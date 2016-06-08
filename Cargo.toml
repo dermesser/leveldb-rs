@@ -1,0 +1,8 @@
+[package]
+name = "leveldb_rs"
+version = "0.1.0"
+authors = ["Lewin Bormann <lbo@spheniscida.de>"]
+
+[dependencies]
+integer-encoding = "0.10.0"
+rand = "0.3"
