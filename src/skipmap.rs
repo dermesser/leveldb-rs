@@ -115,7 +115,6 @@ impl<C: Comparator> SkipMap<C> {
 
     pub fn insert(&mut self, key: Vec<u8>, val: Vec<u8>) {
         assert!(!key.is_empty());
-        assert!(!val.is_empty());
 
         // Keeping track of skip entries that will need to be updated
         let new_height = self.random_height();
