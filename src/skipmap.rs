@@ -6,6 +6,7 @@ use std::cmp::Ordering;
 use std::mem::{replace, transmute_copy};
 
 const MAX_HEIGHT: usize = 12;
+const BRANCHING_FACTOR: u32 = 4;
 
 pub trait Comparator {
     fn cmp(&Vec<u8>, &Vec<u8>) -> Ordering;
@@ -63,7 +64,13 @@ impl<C: Comparator> SkipMap<C> {
         self.len
     }
     fn random_height(&mut self) -> usize {
-        1 + (self.rand.next_u32() as usize % (MAX_HEIGHT - 1))
+        let mut height = 1;
+
+        while height < MAX_HEIGHT && self.rand.next_u32() % BRANCHING_FACTOR == 0 {
+            height += 1;
+        }
+
+        height
     }
 
     fn contains(&mut self, key: &Vec<u8>) -> bool {
