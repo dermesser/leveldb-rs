@@ -2,7 +2,8 @@
 
 use rand::{Rng, SeedableRng, StdRng};
 use std::cmp::Ordering;
-
+use std::default::Default;
+use std::marker;
 use std::mem::{replace, transmute_copy};
 
 const MAX_HEIGHT: usize = 12;
@@ -175,6 +176,12 @@ impl<C: Comparator> SkipMap<C> {
         self.len += 1;
     }
 
+    fn iter<'a>(&'a self) -> SkipMapIter<'a, C> {
+        SkipMapIter {
+            _map: Default::default(),
+            current: unsafe { transmute_copy(&self.head.as_ref()) },
+        }
+    }
 
     // Runs through the skipmap and prints everything including addresses
     fn dbg_print(&self) {
@@ -192,6 +199,25 @@ impl<C: Comparator> SkipMap<C> {
                     break;
                 }
             }
+        }
+    }
+}
+
+pub struct SkipMapIter<'a, C: Comparator + 'a> {
+    _map: marker::PhantomData<&'a SkipMap<C>>,
+    current: *const Node,
+}
+
+impl<'a, C: Comparator + 'a> Iterator for SkipMapIter<'a, C> {
+    type Item = (&'a Vec<u8>, &'a Vec<u8>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // we first go to the next element, then return that -- in order to skip the head node
+        unsafe {
+            (*self.current).next.as_ref().map(|next| {
+                self.current = transmute_copy(&next.as_ref());
+                (&(*self.current).key, &(*self.current).value)
+            })
         }
     }
 }
@@ -237,5 +263,27 @@ mod tests {
         assert!(!skm.contains(&"123".as_bytes().to_vec()));
         assert!(!skm.contains(&"aaa".as_bytes().to_vec()));
         assert!(!skm.contains(&"456".as_bytes().to_vec()));
+    }
+
+    #[test]
+    fn test_iterator_0() {
+        let skm = SkipMap::new();
+        let mut i = 0;
+        for (_, _) in skm.iter() {
+            i += 1;
+        }
+        assert_eq!(i, 0);
+    }
+
+    #[test]
+    fn test_iterator() {
+        let skm = make_skipmap();
+        let mut i = 0;
+        for (k, v) in skm.iter() {
+            assert!(!k.is_empty());
+            assert!(!v.is_empty());
+            i += 1;
+        }
+        assert_eq!(i, 26);
     }
 }
