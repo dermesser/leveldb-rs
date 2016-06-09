@@ -4,7 +4,7 @@ use rand::{Rng, SeedableRng, StdRng};
 use std::cmp::Ordering;
 use std::default::Default;
 use std::marker;
-use std::mem::{replace, transmute_copy};
+use std::mem::{replace, size_of, transmute_copy};
 
 const MAX_HEIGHT: usize = 12;
 const BRANCHING_FACTOR: u32 = 4;
@@ -34,17 +34,19 @@ pub struct SkipMap<C: Comparator> {
     rand: StdRng,
     cmp: C,
     len: usize,
+    // approximation of memory used.
+    approx_mem: usize,
 }
 
 impl SkipMap<StandardComparator> {
-    fn new() -> SkipMap<StandardComparator> {
+    pub fn new() -> SkipMap<StandardComparator> {
         SkipMap::new_with_cmp(StandardComparator {})
     }
 }
 
 
 impl<C: Comparator> SkipMap<C> {
-    fn new_with_cmp(c: C) -> SkipMap<C> {
+    pub fn new_with_cmp(c: C) -> SkipMap<C> {
         let mut s = Vec::new();
         s.resize(MAX_HEIGHT, None);
 
@@ -58,12 +60,17 @@ impl<C: Comparator> SkipMap<C> {
             rand: StdRng::from_seed(&[0xde, 0xad, 0xbe, 0xef]),
             cmp: c,
             len: 0,
+            approx_mem: size_of::<Self>() + MAX_HEIGHT * size_of::<Option<*mut Node>>(),
         }
     }
 
-    fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.len
     }
+    pub fn approx_memory(&self) -> usize {
+        self.approx_mem
+    }
+
     fn random_height(&mut self) -> usize {
         let mut height = 1;
 
@@ -74,7 +81,7 @@ impl<C: Comparator> SkipMap<C> {
         height
     }
 
-    fn contains(&mut self, key: &Vec<u8>) -> bool {
+    pub fn contains(&mut self, key: &Vec<u8>) -> bool {
         if key.is_empty() {
             return false;
         }
@@ -106,7 +113,7 @@ impl<C: Comparator> SkipMap<C> {
         false
     }
 
-    fn insert(&mut self, key: Vec<u8>, val: Vec<u8>) {
+    pub fn insert(&mut self, key: Vec<u8>, val: Vec<u8>) {
         assert!(!key.is_empty());
         assert!(!val.is_empty());
 
@@ -167,16 +174,19 @@ impl<C: Comparator> SkipMap<C> {
             }
         }
 
+        let added_mem = size_of::<Node>() + size_of::<Option<*mut Node>>() * new.skips.len() +
+                        new.key.len() + new.value.len();
+        self.approx_mem += added_mem;
+        self.len += 1;
+
         // Insert new node by first replacing the previous element's next field with None and
         // assigning its value to new.next...
         new.next = unsafe { replace(&mut (*current).next, None) };
         // ...and then setting the previous element's next field to the new node
         unsafe { replace(&mut (*current).next, Some(new)) };
-
-        self.len += 1;
     }
 
-    fn iter<'a>(&'a self) -> SkipMapIter<'a, C> {
+    pub fn iter<'a>(&'a self) -> SkipMapIter<'a, C> {
         SkipMapIter {
             _map: Default::default(),
             current: unsafe { transmute_copy(&self.head.as_ref()) },
