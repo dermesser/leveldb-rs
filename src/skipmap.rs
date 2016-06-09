@@ -198,26 +198,31 @@ impl<C: Comparator> SkipMap<C> {
 
 #[cfg(test)]
 mod tests {
-    use super::SkipMap;
+    use super::*;
+
+    fn make_skipmap() -> SkipMap<StandardComparator> {
+        let mut skm = SkipMap::new();
+        let keys = vec!["aba", "abb", "abc", "abd", "abe", "abf", "abg", "abh", "abi", "abj",
+                        "abk", "abl", "abm", "abn", "abo", "abp", "abq", "abr", "abs", "abt",
+                        "abu", "abv", "abw", "abx", "aby", "abz"];
+
+        for k in keys {
+            skm.insert(k.as_bytes().to_vec(), "def".as_bytes().to_vec());
+        }
+        skm
+    }
+
     #[test]
     fn test_insert() {
-        let mut skm = SkipMap::new();
-        skm.insert("abc".as_bytes().to_vec(), "def".as_bytes().to_vec());
-        skm.insert("abd".as_bytes().to_vec(), "def".as_bytes().to_vec());
-        skm.insert("abe".as_bytes().to_vec(), "def".as_bytes().to_vec());
-        skm.insert("abf".as_bytes().to_vec(), "def".as_bytes().to_vec());
-        assert_eq!(skm.len(), 4);
+        let skm = make_skipmap();
+        assert_eq!(skm.len(), 26);
         skm.dbg_print();
     }
 
     #[test]
     #[should_panic]
     fn test_no_dupes() {
-        let mut skm = SkipMap::new();
-        skm.insert("abc".as_bytes().to_vec(), "def".as_bytes().to_vec());
-        skm.insert("abd".as_bytes().to_vec(), "def".as_bytes().to_vec());
-        skm.insert("abe".as_bytes().to_vec(), "def".as_bytes().to_vec());
-        skm.insert("abi".as_bytes().to_vec(), "def".as_bytes().to_vec());
+        let mut skm = make_skipmap();
         // this should panic
         skm.insert("abc".as_bytes().to_vec(), "def".as_bytes().to_vec());
         skm.insert("abf".as_bytes().to_vec(), "def".as_bytes().to_vec());
@@ -225,20 +230,12 @@ mod tests {
 
     #[test]
     fn test_contains() {
-        let mut skm = SkipMap::new();
-        skm.insert("abc".as_bytes().to_vec(), "def".as_bytes().to_vec());
-        skm.insert("abd".as_bytes().to_vec(), "def".as_bytes().to_vec());
-        skm.insert("abe".as_bytes().to_vec(), "def".as_bytes().to_vec());
-        skm.insert("abi".as_bytes().to_vec(), "def".as_bytes().to_vec());
-        skm.insert("abx".as_bytes().to_vec(), "def".as_bytes().to_vec());
-        skm.insert("aby".as_bytes().to_vec(), "def".as_bytes().to_vec());
-        skm.insert("abz".as_bytes().to_vec(), "def".as_bytes().to_vec());
-        skm.insert("abm".as_bytes().to_vec(), "def".as_bytes().to_vec());
+        let mut skm = make_skipmap();
         assert!(skm.contains(&"aby".as_bytes().to_vec()));
         assert!(skm.contains(&"abc".as_bytes().to_vec()));
         assert!(skm.contains(&"abz".as_bytes().to_vec()));
         assert!(!skm.contains(&"123".as_bytes().to_vec()));
-        assert!(!skm.contains(&"abg".as_bytes().to_vec()));
+        assert!(!skm.contains(&"aaa".as_bytes().to_vec()));
         assert!(!skm.contains(&"456".as_bytes().to_vec()));
     }
 }
