@@ -1,9 +1,8 @@
 #![allow(dead_code)]
 
+use types::LdbIterator;
 use rand::{Rng, SeedableRng, StdRng};
 use std::cmp::Ordering;
-use std::default::Default;
-use std::marker;
 use std::mem::{replace, size_of, transmute_copy};
 
 const MAX_HEIGHT: usize = 12;
@@ -82,13 +81,13 @@ impl<C: Comparator> SkipMap<C> {
     }
 
     pub fn contains(&self, key: &Vec<u8>) -> bool {
-        let n = self.get_next_smaller(key);
+        let n = self.get_greater_or_equal(key);
         println!("{:?}", n.key);
         n.key.starts_with(&key)
     }
 
     // Returns the node with key or the next smaller one
-    fn get_next_smaller<'a>(&'a self, key: &Vec<u8>) -> &'a Node {
+    fn get_greater_or_equal<'a>(&'a self, key: &Vec<u8>) -> &'a Node {
         // Start at the highest skip link of the head node, and work down from there
         let mut current: *const Node = unsafe { transmute_copy(&self.head.as_ref()) };
         let mut level = self.head.skips.len() - 1;
@@ -104,7 +103,11 @@ impl<C: Comparator> SkipMap<C> {
                             continue;
                         }
                         Ordering::Equal => return &(*next),
-                        Ordering::Greater => (),
+                        Ordering::Greater => {
+                            if level == 0 {
+                                return &(*next);
+                            }
+                        }
                     }
                 }
             }
@@ -220,9 +223,9 @@ pub struct SkipMapIter<'a, C: Comparator + 'a> {
     current: *const Node,
 }
 
-impl<'a, C: Comparator> SkipMapIter<'a, C> {
+impl<'a, C: Comparator> LdbIterator<'a> for SkipMapIter<'a, C> {
     fn seek(&mut self, key: &Vec<u8>) {
-        let node = self.map.get_next_smaller(key);
+        let node = self.map.get_greater_or_equal(key);
         self.current = unsafe { transmute_copy(&node) }
     }
     fn valid(&self) -> bool {
@@ -251,6 +254,7 @@ impl<'a, C: Comparator + 'a> Iterator for SkipMapIter<'a, C> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use types::*;
 
     fn make_skipmap() -> SkipMap<StandardComparator> {
         let mut skm = SkipMap::new();
@@ -295,11 +299,12 @@ mod tests {
     #[test]
     fn test_seek() {
         let skm = make_skipmap();
-        assert_eq!(skm.get_next_smaller(&"abf".as_bytes().to_vec()).key,
+        assert_eq!(skm.get_greater_or_equal(&"abf".as_bytes().to_vec()).key,
                    "abf".as_bytes().to_vec());
-        assert_eq!(skm.get_next_smaller(&"ab{".as_bytes().to_vec()).key,
+        assert_eq!(skm.get_greater_or_equal(&"ab{".as_bytes().to_vec()).key,
                    "abz".as_bytes().to_vec());
-        assert_eq!(skm.get_next_smaller(&"aaa".as_bytes().to_vec()).key, vec![]);
+        assert_eq!(skm.get_greater_or_equal(&"aaa".as_bytes().to_vec()).key,
+                   "aba".as_bytes().to_vec());
     }
 
     #[test]
@@ -332,8 +337,12 @@ mod tests {
 
         iter.next();
         assert!(iter.valid());
-        iter.seek(&"abg".as_bytes().to_vec());
+        iter.seek(&"abz".as_bytes().to_vec());
         assert_eq!(iter.current(),
-                   (&"abg".as_bytes().to_vec(), &"def".as_bytes().to_vec()));
+                   (&"abz".as_bytes().to_vec(), &"def".as_bytes().to_vec()));
+        // go back to beginning
+        iter.seek(&"aba".as_bytes().to_vec());
+        assert_eq!(iter.current(),
+                   (&"aba".as_bytes().to_vec(), &"def".as_bytes().to_vec()));
     }
 }
