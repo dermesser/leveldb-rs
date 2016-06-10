@@ -6,6 +6,7 @@ pub enum ValueType {
 
 pub type SequenceNumber = u64;
 
+#[allow(dead_code)]
 pub enum Status {
     OK,
     NotFound(String),
@@ -13,4 +14,10 @@ pub enum Status {
     NotSupported(String),
     InvalidArgument(String),
     IOError(String),
+}
+
+pub trait LdbIterator<'a>: Iterator {
+    fn seek(&mut self, key: &Vec<u8>);
+    fn valid(&self) -> bool;
+    fn current(&'a self) -> Self::Item;
 }
