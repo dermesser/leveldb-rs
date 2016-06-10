@@ -1,0 +1,4 @@
+.*.swp
+target
+.*.orig
+Cargo.lock
