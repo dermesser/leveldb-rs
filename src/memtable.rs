@@ -9,6 +9,8 @@ pub struct LookupKey {
     key_offset: usize,
 }
 
+/// Encapsulates a user key + sequence number, which is used for lookups in the internal map
+/// implementation of a MemTable.
 impl LookupKey {
     #[allow(unused_assignments)]
     fn new(k: &Vec<u8>, s: SequenceNumber) -> LookupKey {
@@ -34,11 +36,9 @@ impl LookupKey {
     fn memtable_key<'a>(&'a self) -> &'a Vec<u8> {
         return &self.key;
     }
-    fn user_key(&self) -> Vec<u8> {
-        return self.key[self.key_offset..].to_vec();
-    }
 }
 
+/// Provides Insert/Get/Iterate, based on the SkipMap implementation.
 pub struct MemTable<C: Comparator> {
     map: SkipMap<C>,
 }
@@ -61,6 +61,10 @@ impl<C: Comparator> MemTable<C> {
         self.map.insert(Self::build_memtable_key(key, value, t, seq), Vec::new())
     }
 
+    /// A memtable key is a bytestring containing (keylen, key, tag, vallen, val). This function
+    /// builds such a key. It's called key because the underlying Map implementation will only be
+    /// concerned with keys; the value field is not used (instead, the value is encoded in the key,
+    /// and for lookups we just search for the next bigger entry).
     fn build_memtable_key(key: &Vec<u8>,
                           value: &Vec<u8>,
                           t: ValueType,
@@ -99,7 +103,9 @@ impl<C: Comparator> MemTable<C> {
         buf
     }
 
-    // returns (keylen, key, tag, vallen, val)
+    /// Parses a memtable key and returns (keylen, key, tag, vallen, val).
+    /// If the key only contains (keylen, key, tag), the vallen and val return values will be
+    /// meaningless.
     fn parse_memtable_key(mkey: &Vec<u8>) -> (usize, Vec<u8>, u64, usize, Vec<u8>) {
         let (keylen, mut i): (usize, usize) = VarInt::decode_var(&mkey);
 

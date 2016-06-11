@@ -8,6 +8,8 @@ use std::mem::{replace, size_of, transmute_copy};
 const MAX_HEIGHT: usize = 12;
 const BRANCHING_FACTOR: u32 = 4;
 
+/// Trait used to influence how SkipMap determines the order of elements. Use StandardComparator
+/// for the normal implementation using numerical comparison.
 pub trait Comparator {
     fn cmp(&Vec<u8>, &Vec<u8>) -> Ordering;
 }
@@ -20,14 +22,19 @@ impl Comparator for StandardComparator {
     }
 }
 
+/// A node in a skipmap contains links to the next node and others that are further away (skips);
+/// `skips[0]` is the immediate element after, that is, the element contained in `next`.
 struct Node {
     skips: Vec<Option<*mut Node>>,
-    // skips[0] points to the element in next; next provides proper ownership
     next: Option<Box<Node>>,
     key: Vec<u8>,
     value: Vec<u8>,
 }
 
+/// Implements the backing store for a `MemTable`. The important methods are `insert()` and
+/// `contains()`; in order to get full key and value for an entry, use a `SkipMapIter` instance,
+/// `seek()` to the key to look up (this is as fast as any lookup in a skip map), and then call
+/// `current()`.
 pub struct SkipMap<C: Comparator> {
     head: Box<Node>,
     rand: StdRng,
@@ -86,7 +93,7 @@ impl<C: Comparator> SkipMap<C> {
         n.key.starts_with(&key)
     }
 
-    // Returns the node with key or the next smaller one
+    // Returns the node with key or the next greater one
     fn get_greater_or_equal<'a>(&'a self, key: &Vec<u8>) -> &'a Node {
         // Start at the highest skip link of the head node, and work down from there
         let mut current: *const Node = unsafe { transmute_copy(&self.head.as_ref()) };
@@ -344,5 +351,18 @@ mod tests {
         iter.seek(&"aba".as_bytes().to_vec());
         assert_eq!(iter.current(),
                    (&"aba".as_bytes().to_vec(), &"def".as_bytes().to_vec()));
+
+        iter.seek(&"".as_bytes().to_vec());
+        assert!(iter.valid());
+
+        loop {
+            if let Some(_) = iter.next() {
+
+            } else {
+                break;
+            }
+        }
+        assert_eq!(iter.next(), None);
+
     }
 }
