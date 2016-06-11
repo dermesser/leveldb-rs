@@ -6,3 +6,4 @@ authors = ["Lewin Bormann <lbo@spheniscida.de>"]
 [dependencies]
 integer-encoding = "0.11.0"
 rand = "0.3"
+crc = "1.2"
