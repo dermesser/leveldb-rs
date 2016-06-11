@@ -1,3 +1,6 @@
+
+#![allow(dead_code)]
+
 use std::cmp::Ordering;
 use types::{ValueType, SequenceNumber, Status, LdbIterator};
 use skipmap::{SkipMap, SkipMapIter, Comparator, StandardComparator};
@@ -33,8 +36,20 @@ impl LookupKey {
             key_offset: k.len().required_space(),
         }
     }
+
+    // Returns full key
     fn memtable_key<'a>(&'a self) -> &'a Vec<u8> {
-        return &self.key;
+        &self.key
+    }
+
+    // Returns only key
+    fn user_key(&self) -> Vec<u8> {
+        self.key[self.key_offset..self.key.len() - 8].to_vec()
+    }
+
+    // Returns key+tag
+    fn internal_key(&self) -> Vec<u8> {
+        self.key[self.key_offset..].to_vec()
     }
 }
 
@@ -203,6 +218,7 @@ impl<'a, C: 'a + Comparator> LdbIterator<'a> for MemtableIterator<'a, C> {
 }
 
 #[cfg(test)]
+#[allow(unused_variables)]
 mod tests {
     use super::*;
     use types::*;
