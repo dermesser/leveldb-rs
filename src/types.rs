@@ -1,12 +1,12 @@
 use std::default::Default;
-use std::collections::LinkedList;
+use std::collections::HashMap;
 
 pub enum ValueType {
     TypeDeletion = 0,
     TypeValue = 1,
 }
 
-/// Represents a snapshot or the sequence number of a single entry.
+/// Represents a sequence number of a single entry.
 pub type SequenceNumber = u64;
 
 #[allow(dead_code)]
@@ -44,28 +44,48 @@ impl Default for ReadOptions {
     }
 }
 
+// Opaque snapshot handle; Represents index to SnapshotList.map
+pub type Snapshot = u64;
+
 /// A list of all snapshots is kept in the DB.
 pub struct SnapshotList {
-    snapshots: LinkedList<SequenceNumber>,
+    map: HashMap<Snapshot, SequenceNumber>,
+    newest: Snapshot,
+    oldest: Snapshot,
 }
 
 impl SnapshotList {
     pub fn new() -> SnapshotList {
-        SnapshotList { snapshots: LinkedList::new() }
+        SnapshotList { map: HashMap::new(), newest: 0, oldest: 0 }
     }
 
-    pub fn new_snapshot(&mut self, seq: SequenceNumber) {
-        self.snapshots.push_back(seq);
+    pub fn new_snapshot(&mut self, seq: SequenceNumber) -> Snapshot {
+        self.newest += 1;
+        self.map.insert(self.newest, seq);
+
+        if self.oldest == 0 {
+            self.oldest = self.newest;
+        }
+
+        self.newest
     }
 
     pub fn oldest(&self) -> SequenceNumber {
-        assert!(!self.snapshots.is_empty());
-        self.snapshots.front().map(|s| *s).unwrap()
+        self.map.get(&self.oldest).unwrap().clone()
     }
 
     pub fn newest(&self) -> SequenceNumber {
-        assert!(!self.snapshots.is_empty());
-        self.snapshots.back().map(|s| *s).unwrap()
+        self.map.get(&self.newest).unwrap().clone()
+    }
+
+    pub fn delete(&mut self, ss: Snapshot) {
+        if self.oldest == ss {
+            self.oldest += 1;
+        }
+        if self.newest == ss {
+            self.newest -= 1;
+        }
+        self.map.remove(&ss);
     }
 }
 
@@ -77,10 +97,21 @@ mod tests {
     fn test_snapshot_list() {
         let mut l = SnapshotList::new();
 
-        l.new_snapshot(1);
+        let oldest = l.new_snapshot(1);
         l.new_snapshot(2);
+        let newest = l.new_snapshot(0);
 
         assert_eq!(l.oldest(), 1);
+        assert_eq!(l.newest(), 0);
+
+        l.delete(newest);
+
         assert_eq!(l.newest(), 2);
+        assert_eq!(l.oldest(), 1);
+
+        l.delete(oldest);
+
+        assert_eq!(l.oldest(), 2);
     }
+
 }
