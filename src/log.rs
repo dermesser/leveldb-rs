@@ -24,9 +24,9 @@ pub enum RecordType {
 
 pub struct LogWriter<W: Write> {
     dst: W,
+    digest: crc32::Digest,
     current_block_offset: usize,
     block_size: usize,
-    digest: crc32::Digest,
 }
 
 impl<W: Write> LogWriter<W> {
@@ -105,12 +105,11 @@ impl<W: Write> LogWriter<W> {
 
 pub struct LogReader<R: Read> {
     src: R,
+    digest: crc32::Digest,
     blk_off: usize,
     blocksize: usize,
-    checksums: bool,
-
-    digest: crc32::Digest,
     head_scratch: [u8; 7],
+    checksums: bool,
 }
 
 impl<R: Read> LogReader<R> {
