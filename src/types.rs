@@ -22,6 +22,10 @@ pub enum Status {
 /// An extension of the standard `Iterator` trait that supports some methods necessary for LevelDB.
 /// This works because the iterators used are stateful and keep the last returned element.
 pub trait LdbIterator<'a>: Iterator {
+    // We're emulating LevelDB's Slice type here using actual slices with the lifetime of the
+    // iterator. The lifetime of the iterator is usually the one of the backing storage (Block,
+    // MemTable, SkipMap...)
+    //type Item = (&'a [u8], &'a [u8]);
     fn seek(&mut self, key: &Vec<u8>);
     fn valid(&self) -> bool;
     fn current(&'a self) -> Self::Item;
@@ -56,7 +60,11 @@ pub struct SnapshotList {
 
 impl SnapshotList {
     pub fn new() -> SnapshotList {
-        SnapshotList { map: HashMap::new(), newest: 0, oldest: 0 }
+        SnapshotList {
+            map: HashMap::new(),
+            newest: 0,
+            oldest: 0,
+        }
     }
 
     pub fn new_snapshot(&mut self, seq: SequenceNumber) -> Snapshot {
@@ -91,7 +99,6 @@ impl SnapshotList {
     pub fn empty(&self) -> bool {
         self.oldest == 0
     }
-
 }
 
 #[cfg(test)]

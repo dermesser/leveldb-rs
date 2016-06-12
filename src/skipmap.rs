@@ -11,13 +11,13 @@ const BRANCHING_FACTOR: u32 = 4;
 /// Trait used to influence how SkipMap determines the order of elements. Use StandardComparator
 /// for the normal implementation using numerical comparison.
 pub trait Comparator {
-    fn cmp(&Vec<u8>, &Vec<u8>) -> Ordering;
+    fn cmp(&[u8], &[u8]) -> Ordering;
 }
 
 pub struct StandardComparator;
 
 impl Comparator for StandardComparator {
-    fn cmp(a: &Vec<u8>, b: &Vec<u8>) -> Ordering {
+    fn cmp(a: &[u8], b: &[u8]) -> Ordering {
         a.cmp(b)
     }
 }
@@ -230,6 +230,20 @@ pub struct SkipMapIter<'a, C: Comparator + 'a> {
     current: *const Node,
 }
 
+impl<'a, C: Comparator + 'a> Iterator for SkipMapIter<'a, C> {
+    type Item = (&'a [u8], &'a [u8]);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // we first go to the next element, then return that -- in order to skip the head node
+        unsafe {
+            (*self.current).next.as_ref().map(|next| {
+                self.current = transmute_copy(&next.as_ref());
+                ((*self.current).key.as_slice(), (*self.current).value.as_slice())
+            })
+        }
+    }
+}
+
 impl<'a, C: Comparator> LdbIterator<'a> for SkipMapIter<'a, C> {
     fn seek(&mut self, key: &Vec<u8>) {
         let node = self.map.get_greater_or_equal(key);
@@ -238,23 +252,9 @@ impl<'a, C: Comparator> LdbIterator<'a> for SkipMapIter<'a, C> {
     fn valid(&self) -> bool {
         unsafe { !(*self.current).key.is_empty() }
     }
-    fn current(&'a self) -> (&'a Vec<u8>, &'a Vec<u8>) {
+    fn current(&'a self) -> Self::Item {
         assert!(self.valid());
         unsafe { (&(*self.current).key, &(*self.current).value) }
-    }
-}
-
-impl<'a, C: Comparator + 'a> Iterator for SkipMapIter<'a, C> {
-    type Item = (&'a Vec<u8>, &'a Vec<u8>);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        // we first go to the next element, then return that -- in order to skip the head node
-        unsafe {
-            (*self.current).next.as_ref().map(|next| {
-                self.current = transmute_copy(&next.as_ref());
-                (&(*self.current).key, &(*self.current).value)
-            })
-        }
     }
 }
 
@@ -345,12 +345,10 @@ mod tests {
         iter.next();
         assert!(iter.valid());
         iter.seek(&"abz".as_bytes().to_vec());
-        assert_eq!(iter.current(),
-                   (&"abz".as_bytes().to_vec(), &"def".as_bytes().to_vec()));
+        assert_eq!(iter.current(), ("abz".as_bytes(), "def".as_bytes()));
         // go back to beginning
         iter.seek(&"aba".as_bytes().to_vec());
-        assert_eq!(iter.current(),
-                   (&"aba".as_bytes().to_vec(), &"def".as_bytes().to_vec()));
+        assert_eq!(iter.current(), ("aba".as_bytes(), "def".as_bytes()));
 
         iter.seek(&"".as_bytes().to_vec());
         assert!(iter.valid());
