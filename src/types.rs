@@ -1,5 +1,6 @@
 use std::default::Default;
 use std::collections::HashMap;
+use std::cmp::Ordering;
 
 pub enum ValueType {
     TypeDeletion = 0,
@@ -19,14 +20,29 @@ pub enum Status {
     IOError(String),
 }
 
+/// Trait used to influence how SkipMap determines the order of elements. Use StandardComparator
+/// for the normal implementation using numerical comparison.
+pub trait Comparator {
+    fn cmp(&[u8], &[u8]) -> Ordering;
+}
+
+pub struct StandardComparator;
+
+impl Comparator for StandardComparator {
+    fn cmp(a: &[u8], b: &[u8]) -> Ordering {
+        a.cmp(b)
+    }
+}
+
+
 /// An extension of the standard `Iterator` trait that supports some methods necessary for LevelDB.
 /// This works because the iterators used are stateful and keep the last returned element.
 pub trait LdbIterator<'a>: Iterator {
     // We're emulating LevelDB's Slice type here using actual slices with the lifetime of the
     // iterator. The lifetime of the iterator is usually the one of the backing storage (Block,
     // MemTable, SkipMap...)
-    //type Item = (&'a [u8], &'a [u8]);
-    fn seek(&mut self, key: &Vec<u8>);
+    // type Item = (&'a [u8], &'a [u8]);
+    fn seek(&mut self, key: &[u8]);
     fn valid(&self) -> bool;
     fn current(&'a self) -> Self::Item;
 }

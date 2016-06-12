@@ -2,8 +2,9 @@
 #![allow(dead_code)]
 
 use std::cmp::Ordering;
+use types::{Comparator, StandardComparator};
 use types::{ValueType, SequenceNumber, Status, LdbIterator};
-use skipmap::{SkipMap, SkipMapIter, Comparator, StandardComparator};
+use skipmap::{SkipMap, SkipMapIter};
 
 use integer_encoding::{FixedInt, VarInt};
 
@@ -16,7 +17,7 @@ pub struct LookupKey {
 /// implementation of a MemTable.
 impl LookupKey {
     #[allow(unused_assignments)]
-    fn new(k: &Vec<u8>, s: SequenceNumber) -> LookupKey {
+    fn new(k: &[u8], s: SequenceNumber) -> LookupKey {
         let mut key = Vec::with_capacity(k.len() + k.len().required_space() +
                                          <u64 as FixedInt>::required_space());
         let mut i = 0;
@@ -24,7 +25,7 @@ impl LookupKey {
         key.resize(k.len().required_space(), 0);
         i += k.len().encode_var(&mut key[i..]);
 
-        key.extend(k.iter());
+        key.extend_from_slice(k);
         i += k.len();
 
         key.resize(i + <u64 as FixedInt>::required_space(), 0);
@@ -133,9 +134,9 @@ impl<C: Comparator> MemTable<C> {
 
             let (vallen, j): (usize, usize) = VarInt::decode_var(&mkey[i..]);
 
-            let valoff = i + j;
-
             i += j;
+
+            let valoff = i;
 
             return (keylen, keyoff, tag, vallen, valoff);
         } else {
@@ -216,7 +217,7 @@ impl<'a, C: 'a + Comparator> LdbIterator<'a> for MemtableIterator<'a, C> {
             panic!("should not happen");
         }
     }
-    fn seek(&mut self, to: &Vec<u8>) {
+    fn seek(&mut self, to: &[u8]) {
         self.skipmapiter.seek(LookupKey::new(to, 0).memtable_key());
     }
 }
@@ -226,7 +227,6 @@ impl<'a, C: 'a + Comparator> LdbIterator<'a> for MemtableIterator<'a, C> {
 mod tests {
     use super::*;
     use types::*;
-    use skipmap::StandardComparator;
 
     fn get_memtable() -> MemTable<StandardComparator> {
         let mut mt = MemTable::new();

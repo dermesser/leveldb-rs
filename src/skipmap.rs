@@ -1,26 +1,12 @@
 #![allow(dead_code)]
 
-use types::LdbIterator;
+use types::{Comparator, StandardComparator, LdbIterator};
 use rand::{Rng, SeedableRng, StdRng};
 use std::cmp::Ordering;
 use std::mem::{replace, size_of, transmute_copy};
 
 const MAX_HEIGHT: usize = 12;
 const BRANCHING_FACTOR: u32 = 4;
-
-/// Trait used to influence how SkipMap determines the order of elements. Use StandardComparator
-/// for the normal implementation using numerical comparison.
-pub trait Comparator {
-    fn cmp(&[u8], &[u8]) -> Ordering;
-}
-
-pub struct StandardComparator;
-
-impl Comparator for StandardComparator {
-    fn cmp(a: &[u8], b: &[u8]) -> Ordering {
-        a.cmp(b)
-    }
-}
 
 /// A node in a skipmap contains links to the next node and others that are further away (skips);
 /// `skips[0]` is the immediate element after, that is, the element contained in `next`.
@@ -87,14 +73,14 @@ impl<C: Comparator> SkipMap<C> {
         height
     }
 
-    pub fn contains(&self, key: &Vec<u8>) -> bool {
+    pub fn contains(&self, key: &[u8]) -> bool {
         let n = self.get_greater_or_equal(key);
         println!("{:?}", n.key);
         n.key.starts_with(&key)
     }
 
     // Returns the node with key or the next greater one
-    fn get_greater_or_equal<'a>(&'a self, key: &Vec<u8>) -> &'a Node {
+    fn get_greater_or_equal<'a>(&'a self, key: &[u8]) -> &'a Node {
         // Start at the highest skip link of the head node, and work down from there
         let mut current: *const Node = unsafe { transmute_copy(&self.head.as_ref()) };
         let mut level = self.head.skips.len() - 1;
@@ -102,7 +88,7 @@ impl<C: Comparator> SkipMap<C> {
         loop {
             unsafe {
                 if let Some(next) = (*current).skips[level] {
-                    let ord = C::cmp(&(*next).key, key);
+                    let ord = C::cmp((*next).key.as_slice(), key);
 
                     match ord {
                         Ordering::Less => {
@@ -245,7 +231,7 @@ impl<'a, C: Comparator + 'a> Iterator for SkipMapIter<'a, C> {
 }
 
 impl<'a, C: Comparator> LdbIterator<'a> for SkipMapIter<'a, C> {
-    fn seek(&mut self, key: &Vec<u8>) {
+    fn seek(&mut self, key: &[u8]) {
         let node = self.map.get_greater_or_equal(key);
         self.current = unsafe { transmute_copy(&node) }
     }
