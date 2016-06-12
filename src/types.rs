@@ -51,6 +51,21 @@ pub struct Options<C: Comparator> {
     pub reuse_logs: bool, // pub filter_policy: FilterPolicy,
 }
 
+impl Default for Options<StandardComparator> {
+    fn default() -> Options<StandardComparator> {
+        Options {
+            cmp: StandardComparator,
+            create_if_missing: true,
+            error_if_exists: false,
+            paranoid_checks: false,
+            write_buffer_size: 4 << 20,
+            max_open_files: 1 << 10,
+            block_size: 4 << 10,
+            block_restart_interval: 16,
+            reuse_logs: false,
+        }
+    }
+}
 
 /// An extension of the standard `Iterator` trait that supports some methods necessary for LevelDB.
 /// This works because the iterators used are stateful and keep the last returned element.
