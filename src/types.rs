@@ -34,6 +34,23 @@ impl Comparator for StandardComparator {
     }
 }
 
+/// [not all member types implemented yet]
+///
+pub struct Options<C: Comparator> {
+    pub cmp: C,
+    pub create_if_missing: bool,
+    pub error_if_exists: bool,
+    pub paranoid_checks: bool,
+    // pub logger: Logger,
+    pub write_buffer_size: usize,
+    pub max_open_files: usize,
+    // pub block_cache: Cache,
+    pub block_size: usize,
+    pub block_restart_interval: usize,
+    // pub compression_type: CompressionType,
+    pub reuse_logs: bool, // pub filter_policy: FilterPolicy,
+}
+
 
 /// An extension of the standard `Iterator` trait that supports some methods necessary for LevelDB.
 /// This works because the iterators used are stateful and keep the last returned element.
