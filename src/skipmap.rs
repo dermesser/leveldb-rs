@@ -112,6 +112,38 @@ impl<C: Comparator> SkipMap<C> {
         return unsafe { &(*current) };
     }
 
+    /// Finds the node immediately before the node with key
+    fn get_next_smaller<'a>(&'a self, key: &[u8]) -> &'a Node {
+        // Start at the highest skip link of the head node, and work down from there
+        let mut current: *const Node = unsafe { transmute_copy(&self.head.as_ref()) };
+        let mut level = self.head.skips.len() - 1;
+
+        loop {
+            unsafe {
+                if let Some(next) = (*current).skips[level] {
+                    let ord = C::cmp((*next).key.as_slice(), key);
+
+                    match ord {
+                        Ordering::Less => {
+                            current = next;
+                            continue;
+                        }
+                        _ => {
+                            if level == 0 {
+                                return &(*current);
+                            }
+                        }
+                    }
+                }
+            }
+            if level == 0 {
+                break;
+            }
+            level -= 1;
+        }
+        return unsafe { &(*current) };
+    }
+
     pub fn insert(&mut self, key: Vec<u8>, val: Vec<u8>) {
         assert!(!key.is_empty());
 
@@ -242,6 +274,17 @@ impl<'a, C: Comparator> LdbIterator<'a> for SkipMapIter<'a, C> {
         assert!(self.valid());
         unsafe { (&(*self.current).key, &(*self.current).value) }
     }
+    fn prev(&mut self) -> Option<Self::Item> {
+        // Going after the original implementation here; we just seek to the node before current().
+        let prev = self.map.get_next_smaller(self.current().0);
+        self.current = unsafe { transmute_copy(&prev) };
+
+        if !prev.key.is_empty() {
+            Some(unsafe { (&(*self.current).key, &(*self.current).value) })
+        } else {
+            None
+        }
+    }
 }
 
 #[cfg(test)]
@@ -290,7 +333,7 @@ mod tests {
     }
 
     #[test]
-    fn test_seek() {
+    fn test_find() {
         let skm = make_skipmap();
         assert_eq!(skm.get_greater_or_equal(&"abf".as_bytes().to_vec()).key,
                    "abf".as_bytes().to_vec());
@@ -298,6 +341,14 @@ mod tests {
                    "abz".as_bytes().to_vec());
         assert_eq!(skm.get_greater_or_equal(&"aaa".as_bytes().to_vec()).key,
                    "aba".as_bytes().to_vec());
+        assert_eq!(skm.get_greater_or_equal(&"ab".as_bytes()).key.as_slice(),
+                   "aba".as_bytes());
+        assert_eq!(skm.get_greater_or_equal(&"abc".as_bytes()).key.as_slice(),
+                   "abc".as_bytes());
+        assert_eq!(skm.get_next_smaller(&"abd".as_bytes()).key.as_slice(),
+                   "abc".as_bytes());
+        assert_eq!(skm.get_next_smaller(&"ab{".as_bytes()).key.as_slice(),
+                   "abz".as_bytes());
     }
 
     #[test]
@@ -347,6 +398,19 @@ mod tests {
             }
         }
         assert_eq!(iter.next(), None);
+    }
 
+    #[test]
+    fn test_iterator_prev() {
+        let skm = make_skipmap();
+        let mut iter = skm.iter();
+
+        iter.next();
+        assert!(iter.valid());
+        iter.prev();
+        assert!(!iter.valid());
+        iter.seek(&"abc".as_bytes());
+        iter.prev();
+        assert_eq!(iter.current(), ("abb".as_bytes(), "def".as_bytes()));
     }
 }
