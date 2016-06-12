@@ -6,6 +6,7 @@ extern crate rand;
 extern crate integer_encoding;
 
 mod block;
+mod blockhandle;
 mod log;
 mod memtable;
 mod skipmap;
