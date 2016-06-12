@@ -116,7 +116,6 @@ impl<'a, C: Comparator> BlockIter<'a, C> {
 }
 
 impl<'a, C: Comparator> Iterator for BlockIter<'a, C> {
-    // This is ugly, but necessary because of Iterator's signature
     type Item = (Vec<u8>, &'a [u8]);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -144,32 +143,31 @@ impl<'a, C: 'a + Comparator> LdbIterator<'a> for BlockIter<'a, C> {
     fn seek(&mut self, to: &[u8]) {
         self.reset();
 
-        if self.block.number_restarts() > 0 {
-            let mut left = 0;
-            let mut right = self.block.number_restarts() - 1;
+        let mut left = 0;
+        let mut right = self.block.number_restarts() - 1;
 
-            while left < right {
-                let middle = (left + right + 1) / 2;
-                self.offset = self.block.get_restart_point(middle);
-                // advances self.offset
-                let (shared, non_shared, _) = self.parse_entry();
+        // Do a binary search over the restart points.
+        while left < right {
+            let middle = (left + right + 1) / 2;
+            self.offset = self.block.get_restart_point(middle);
+            // advances self.offset
+            let (shared, non_shared, _) = self.parse_entry();
 
-                // At a restart, the shared part is supposed to be 0.
-                assert_eq!(shared, 0);
+            // At a restart, the shared part is supposed to be 0.
+            assert_eq!(shared, 0);
 
-                let cmp = C::cmp(to, &self.block.data[self.offset..self.offset + non_shared]);
+            let cmp = C::cmp(to, &self.block.data[self.offset..self.offset + non_shared]);
 
-                if cmp == Ordering::Less {
-                    right = middle - 1;
-                } else {
-                    left = middle;
-                }
+            if cmp == Ordering::Less {
+                right = middle - 1;
+            } else {
+                left = middle;
             }
-
-            assert_eq!(left, right);
-            self.current_restart_ix = left;
-            self.offset = self.block.get_restart_point(left);
         }
+
+        assert_eq!(left, right);
+        self.current_restart_ix = left;
+        self.offset = self.block.get_restart_point(left);
 
         // Linear search from here on
         while let Some((k, _)) = self.next() {
