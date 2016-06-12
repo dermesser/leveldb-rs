@@ -180,6 +180,7 @@ impl<C: Comparator> BlockBuilder<C> {
         self.buffer.clear();
         self.restarts.clear();
         self.last_key.clear();
+        self.counter = 0;
     }
 
     pub fn add(&mut self, key: &[u8], val: &[u8]) {
