@@ -57,7 +57,7 @@ impl<C: Comparator> Block<C> {
 
     fn get_restart_point(&self, ix: usize) -> usize {
         let restart = self.restarts_off + 4 * ix;
-        usize::decode_fixed(&self.data[restart..restart + 4])
+        u32::decode_fixed(&self.data[restart..restart + 4]) as usize
     }
 
     pub fn iter<'a>(&'a self) -> BlockIter<'a, C> {
@@ -106,6 +106,13 @@ impl<'a, C: Comparator> BlockIter<'a, C> {
         self.key.resize(shared, 0);
         self.key.extend_from_slice(&self.block.data[self.offset..self.offset + non_shared]);
     }
+
+    fn reset(&mut self) {
+        self.offset = 0;
+        self.current_restart_ix = 0;
+        self.key.clear();
+        self.val_offset = 0;
+    }
 }
 
 impl<'a, C: Comparator> Iterator for BlockIter<'a, C> {
@@ -134,15 +141,40 @@ impl<'a, C: Comparator> Iterator for BlockIter<'a, C> {
 }
 
 impl<'a, C: 'a + Comparator> LdbIterator<'a> for BlockIter<'a, C> {
-    // TODO: Use binary search here
     fn seek(&mut self, to: &[u8]) {
-        loop {
-            if let Some((k, _)) = self.next() {
-                if C::cmp(k.as_slice(), to) != Ordering::Less {
-                    break;
+        self.reset();
+
+        if self.block.number_restarts() > 0 {
+            let mut left = 0;
+            let mut right = self.block.number_restarts() - 1;
+
+            while left < right {
+                let middle = (left + right + 1) / 2;
+                self.offset = self.block.get_restart_point(middle);
+                // advances self.offset
+                let (shared, non_shared, _) = self.parse_entry();
+
+                // At a restart, the shared part is supposed to be 0.
+                assert_eq!(shared, 0);
+
+                let cmp = C::cmp(to, &self.block.data[self.offset..self.offset + non_shared]);
+
+                if cmp == Ordering::Less {
+                    right = middle - 1;
+                } else {
+                    left = middle;
                 }
-            } else {
-                break;
+            }
+
+            assert_eq!(left, right);
+            self.current_restart_ix = left;
+            self.offset = self.block.get_restart_point(left);
+        }
+
+        // Linear search from here on
+        while let Some((k, _)) = self.next() {
+            if C::cmp(k.as_slice(), to) >= Ordering::Equal {
+                return;
             }
         }
     }
@@ -168,10 +200,13 @@ pub struct BlockBuilder<C: Comparator> {
 
 impl<C: Comparator> BlockBuilder<C> {
     fn new(o: Options<C>) -> BlockBuilder<C> {
+        let mut restarts = vec![0];
+        restarts.reserve(1023);
+
         BlockBuilder {
             buffer: Vec::with_capacity(o.block_size),
             opt: o,
-            restarts: Vec::with_capacity(1024),
+            restarts: restarts,
             last_key: Vec::new(),
             counter: 0,
         }
@@ -275,7 +310,7 @@ mod tests {
         }
 
         let block = builder.finish();
-        assert_eq!(block.len(), 145);
+        assert_eq!(block.len(), 149);
     }
 
     #[test]
@@ -298,5 +333,33 @@ mod tests {
             i += 1;
         }
         assert_eq!(i, data.len());
+    }
+
+    #[test]
+    fn test_seek() {
+        let mut o = Options::default();
+        o.block_restart_interval = 3;
+
+        let data = get_data();
+        let mut builder = BlockBuilder::new(o);
+
+        for &(k, v) in data.iter() {
+            builder.add(k, v);
+        }
+
+        let block_contents = builder.finish();
+
+        let block = Block::new(block_contents);
+        let mut iter = block.iter();
+
+        iter.seek(&"prefix_key2".as_bytes());
+        assert!(iter.valid());
+        assert_eq!(iter.current(),
+                   ("prefix_key2".as_bytes().to_vec(), "value".as_bytes()));
+
+        iter.seek(&"key1".as_bytes());
+        assert!(iter.valid());
+        assert_eq!(iter.current(),
+                   ("key1".as_bytes().to_vec(), "value1".as_bytes()));
     }
 }
