@@ -39,18 +39,18 @@ impl LookupKey {
     }
 
     // Returns full key
-    fn memtable_key<'a>(&'a self) -> &'a Vec<u8> {
-        &self.key
+    fn memtable_key<'a>(&'a self) -> &'a [u8] {
+        self.key.as_slice()
     }
 
     // Returns only key
-    fn user_key(&self) -> Vec<u8> {
-        self.key[self.key_offset..self.key.len() - 8].to_vec()
+    fn user_key<'a>(&'a self) -> &'a [u8] {
+        &self.key[self.key_offset..self.key.len() - 8]
     }
 
     // Returns key+tag
-    fn internal_key(&self) -> Vec<u8> {
-        self.key[self.key_offset..].to_vec()
+    fn internal_key<'a>(&'a self) -> &'a [u8] {
+        &self.key[self.key_offset..]
     }
 }
 
