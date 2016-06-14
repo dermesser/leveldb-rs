@@ -55,19 +55,18 @@ impl LookupKey {
 }
 
 /// Provides Insert/Get/Iterate, based on the SkipMap implementation.
-pub struct MemTable<C: Comparator> {
-    map: SkipMap<C>,
+pub struct MemTable {
+    map: SkipMap,
+    cmp: Box<Comparator>,
 }
 
-impl MemTable<StandardComparator> {
-    pub fn new() -> MemTable<StandardComparator> {
-        MemTable::new_custom_cmp(StandardComparator {})
+
+impl MemTable {
+    pub fn new() -> MemTable {
+        MemTable::new_custom_cmp(Box::new(StandardComparator))
     }
-}
-
-impl<C: Comparator> MemTable<C> {
-    pub fn new_custom_cmp(comparator: C) -> MemTable<C> {
-        MemTable { map: SkipMap::new_with_cmp(comparator) }
+    pub fn new_custom_cmp(comparator: Box<Comparator>) -> MemTable {
+        MemTable { map: SkipMap::new_with_cmp(comparator),  }
     }
     pub fn approx_mem_usage(&self) -> usize {
         self.map.approx_memory()
@@ -154,7 +153,7 @@ impl<C: Comparator> MemTable<C> {
             let (lkeylen, lkeyoff, _, _, _) = Self::parse_memtable_key(key.memtable_key());
             let (fkeylen, fkeyoff, tag, vallen, valoff) = Self::parse_memtable_key(foundkey);
 
-            if C::cmp(&key.memtable_key()[lkeyoff..lkeyoff + lkeylen],
+            if self.cmp.cmp(&key.memtable_key()[lkeyoff..lkeyoff + lkeylen],
                       &foundkey[fkeyoff..fkeyoff + fkeylen]) == Ordering::Equal {
                 if tag & 0xff == ValueType::TypeValue as u64 {
                     return Result::Ok(foundkey[valoff..valoff + vallen].to_vec());
@@ -166,7 +165,7 @@ impl<C: Comparator> MemTable<C> {
         Result::Err(Status::NotFound("not found".to_string()))
     }
 
-    pub fn iter<'a>(&'a self) -> MemtableIterator<'a, C> {
+    pub fn iter<'a>(&'a self) -> MemtableIterator<'a> {
         MemtableIterator {
             _tbl: self,
             skipmapiter: self.map.iter(),
@@ -174,19 +173,19 @@ impl<C: Comparator> MemTable<C> {
     }
 }
 
-pub struct MemtableIterator<'a, C: 'a + Comparator> {
-    _tbl: &'a MemTable<C>,
-    skipmapiter: SkipMapIter<'a, C>,
+pub struct MemtableIterator<'a> {
+    _tbl: &'a MemTable,
+    skipmapiter: SkipMapIter<'a>,
 }
 
-impl<'a, C: 'a + Comparator> Iterator for MemtableIterator<'a, C> {
+impl<'a> Iterator for MemtableIterator<'a> {
     type Item = (&'a [u8], &'a [u8]);
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             if let Some((foundkey, _)) = self.skipmapiter.next() {
                 let (keylen, keyoff, tag, vallen, valoff) =
-                    MemTable::<C>::parse_memtable_key(foundkey);
+                    MemTable::parse_memtable_key(foundkey);
 
                 if tag & 0xff == ValueType::TypeValue as u64 {
                     return Some((&foundkey[keyoff..keyoff + keylen],
@@ -201,12 +200,12 @@ impl<'a, C: 'a + Comparator> Iterator for MemtableIterator<'a, C> {
     }
 }
 
-impl<'a, C: 'a + Comparator> LdbIterator<'a> for MemtableIterator<'a, C> {
+impl<'a> LdbIterator<'a> for MemtableIterator<'a> {
     fn prev(&mut self) -> Option<Self::Item> {
         loop {
             if let Some((foundkey, _)) = self.skipmapiter.prev() {
                 let (keylen, keyoff, tag, vallen, valoff) =
-                    MemTable::<C>::parse_memtable_key(foundkey);
+                    MemTable::parse_memtable_key(foundkey);
 
                 if tag & 0xff == ValueType::TypeValue as u64 {
                     return Some((&foundkey[keyoff..keyoff + keylen],
@@ -226,7 +225,7 @@ impl<'a, C: 'a + Comparator> LdbIterator<'a> for MemtableIterator<'a, C> {
         assert!(self.valid());
 
         let (foundkey, _): (&'a [u8], &'a [u8]) = self.skipmapiter.current();
-        let (keylen, keyoff, tag, vallen, valoff) = MemTable::<C>::parse_memtable_key(foundkey);
+        let (keylen, keyoff, tag, vallen, valoff) = MemTable::parse_memtable_key(foundkey);
 
         if tag & 0xff == ValueType::TypeValue as u64 {
             return (&foundkey[keyoff..keyoff + keylen], &foundkey[valoff..valoff + vallen]);
@@ -245,7 +244,7 @@ mod tests {
     use super::*;
     use types::*;
 
-    fn get_memtable() -> MemTable<StandardComparator> {
+    fn get_memtable() -> MemTable {
         let mut mt = MemTable::new();
         let entries = vec![(120, "abc", "123"),
                            (121, "abd", "124"),

@@ -1,6 +1,8 @@
 use std::default::Default;
 use std::cmp::Ordering;
 
+use filter::{FilterPolicy, BloomPolicy};
+
 pub enum ValueType {
     TypeDeletion = 0,
     TypeValue = 1,
@@ -22,21 +24,21 @@ pub enum Status {
 /// Trait used to influence how SkipMap determines the order of elements. Use StandardComparator
 /// for the normal implementation using numerical comparison.
 pub trait Comparator {
-    fn cmp(&[u8], &[u8]) -> Ordering;
+    fn cmp(&self, &[u8], &[u8]) -> Ordering;
 }
 
 pub struct StandardComparator;
 
 impl Comparator for StandardComparator {
-    fn cmp(a: &[u8], b: &[u8]) -> Ordering {
+    fn cmp(&self, a: &[u8], b: &[u8]) -> Ordering {
         a.cmp(b)
     }
 }
 
 /// [not all member types implemented yet]
 ///
-pub struct Options<C: Comparator> {
-    pub cmp: C,
+pub struct Options {
+    pub cmp: Box<Comparator>,
     pub create_if_missing: bool,
     pub error_if_exists: bool,
     pub paranoid_checks: bool,
@@ -47,13 +49,14 @@ pub struct Options<C: Comparator> {
     pub block_size: usize,
     pub block_restart_interval: usize,
     // pub compression_type: CompressionType,
-    pub reuse_logs: bool, // pub filter_policy: FilterPolicy,
+    pub reuse_logs: bool,
+    pub filter_policy: Box<FilterPolicy>,
 }
 
-impl Default for Options<StandardComparator> {
-    fn default() -> Options<StandardComparator> {
+impl Default for Options {
+    fn default() -> Options {
         Options {
-            cmp: StandardComparator,
+            cmp: Box::new(StandardComparator),
             create_if_missing: true,
             error_if_exists: false,
             paranoid_checks: false,
@@ -62,6 +65,7 @@ impl Default for Options<StandardComparator> {
             block_size: 4 << 10,
             block_restart_interval: 16,
             reuse_logs: false,
+            filter_policy: Box::new(BloomPolicy),
         }
     }
 }

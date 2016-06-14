@@ -26,20 +26,13 @@ pub type BlockContents = Vec<u8>;
 /// A RESTART is a fixed u32 pointing to the beginning of an ENTRY.
 ///
 /// N_RESTARTS contains the number of restarts.
-pub struct Block<C: Comparator> {
+pub struct Block {
     data: BlockContents,
     restarts_off: usize,
-    cmp: C,
 }
 
-impl Block<StandardComparator> {
-    pub fn new(contents: BlockContents) -> Block<StandardComparator> {
-        Self::new_with_cmp(contents, StandardComparator)
-    }
-}
-
-impl<C: Comparator> Block<C> {
-    pub fn new_with_cmp(contents: BlockContents, cmp: C) -> Block<C> {
+impl Block {
+    pub fn new(contents: BlockContents) -> Block {
         assert!(contents.len() > 4);
         let restarts = u32::decode_fixed(&contents[contents.len() - 4..]);
         let restart_offset = contents.len() - 4 - 4 * restarts as usize;
@@ -47,7 +40,6 @@ impl<C: Comparator> Block<C> {
         Block {
             data: contents,
             restarts_off: restart_offset,
-            cmp: cmp,
         }
     }
 
@@ -60,9 +52,10 @@ impl<C: Comparator> Block<C> {
         u32::decode_fixed(&self.data[restart..restart + 4]) as usize
     }
 
-    pub fn iter<'a>(&'a self) -> BlockIter<'a, C> {
+    pub fn iter<'a>(&'a self, cmp: Box<Comparator>) -> BlockIter<'a> {
         BlockIter {
             block: self,
+            cmp: cmp,
             current_restart_ix: 0,
             offset: 0,
             key: Vec::new(),
@@ -72,9 +65,9 @@ impl<C: Comparator> Block<C> {
     }
 }
 
-
-pub struct BlockIter<'a, C: 'a + Comparator> {
-    block: &'a Block<C>,
+pub struct BlockIter<'a> {
+    block: &'a Block,
+    cmp: Box<Comparator>,
     // start of next entry
     offset: usize,
     // start of current entry
@@ -87,7 +80,7 @@ pub struct BlockIter<'a, C: 'a + Comparator> {
     val_offset: usize,
 }
 
-impl<'a, C: Comparator> BlockIter<'a, C> {
+impl<'a> BlockIter<'a> {
     // Returns SHARED, NON_SHARED and VALSIZE from the current position. Advances self.offset.
     fn parse_entry(&mut self) -> (usize, usize, usize) {
         let mut i = 0;
@@ -120,7 +113,7 @@ impl<'a, C: Comparator> BlockIter<'a, C> {
     }
 }
 
-impl<'a, C: Comparator> Iterator for BlockIter<'a, C> {
+impl<'a> Iterator for BlockIter<'a> {
     type Item = (Vec<u8>, &'a [u8]);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -145,7 +138,7 @@ impl<'a, C: Comparator> Iterator for BlockIter<'a, C> {
     }
 }
 
-impl<'a, C: 'a + Comparator> LdbIterator<'a> for BlockIter<'a, C> {
+impl<'a> LdbIterator<'a> for BlockIter<'a> {
     fn prev(&mut self) -> Option<Self::Item> {
         // as in the original implementation -- seek to last restart point, then look for key
         let current_offset = self.current_entry_offset;
@@ -192,7 +185,7 @@ impl<'a, C: 'a + Comparator> LdbIterator<'a> for BlockIter<'a, C> {
             // At a restart, the shared part is supposed to be 0.
             assert_eq!(shared, 0);
 
-            let cmp = C::cmp(to, &self.block.data[self.offset..self.offset + non_shared]);
+            let cmp = self.cmp.cmp(to, &self.block.data[self.offset..self.offset + non_shared]);
 
             if cmp == Ordering::Less {
                 right = middle - 1;
@@ -207,7 +200,7 @@ impl<'a, C: 'a + Comparator> LdbIterator<'a> for BlockIter<'a, C> {
 
         // Linear search from here on
         while let Some((k, _)) = self.next() {
-            if C::cmp(k.as_slice(), to) >= Ordering::Equal {
+            if self.cmp.cmp(k.as_slice(), to) >= Ordering::Equal {
                 return;
             }
         }
@@ -223,8 +216,8 @@ impl<'a, C: 'a + Comparator> LdbIterator<'a> for BlockIter<'a, C> {
     }
 }
 
-pub struct BlockBuilder<C: Comparator> {
-    opt: Options<C>,
+pub struct BlockBuilder {
+    opt: Options,
     buffer: Vec<u8>,
     restarts: Vec<u32>,
 
@@ -232,8 +225,8 @@ pub struct BlockBuilder<C: Comparator> {
     counter: usize,
 }
 
-impl<C: Comparator> BlockBuilder<C> {
-    fn new(o: Options<C>) -> BlockBuilder<C> {
+impl BlockBuilder {
+    fn new(o: Options) -> BlockBuilder {
         let mut restarts = vec![0];
         restarts.reserve(1023);
 
@@ -254,7 +247,7 @@ impl<C: Comparator> BlockBuilder<C> {
 
     pub fn add(&mut self, key: &[u8], val: &[u8]) {
         assert!(self.counter <= self.opt.block_restart_interval);
-        assert!(self.buffer.is_empty() || C::cmp(self.last_key.as_slice(), key) == Ordering::Less);
+        assert!(self.buffer.is_empty() || self.opt.cmp.cmp(self.last_key.as_slice(), key) == Ordering::Less);
 
         let mut shared = 0;
 
