@@ -7,6 +7,7 @@ extern crate integer_encoding;
 
 mod block;
 mod blockhandle;
+mod filter;
 mod log;
 mod memtable;
 mod skipmap;

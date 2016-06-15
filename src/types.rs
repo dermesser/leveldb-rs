@@ -1,6 +1,8 @@
 use std::default::Default;
 use std::cmp::Ordering;
 
+use filter::FilterPolicy;
+
 pub enum ValueType {
     TypeDeletion = 0,
     TypeValue = 1,
@@ -47,7 +49,8 @@ pub struct Options<C: Comparator> {
     pub block_size: usize,
     pub block_restart_interval: usize,
     // pub compression_type: CompressionType,
-    pub reuse_logs: bool, // pub filter_policy: FilterPolicy,
+    pub reuse_logs: bool,
+    pub filter_policy: Option<Box<FilterPolicy>>,
 }
 
 impl Default for Options<StandardComparator> {
@@ -62,6 +65,7 @@ impl Default for Options<StandardComparator> {
             block_size: 4 << 10,
             block_restart_interval: 16,
             reuse_logs: false,
+            filter_policy: None,
         }
     }
 }
