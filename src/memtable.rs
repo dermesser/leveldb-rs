@@ -22,6 +22,8 @@ impl LookupKey {
                                          <u64 as FixedInt>::required_space());
         let mut i = 0;
 
+        key.reserve(8 + k.len().required_space() + k.len());
+
         key.resize(k.len().required_space(), 0);
         i += k.len().encode_var(&mut key[i..]);
 
@@ -259,6 +261,23 @@ mod tests {
                    &e.2.as_bytes().to_vec());
         }
         mt
+    }
+
+    #[test]
+    fn test_lookupkey() {
+        use integer_encoding::VarInt;
+
+        let lk1 = LookupKey::new("abcde".as_bytes(), 123);
+        let lk2 = LookupKey::new("xyabxy".as_bytes(), 97);
+
+        // Assert correct allocation strategy
+        assert_eq!(lk1.key.len(), 14);
+        assert_eq!(lk1.key.capacity(), 14);
+
+        assert_eq!(lk1.user_key(), "abcde".as_bytes());
+        assert_eq!(u32::decode_var(lk1.memtable_key()), (5, 1));
+        assert_eq!(lk2.internal_key(),
+                   vec![120, 121, 97, 98, 120, 121, 1, 97, 0, 0, 0, 0, 0, 0].as_slice());
     }
 
     #[test]
