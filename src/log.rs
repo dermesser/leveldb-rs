@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 //! A log consists of a number of blocks.
 //! A block consists of a number of records and an optional trailer (filler).
 //! A record is a bytestring: [checksum: uint32, length: uint16, type: uint8, data: [u8]]

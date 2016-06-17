@@ -1,6 +1,3 @@
-
-#![allow(dead_code)]
-
 use std::cmp::Ordering;
 use types::{Comparator, StandardComparator};
 use types::{ValueType, SequenceNumber, Status, LdbIterator};

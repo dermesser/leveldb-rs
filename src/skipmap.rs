@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use types::{Comparator, StandardComparator, LdbIterator};
 use rand::{Rng, SeedableRng, StdRng};
 use std::cmp::Ordering;
