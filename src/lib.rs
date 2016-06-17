@@ -1,4 +1,3 @@
-
 #![allow(dead_code)]
 
 extern crate crc;
@@ -8,6 +7,7 @@ extern crate integer_encoding;
 mod block;
 mod blockhandle;
 mod filter;
+mod filter_block;
 mod log;
 mod memtable;
 mod skipmap;
