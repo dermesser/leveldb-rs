@@ -1,6 +1,7 @@
 use std::cmp::Ordering;
 
-use types::{LdbIterator, Options};
+use options::Options;
+use types::LdbIterator;
 use types::{Comparator, StandardComparator};
 
 use integer_encoding::FixedInt;
