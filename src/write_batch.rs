@@ -83,3 +83,42 @@ impl<'b, 'a: 'b> Iterator for WriteBatchIter<'b, 'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::iter::Iterator;
+
+    #[test]
+    fn test_write_batch() {
+        let mut b = WriteBatch::with_capacity(1, 16);
+        let entries = vec![("abc".as_bytes(), "def".as_bytes()),
+                           ("123".as_bytes(), "456".as_bytes()),
+                           ("xxx".as_bytes(), "yyy".as_bytes()),
+                           ("zzz".as_bytes(), "".as_bytes()),
+                           ("010".as_bytes(), "".as_bytes())];
+
+        for &(k, v) in entries.iter() {
+            if !v.is_empty() {
+                b.put(k, v);
+            } else {
+                b.delete(k)
+            }
+        }
+
+        assert_eq!(b.iter().count(), 5);
+
+        let mut i = 0;
+
+        for (k, v) in b.iter() {
+            assert_eq!(k, entries[i].0);
+
+            match v {
+                None => assert!(entries[i].1.is_empty()),
+                Some(v_) => assert_eq!(v_, entries[i].1),
+            }
+
+            i += 1;
+        }
+    }
+}
