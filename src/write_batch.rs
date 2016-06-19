@@ -1,5 +1,6 @@
 use memtable::MemTable;
 use types::{Comparator, SequenceNumber, ValueType};
+use integer_encoding::VarInt;
 
 struct BatchEntry<'a> {
     key: &'a [u8],
@@ -45,6 +46,23 @@ impl<'a> WriteBatch<'a> {
         self.entries.clear()
     }
 
+    fn byte_size(&self) -> usize {
+        let mut size = 0;
+
+        for e in self.entries.iter() {
+            size += e.key.len() + e.key.len().required_space();
+
+            if let Some(v) = e.val {
+                size += v.len() + v.len().required_space();
+            } else {
+                size += 1;
+            }
+
+            size += 1; // account for tag
+        }
+        size
+    }
+
     fn iter<'b>(&'b self) -> WriteBatchIter<'b, 'a> {
         WriteBatchIter {
             batch: self,
@@ -62,6 +80,46 @@ impl<'a> WriteBatch<'a> {
             }
             sequence_num += 1;
         }
+    }
+
+    fn encode(&self) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(self.byte_size());
+        let mut ix = 0;
+
+        for (k, v) in self.iter() {
+            if let Some(_) = v {
+                buf.push(ValueType::TypeValue as u8);
+            } else {
+                buf.push(ValueType::TypeDeletion as u8);
+            }
+
+            ix += 1;
+
+            let req = k.len().required_space();
+            buf.resize(ix + req, 0);
+            ix += k.len().encode_var(&mut buf[ix..ix + req]);
+
+            buf.extend_from_slice(k);
+            ix += k.len();
+
+            let req2;
+            let v_;
+
+            if let Some(v__) = v {
+                v_ = v__;
+                req2 = v_.len().required_space();
+            } else {
+                v_ = "".as_bytes();
+                req2 = 0.required_space();
+            }
+
+            buf.resize(ix + req2, 0);
+            ix += v_.len().encode_var(&mut buf[ix..ix + req2]);
+
+            buf.extend_from_slice(v_);
+            ix += v_.len();
+        }
+        buf
     }
 }
 
@@ -106,6 +164,8 @@ mod tests {
             }
         }
 
+        assert_eq!(b.byte_size(), 39);
+        assert_eq!(b.encode().len(), 39);
         assert_eq!(b.iter().count(), 5);
 
         let mut i = 0;
