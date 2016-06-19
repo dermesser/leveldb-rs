@@ -254,8 +254,8 @@ mod tests {
         for e in entries.iter() {
             mt.add(e.0,
                    ValueType::TypeValue,
-                   &e.1.as_bytes().to_vec(),
-                   &e.2.as_bytes().to_vec());
+                   e.1.as_bytes(),
+                   e.2.as_bytes());
         }
         mt
     }
@@ -282,8 +282,8 @@ mod tests {
         let mut mt = MemTable::new();
         mt.add(123,
                ValueType::TypeValue,
-               &"abc".as_bytes().to_vec(),
-               &"123".as_bytes().to_vec());
+               "abc".as_bytes(),
+               "123".as_bytes());
 
         assert_eq!(mt.map.iter().next().unwrap().0,
                    vec![3, 97, 98, 99, 1, 123, 0, 0, 0, 0, 0, 0, 3, 49, 50, 51].as_slice());
@@ -293,19 +293,19 @@ mod tests {
     fn test_add_get() {
         let mt = get_memtable();
 
-        if let Result::Ok(v) = mt.get(&LookupKey::new(&"abc".as_bytes().to_vec(), 120)) {
-            assert_eq!(v, "123".as_bytes().to_vec());
+        if let Result::Ok(v) = mt.get(&LookupKey::new("abc".as_bytes(), 120)) {
+            assert_eq!(v, "123".as_bytes());
         } else {
             panic!("not found");
         }
 
-        if let Result::Ok(v) = mt.get(&LookupKey::new(&"abe".as_bytes().to_vec(), 122)) {
-            assert_eq!(v, "125".as_bytes().to_vec());
+        if let Result::Ok(v) = mt.get(&LookupKey::new("abe".as_bytes(), 122)) {
+            assert_eq!(v, "125".as_bytes());
         } else {
             panic!("not found");
         }
 
-        if let Result::Ok(v) = mt.get(&LookupKey::new(&"abc".as_bytes().to_vec(), 124)) {
+        if let Result::Ok(v) = mt.get(&LookupKey::new("abc".as_bytes(), 124)) {
             println!("{:?}", v);
             panic!("found");
         }
@@ -323,7 +323,7 @@ mod tests {
         assert_eq!(iter.current().0, vec![97, 98, 99].as_slice());
         assert_eq!(iter.current().1, vec![49, 50, 51].as_slice());
 
-        iter.seek(&"abf".as_bytes().to_vec());
+        iter.seek("abf".as_bytes());
         assert_eq!(iter.current().0, vec![97, 98, 102].as_slice());
         assert_eq!(iter.current().1, vec![49, 50, 54].as_slice());
     }
