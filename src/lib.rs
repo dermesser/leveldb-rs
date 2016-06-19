@@ -17,6 +17,7 @@ mod options;
 mod skipmap;
 mod snapshot;
 mod types;
+mod write_batch;
 
 pub use types::Comparator;
 
