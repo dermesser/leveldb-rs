@@ -1,11 +1,13 @@
 #![allow(dead_code)]
 
 extern crate crc;
-extern crate rand;
 extern crate integer_encoding;
+extern crate libc;
+extern crate rand;
 
 mod block;
 mod blockhandle;
+mod env;
 mod filter;
 mod filter_block;
 mod log;
