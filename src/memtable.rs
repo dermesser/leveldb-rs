@@ -72,7 +72,7 @@ impl<C: Comparator> MemTable<C> {
         self.map.approx_memory()
     }
 
-    pub fn add(&mut self, seq: SequenceNumber, t: ValueType, key: &Vec<u8>, value: &Vec<u8>) {
+    pub fn add(&mut self, seq: SequenceNumber, t: ValueType, key: &[u8], value: &[u8]) {
         self.map.insert(Self::build_memtable_key(key, value, t, seq), Vec::new())
     }
 
@@ -80,8 +80,8 @@ impl<C: Comparator> MemTable<C> {
     /// builds such a key. It's called key because the underlying Map implementation will only be
     /// concerned with keys; the value field is not used (instead, the value is encoded in the key,
     /// and for lookups we just search for the next bigger entry).
-    fn build_memtable_key(key: &Vec<u8>,
-                          value: &Vec<u8>,
+    fn build_memtable_key(key: &[u8],
+                          value: &[u8],
                           t: ValueType,
                           seq: SequenceNumber)
                           -> Vec<u8> {
