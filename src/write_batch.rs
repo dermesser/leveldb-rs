@@ -11,7 +11,7 @@ pub struct WriteBatch {
 }
 
 impl WriteBatch {
-    fn new(seq: SequenceNumber) -> WriteBatch {
+    fn new() -> WriteBatch {
         let mut v = Vec::with_capacity(128);
         v.resize(HEADER_SIZE, 0);
 
@@ -22,6 +22,7 @@ impl WriteBatch {
         WriteBatch { entries: buf }
     }
 
+    #[allow(unused_assignments)]
     fn put(&mut self, k: &[u8], v: &[u8]) {
         let mut ix = self.entries.len();
 
@@ -38,12 +39,13 @@ impl WriteBatch {
         ix += v.len().encode_var(&mut self.entries[ix..]);
 
         self.entries.extend_from_slice(v);
-        // ix += v.len();
+        ix += v.len();
 
         let c = self.count();
         self.set_count(c + 1);
     }
 
+    #[allow(unused_assignments)]
     fn delete(&mut self, k: &[u8]) {
         let mut ix = self.entries.len();
 
@@ -54,7 +56,7 @@ impl WriteBatch {
         ix += k.len().encode_var(&mut self.entries[ix..]);
 
         self.entries.extend_from_slice(k);
-        // ix += k.len();
+        ix += k.len();
 
         let c = self.count();
         self.set_count(c + 1);
@@ -91,8 +93,8 @@ impl WriteBatch {
         }
     }
 
-    fn insert_into_memtable<C: Comparator>(&self, mt: &mut MemTable<C>) {
-        let mut sequence_num = self.sequence();
+    fn insert_into_memtable<C: Comparator>(&self, seq: SequenceNumber, mt: &mut MemTable<C>) {
+        let mut sequence_num = seq;
 
         for (k, v) in self.iter() {
             match v {
@@ -103,7 +105,8 @@ impl WriteBatch {
         }
     }
 
-    fn encode(self) -> Vec<u8> {
+    fn encode(mut self, seq: SequenceNumber) -> Vec<u8> {
+        self.set_sequence(seq);
         self.entries
     }
 }
@@ -150,7 +153,7 @@ mod tests {
 
     #[test]
     fn test_write_batch() {
-        let mut b = WriteBatch::new(1);
+        let mut b = WriteBatch::new();
         let entries = vec![("abc".as_bytes(), "def".as_bytes()),
                            ("123".as_bytes(), "456".as_bytes()),
                            ("xxx".as_bytes(), "yyy".as_bytes()),
@@ -183,6 +186,6 @@ mod tests {
         }
 
         assert_eq!(i, 5);
-        assert_eq!(b.encode().len(), 49);
+        assert_eq!(b.encode(1).len(), 49);
     }
 }
