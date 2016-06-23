@@ -11,7 +11,7 @@ pub struct WriteBatch {
 }
 
 impl WriteBatch {
-    fn new() -> WriteBatch {
+    pub fn new() -> WriteBatch {
         let mut v = Vec::with_capacity(128);
         v.resize(HEADER_SIZE, 0);
 
@@ -23,7 +23,7 @@ impl WriteBatch {
     }
 
     #[allow(unused_assignments)]
-    fn put(&mut self, k: &[u8], v: &[u8]) {
+    pub fn put(&mut self, k: &[u8], v: &[u8]) {
         let mut ix = self.entries.len();
 
         self.entries.push(ValueType::TypeValue as u8);
@@ -46,7 +46,7 @@ impl WriteBatch {
     }
 
     #[allow(unused_assignments)]
-    fn delete(&mut self, k: &[u8]) {
+    pub fn delete(&mut self, k: &[u8]) {
         let mut ix = self.entries.len();
 
         self.entries.push(ValueType::TypeDeletion as u8);
@@ -66,34 +66,34 @@ impl WriteBatch {
         self.entries.clear()
     }
 
-    fn byte_size(&self) -> usize {
+    pub fn byte_size(&self) -> usize {
         self.entries.len()
     }
 
-    fn set_count(&mut self, c: u32) {
+    pub fn set_count(&mut self, c: u32) {
         c.encode_fixed(&mut self.entries[COUNT_OFFSET..COUNT_OFFSET + 4]);
     }
 
-    fn count(&self) -> u32 {
+    pub fn count(&self) -> u32 {
         u32::decode_fixed(&self.entries[COUNT_OFFSET..COUNT_OFFSET + 4])
     }
 
-    fn set_sequence(&mut self, s: SequenceNumber) {
+    pub fn set_sequence(&mut self, s: SequenceNumber) {
         s.encode_fixed(&mut self.entries[SEQNUM_OFFSET..SEQNUM_OFFSET + 8]);
     }
 
-    fn sequence(&self) -> SequenceNumber {
+    pub fn sequence(&self) -> SequenceNumber {
         u64::decode_fixed(&self.entries[SEQNUM_OFFSET..SEQNUM_OFFSET + 8])
     }
 
-    fn iter<'a>(&'a self) -> WriteBatchIter<'a> {
+    pub fn iter<'a>(&'a self) -> WriteBatchIter<'a> {
         WriteBatchIter {
             batch: self,
             ix: HEADER_SIZE,
         }
     }
 
-    fn insert_into_memtable<C: Comparator>(&self, seq: SequenceNumber, mt: &mut MemTable<C>) {
+    pub fn insert_into_memtable<C: Comparator>(&self, seq: SequenceNumber, mt: &mut MemTable<C>) {
         let mut sequence_num = seq;
 
         for (k, v) in self.iter() {
@@ -105,7 +105,7 @@ impl WriteBatch {
         }
     }
 
-    fn encode(mut self, seq: SequenceNumber) -> Vec<u8> {
+    pub fn encode(mut self, seq: SequenceNumber) -> Vec<u8> {
         self.set_sequence(seq);
         self.entries
     }
