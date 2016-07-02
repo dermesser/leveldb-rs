@@ -223,7 +223,8 @@ impl<'a, C: 'a + Comparator> LdbIterator<'a> for BlockIter<'a, C> {
 }
 
 pub struct BlockBuilder<C: Comparator> {
-    opt: Options<C>,
+    opt: Options,
+    cmp: C,
     buffer: Vec<u8>,
     restarts: Vec<u32>,
 
@@ -232,13 +233,14 @@ pub struct BlockBuilder<C: Comparator> {
 }
 
 impl<C: Comparator> BlockBuilder<C> {
-    fn new(o: Options<C>) -> BlockBuilder<C> {
+    pub fn new(o: Options, cmp: C) -> BlockBuilder<C> {
         let mut restarts = vec![0];
         restarts.reserve(1023);
 
         BlockBuilder {
             buffer: Vec::with_capacity(o.block_size),
             opt: o,
+            cmp: cmp,
             restarts: restarts,
             last_key: Vec::new(),
             counter: 0,
@@ -340,7 +342,7 @@ mod tests {
         let mut o = Options::default();
         o.block_restart_interval = 3;
 
-        let mut builder = BlockBuilder::new(o);
+        let mut builder = BlockBuilder::new(o, StandardComparator);
 
         for &(k, v) in get_data().iter() {
             builder.add(k, v);
@@ -355,7 +357,7 @@ mod tests {
     #[test]
     fn test_build_iterate() {
         let data = get_data();
-        let mut builder = BlockBuilder::new(Options::default());
+        let mut builder = BlockBuilder::new(Options::default(), StandardComparator);
 
         for &(k, v) in data.iter() {
             builder.add(k, v);
@@ -378,7 +380,7 @@ mod tests {
         let mut o = Options::default();
         o.block_restart_interval = 3;
         let data = get_data();
-        let mut builder = BlockBuilder::new(o);
+        let mut builder = BlockBuilder::new(o, StandardComparator);
 
         for &(k, v) in data.iter() {
             builder.add(k, v);
@@ -408,7 +410,7 @@ mod tests {
         o.block_restart_interval = 3;
 
         let data = get_data();
-        let mut builder = BlockBuilder::new(o);
+        let mut builder = BlockBuilder::new(o, StandardComparator);
 
         for &(k, v) in data.iter() {
             builder.add(k, v);
