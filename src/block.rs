@@ -296,6 +296,10 @@ impl<C: Comparator> BlockBuilder<C> {
         self.counter += 1;
     }
 
+    pub fn last_key<'a>(&'a self) -> &'a [u8] {
+        &self.last_key
+    }
+
     pub fn finish(mut self) -> BlockContents {
         // 1. Append RESTARTS
         let mut buf = [0 as u8; 4];
@@ -341,6 +345,7 @@ mod tests {
         for &(k, v) in get_data().iter() {
             builder.add(k, v);
             assert!(builder.counter <= 3);
+            assert_eq!(builder.last_key(), k);
         }
 
         let block = builder.finish();
