@@ -40,13 +40,10 @@ impl BlockHandle {
 
     /// Returns how many bytes were written, or 0 if the write failed because `dst` is too small.
     pub fn encode_to(&self, dst: &mut [u8]) -> usize {
-        if dst.len() < self.offset.required_space() + self.size.required_space() {
-            0
-        } else {
-            let off = self.offset.encode_var(dst);
-            off + self.size.encode_var(&mut dst[off..])
-        }
+        assert!(dst.len() >= self.offset.required_space() + self.size.required_space());
 
+        let off = self.offset.encode_var(dst);
+        off + self.size.encode_var(&mut dst[off..])
     }
 }
 

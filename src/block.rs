@@ -363,6 +363,23 @@ mod tests {
     }
 
     #[test]
+    fn test_empty_block() {
+        let mut o = Options::default();
+        o.block_restart_interval = 16;
+        let builder = BlockBuilder::new(o, StandardComparator);
+
+        let blockc = builder.finish();
+        assert_eq!(blockc.len(), 8);
+        assert_eq!(blockc, vec![0, 0, 0, 0, 1, 0, 0, 0]);
+
+        let block = Block::new(blockc);
+        let block_iter = block.iter();
+        for _ in block_iter {
+            panic!("expected 0 iterations");
+        }
+    }
+
+    #[test]
     fn test_build_iterate() {
         let data = get_data();
         let mut builder = BlockBuilder::new(Options::default(), StandardComparator);
