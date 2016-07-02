@@ -34,7 +34,7 @@ impl Comparator for StandardComparator {
 
 pub struct Range<'a> {
     pub start: &'a [u8],
-    pub limit: &'a [u8]
+    pub limit: &'a [u8],
 }
 
 /// An extension of the standard `Iterator` trait that supports some methods necessary for LevelDB.
@@ -49,4 +49,3 @@ pub trait LdbIterator<'a>: Iterator {
     fn current(&'a self) -> Self::Item;
     fn prev(&mut self) -> Option<Self::Item>;
 }
-

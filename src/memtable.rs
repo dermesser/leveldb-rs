@@ -80,11 +80,7 @@ impl<C: Comparator> MemTable<C> {
     /// builds such a key. It's called key because the underlying Map implementation will only be
     /// concerned with keys; the value field is not used (instead, the value is encoded in the key,
     /// and for lookups we just search for the next bigger entry).
-    fn build_memtable_key(key: &[u8],
-                          value: &[u8],
-                          t: ValueType,
-                          seq: SequenceNumber)
-                          -> Vec<u8> {
+    fn build_memtable_key(key: &[u8], value: &[u8], t: ValueType, seq: SequenceNumber) -> Vec<u8> {
         // We are using the original LevelDB approach here -- encoding key and value into the
         // key that is used for insertion into the SkipMap.
         // The format is: [key_size: varint32, key_data: [u8], flags: u64, value_size: varint32,
@@ -252,10 +248,7 @@ mod tests {
                            (123, "abf", "126")];
 
         for e in entries.iter() {
-            mt.add(e.0,
-                   ValueType::TypeValue,
-                   e.1.as_bytes(),
-                   e.2.as_bytes());
+            mt.add(e.0, ValueType::TypeValue, e.1.as_bytes(), e.2.as_bytes());
         }
         mt
     }
