@@ -40,6 +40,10 @@ impl<'a, FP: FilterPolicy> FilterBlockBuilder<'a, FP> {
         }
     }
 
+    pub fn filter_name(&self) -> &'static str {
+        self.policy.name()
+    }
+
     pub fn add_key(&mut self, key: &'a [u8]) {
         self.keys.push(key);
     }
