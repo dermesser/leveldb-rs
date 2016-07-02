@@ -2,7 +2,7 @@ use types::SequenceNumber;
 
 use std::default::Default;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum CompressionType {
     CompressionNone = 0,
     CompressionSnappy = 1,
