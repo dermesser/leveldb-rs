@@ -246,6 +246,19 @@ impl<C: Comparator> BlockBuilder<C> {
             counter: 0,
         }
     }
+
+    pub fn entries(&self) -> usize {
+        self.counter
+    }
+
+    pub fn last_key<'a>(&'a self) -> &'a [u8] {
+        &self.last_key
+    }
+
+    pub fn size_estimate(&self) -> usize {
+        self.buffer.len() + self.restarts.len() * 4 + 4
+    }
+
     pub fn reset(&mut self) {
         self.buffer.clear();
         self.restarts.clear();
@@ -298,23 +311,18 @@ impl<C: Comparator> BlockBuilder<C> {
         self.counter += 1;
     }
 
-    pub fn last_key<'a>(&'a self) -> &'a [u8] {
-        &self.last_key
-    }
-
     pub fn finish(mut self) -> BlockContents {
         // 1. Append RESTARTS
-        let mut buf = [0 as u8; 4];
-        self.buffer.reserve(self.restarts.len() * 4 + 4);
+        let mut i = self.buffer.len();
+        self.buffer.resize(i + self.restarts.len() * 4 + 4, 0);
 
         for r in self.restarts.iter() {
-            r.encode_fixed(&mut buf[..]);
-            self.buffer.extend_from_slice(&buf[..]);
+            r.encode_fixed(&mut self.buffer[i..i + 4]);
+            i += 4;
         }
 
         // 2. Append N_RESTARTS
-        (self.restarts.len() as u32).encode_fixed(&mut buf[..]);
-        self.buffer.extend_from_slice(&buf[..]);
+        (self.restarts.len() as u32).encode_fixed(&mut self.buffer[i..i + 4]);
 
         // done
         self.buffer
