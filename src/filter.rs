@@ -10,6 +10,21 @@ pub trait FilterPolicy {
     fn key_may_match(&self, key: &[u8], filter: &[u8]) -> bool;
 }
 
+/// Used for tables that don't have filter blocks but need a type parameter.
+pub struct NoFilterPolicy;
+
+impl FilterPolicy for NoFilterPolicy {
+    fn name(&self) -> &'static str {
+        "_"
+    }
+    fn create_filter(&self, _: &Vec<&[u8]>) -> Vec<u8> {
+        vec![]
+    }
+    fn key_may_match(&self, _: &[u8], _: &[u8]) -> bool {
+        true
+    }
+}
+
 const BLOOM_SEED: u32 = 0xbc9f1d34;
 
 /// A filter policy using a bloom filter internally.
