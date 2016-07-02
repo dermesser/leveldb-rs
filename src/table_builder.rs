@@ -147,6 +147,9 @@ impl<'a, C: Comparator, Dst: Write, FilterPol: FilterPolicy> TableBuilder<'a, C,
         }
     }
 
+    pub fn entries(&self) -> usize {
+        self.num_entries
+    }
 
     pub fn add(&mut self, key: &'a [u8], val: &[u8]) {
         assert!(self.data_block.is_some());
@@ -297,19 +300,32 @@ mod tests {
     #[test]
     fn test_table_builder() {
         let mut d = Vec::with_capacity(512);
-        {
-            let mut opt = Options::default();
-            opt.block_restart_interval = 3;
-            let mut b = TableBuilder::new(opt, StandardComparator, &mut d, BloomPolicy::new(4));
+        let mut opt = Options::default();
+        opt.block_restart_interval = 3;
+        let mut b = TableBuilder::new(opt, StandardComparator, &mut d, BloomPolicy::new(4));
 
-            let data = vec![("abc", "def"), ("abd", "dee"), ("bcd", "asa"), ("bsr", "a00")];
+        let data = vec![("abc", "def"), ("abd", "dee"), ("bcd", "asa"), ("bsr", "a00")];
 
-            for &(k, v) in data.iter() {
-                b.add(k.as_bytes(), v.as_bytes());
-            }
-
-            b.finish();
+        for &(k, v) in data.iter() {
+            b.add(k.as_bytes(), v.as_bytes());
         }
-        println!("{:?}", d);
+
+        b.finish();
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_bad_input() {
+        let mut d = Vec::with_capacity(512);
+        let mut opt = Options::default();
+        opt.block_restart_interval = 3;
+        let mut b = TableBuilder::new(opt, StandardComparator, &mut d, BloomPolicy::new(4));
+
+        // Test two equal consecutive keys
+        let data = vec![("abc", "def"), ("abc", "dee"), ("bcd", "asa"), ("bsr", "a00")];
+
+        for &(k, v) in data.iter() {
+            b.add(k.as_bytes(), v.as_bytes());
+        }
     }
 }
