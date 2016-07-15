@@ -353,17 +353,30 @@ mod tests {
     fn test_iterator_0() {
         let skm = SkipMap::new();
         let mut i = 0;
+
         for (_, _) in skm.iter() {
             i += 1;
         }
+
         assert_eq!(i, 0);
         assert!(!skm.iter().valid());
+    }
+
+    #[test]
+    fn test_iterator_init() {
+        let skm = make_skipmap();
+        let mut iter = skm.iter();
+
+        assert!(!iter.valid());
+        iter.next();
+        assert!(iter.valid());
     }
 
     #[test]
     fn test_iterator() {
         let skm = make_skipmap();
         let mut i = 0;
+
         for (k, v) in skm.iter() {
             assert!(!k.is_empty());
             assert!(!v.is_empty());
