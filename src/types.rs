@@ -40,13 +40,20 @@ pub struct Range<'a> {
 
 /// An extension of the standard `Iterator` trait that supports some methods necessary for LevelDB.
 /// This works because the iterators used are stateful and keep the last returned element.
+///
+/// Note: Implementing types are expected to hold `!valid()` before the first call to `next()`.
 pub trait LdbIterator<'a>: Iterator {
     // We're emulating LevelDB's Slice type here using actual slices with the lifetime of the
     // iterator. The lifetime of the iterator is usually the one of the backing storage (Block,
     // MemTable, SkipMap...)
     // type Item = (&'a [u8], &'a [u8]);
+
+    /// Seek the iterator to `key` or the next bigger key.
     fn seek(&mut self, key: &[u8]);
+    /// Returns true if `current()` would return a valid item.
     fn valid(&self) -> bool;
+    /// Return the current item. Panics if `!valid()`.
     fn current(&'a self) -> Self::Item;
+    /// Go to the previous item.
     fn prev(&mut self) -> Option<Self::Item>;
 }
