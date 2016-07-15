@@ -261,6 +261,10 @@ impl<'a, C: Comparator + 'a> Iterator for SkipMapIter<'a, C> {
 }
 
 impl<'a, C: Comparator> LdbIterator<'a> for SkipMapIter<'a, C> {
+    fn reset(&mut self) {
+        let new = self.map.iter();
+        self.current = new.current;
+    }
     fn seek(&mut self, key: &[u8]) {
         let node = self.map.get_greater_or_equal(key);
         self.current = unsafe { transmute_copy(&node) }

@@ -197,6 +197,9 @@ impl<'a, C: 'a + Comparator> Iterator for MemtableIterator<'a, C> {
 }
 
 impl<'a, C: 'a + Comparator> LdbIterator<'a> for MemtableIterator<'a, C> {
+    fn reset(&mut self) {
+        self.skipmapiter.reset();
+    }
     fn prev(&mut self) -> Option<Self::Item> {
         loop {
             if let Some((foundkey, _)) = self.skipmapiter.prev() {

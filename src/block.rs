@@ -110,13 +110,6 @@ impl<'a, C: Comparator> BlockIter<'a, C> {
         self.key.resize(shared, 0);
         self.key.extend_from_slice(&self.block.data[self.offset..self.offset + non_shared]);
     }
-
-    fn reset(&mut self) {
-        self.offset = 0;
-        self.current_restart_ix = 0;
-        self.key.clear();
-        self.val_offset = 0;
-    }
 }
 
 impl<'a, C: Comparator> Iterator for BlockIter<'a, C> {
@@ -145,6 +138,12 @@ impl<'a, C: Comparator> Iterator for BlockIter<'a, C> {
 }
 
 impl<'a, C: 'a + Comparator> LdbIterator<'a> for BlockIter<'a, C> {
+    fn reset(&mut self) {
+        self.offset = 0;
+        self.current_restart_ix = 0;
+        self.key.clear();
+        self.val_offset = 0;
+    }
     fn prev(&mut self) -> Option<Self::Item> {
         // as in the original implementation -- seek to last restart point, then look for key
         let current_offset = self.current_entry_offset;
