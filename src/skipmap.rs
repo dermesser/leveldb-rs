@@ -260,7 +260,7 @@ impl<'a, C: Comparator + 'a> Iterator for SkipMapIter<'a, C> {
     }
 }
 
-impl<'a, C: Comparator> LdbIterator<'a> for SkipMapIter<'a, C> {
+impl<'a, C: Comparator> LdbIterator for SkipMapIter<'a, C> {
     fn reset(&mut self) {
         let new = self.map.iter();
         self.current = new.current;
@@ -272,17 +272,24 @@ impl<'a, C: Comparator> LdbIterator<'a> for SkipMapIter<'a, C> {
     fn valid(&self) -> bool {
         unsafe { !(*self.current).key.is_empty() }
     }
-    fn current(&'a self) -> Self::Item {
-        assert!(self.valid());
-        unsafe { (&(*self.current).key, &(*self.current).value) }
+    fn current(&self) -> Option<Self::Item> {
+        if self.valid() {
+            Some(unsafe { (&(*self.current).key, &(*self.current).value) })
+        } else {
+            None
+        }
     }
     fn prev(&mut self) -> Option<Self::Item> {
         // Going after the original implementation here; we just seek to the node before current().
-        let prev = self.map.get_next_smaller(self.current().0);
-        self.current = unsafe { transmute_copy(&prev) };
+        if let Some(current) = self.current() {
+            let prev = self.map.get_next_smaller(current.0);
+            self.current = unsafe { transmute_copy(&prev) };
 
-        if !prev.key.is_empty() {
-            Some(unsafe { (&(*self.current).key, &(*self.current).value) })
+            if !prev.key.is_empty() {
+                Some(unsafe { (&(*self.current).key, &(*self.current).value) })
+            } else {
+                None
+            }
         } else {
             None
         }
@@ -290,11 +297,11 @@ impl<'a, C: Comparator> LdbIterator<'a> for SkipMapIter<'a, C> {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
     use types::*;
 
-    fn make_skipmap() -> SkipMap<StandardComparator> {
+    pub fn make_skipmap() -> SkipMap<StandardComparator> {
         let mut skm = SkipMap::new();
         let keys = vec!["aba", "abb", "abc", "abd", "abe", "abf", "abg", "abh", "abi", "abj",
                         "abk", "abl", "abm", "abn", "abo", "abp", "abq", "abr", "abs", "abt",
@@ -397,10 +404,12 @@ mod tests {
         iter.next();
         assert!(iter.valid());
         iter.seek(&"abz".as_bytes().to_vec());
-        assert_eq!(iter.current(), ("abz".as_bytes(), "def".as_bytes()));
+        assert_eq!(iter.current().unwrap(),
+                   ("abz".as_bytes(), "def".as_bytes()));
         // go back to beginning
         iter.seek(&"aba".as_bytes().to_vec());
-        assert_eq!(iter.current(), ("aba".as_bytes(), "def".as_bytes()));
+        assert_eq!(iter.current().unwrap(),
+                   ("aba".as_bytes(), "def".as_bytes()));
 
         iter.seek(&"".as_bytes().to_vec());
         assert!(iter.valid());
@@ -426,6 +435,7 @@ mod tests {
         assert!(!iter.valid());
         iter.seek(&"abc".as_bytes());
         iter.prev();
-        assert_eq!(iter.current(), ("abb".as_bytes(), "def".as_bytes()));
+        assert_eq!(iter.current().unwrap(),
+                   ("abb".as_bytes(), "def".as_bytes()));
     }
 }

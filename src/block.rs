@@ -137,7 +137,7 @@ impl<'a, C: Comparator> Iterator for BlockIter<'a, C> {
     }
 }
 
-impl<'a, C: 'a + Comparator> LdbIterator<'a> for BlockIter<'a, C> {
+impl<'a, C: 'a + Comparator> LdbIterator for BlockIter<'a, C> {
     fn reset(&mut self) {
         self.offset = 0;
         self.current_restart_ix = 0;
@@ -215,9 +215,12 @@ impl<'a, C: 'a + Comparator> LdbIterator<'a> for BlockIter<'a, C> {
         !self.key.is_empty() && self.val_offset > 0 && self.val_offset < self.block.restarts_off
     }
 
-    fn current(&self) -> Self::Item {
-        assert!(self.valid());
-        (self.key.clone(), &self.block.data[self.val_offset..self.offset])
+    fn current(&self) -> Option<Self::Item> {
+        if self.valid() {
+            Some((self.key.clone(), &self.block.data[self.val_offset..self.offset]))
+        } else {
+            None
+        }
     }
 }
 
@@ -426,7 +429,7 @@ mod tests {
         block_iter.prev();
         assert!(block_iter.valid());
         assert_eq!(block_iter.current(),
-                   ("key1".as_bytes().to_vec(), "value1".as_bytes()));
+                   Some(("key1".as_bytes().to_vec(), "value1".as_bytes())));
         block_iter.prev();
         assert!(!block_iter.valid());
     }
@@ -451,11 +454,11 @@ mod tests {
         iter.seek(&"prefix_key2".as_bytes());
         assert!(iter.valid());
         assert_eq!(iter.current(),
-                   ("prefix_key2".as_bytes().to_vec(), "value".as_bytes()));
+                   Some(("prefix_key2".as_bytes().to_vec(), "value".as_bytes())));
 
         iter.seek(&"key1".as_bytes());
         assert!(iter.valid());
         assert_eq!(iter.current(),
-                   ("key1".as_bytes().to_vec(), "value1".as_bytes()));
+                   Some(("key1".as_bytes().to_vec(), "value1".as_bytes())));
     }
 }
