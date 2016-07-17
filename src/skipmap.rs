@@ -73,7 +73,6 @@ impl<C: Comparator> SkipMap<C> {
 
     pub fn contains(&self, key: &[u8]) -> bool {
         let n = self.get_greater_or_equal(key);
-        println!("{:?}", n.key);
         n.key.starts_with(&key)
     }
 

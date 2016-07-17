@@ -165,7 +165,6 @@ impl<'a, C: 'a + Comparator> LdbIterator for BlockIter<'a, C> {
 
         loop {
             result = self.next();
-            println!("next! {:?}", (self.current_entry_offset, self.offset));
 
             if self.offset >= current_offset {
                 break;
