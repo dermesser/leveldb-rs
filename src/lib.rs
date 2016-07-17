@@ -13,12 +13,15 @@ mod filter;
 mod filter_block;
 mod log;
 mod memtable;
+mod merging_iter;
 mod options;
 mod skipmap;
 mod snapshot;
 mod table_builder;
 mod types;
 mod write_batch;
+
+mod test_util;
 
 pub use types::Comparator;
 
