@@ -72,12 +72,16 @@ impl<C: Comparator> SkipMap<C> {
     }
 
     pub fn contains(&self, key: &[u8]) -> bool {
-        let n = self.get_greater_or_equal(key);
-        n.key.starts_with(&key)
+        if let Some(n) = self.get_greater_or_equal(key) {
+            n.key.starts_with(&key)
+        } else {
+            false
+        }
     }
 
     /// Returns the node with key or the next greater one
-    fn get_greater_or_equal<'a>(&'a self, key: &[u8]) -> &'a Node {
+    /// Returns None if the given key lies past the greatest key in the table.
+    fn get_greater_or_equal<'a>(&'a self, key: &[u8]) -> Option<&'a Node> {
         // Start at the highest skip link of the head node, and work down from there
         let mut current: *const Node = unsafe { transmute_copy(&self.head.as_ref()) };
         let mut level = self.head.skips.len() - 1;
@@ -92,10 +96,10 @@ impl<C: Comparator> SkipMap<C> {
                             current = next;
                             continue;
                         }
-                        Ordering::Equal => return &(*next),
+                        Ordering::Equal => return Some(&(*next)),
                         Ordering::Greater => {
                             if level == 0 {
-                                return &(*next);
+                                return Some(&(*next));
                             }
                         }
                     }
@@ -106,11 +110,21 @@ impl<C: Comparator> SkipMap<C> {
             }
             level -= 1;
         }
-        return unsafe { &(*current) };
+
+        unsafe {
+            if current.is_null() {
+                return None;
+            } else if C::cmp(&(*current).key, key) == Ordering::Less {
+                return None;
+            } else {
+                return Some(&(*current));
+            }
+        }
     }
 
-    /// Finds the node immediately before the node with key
-    fn get_next_smaller<'a>(&'a self, key: &[u8]) -> &'a Node {
+    /// Finds the node immediately before the node with key.
+    /// Returns None if no smaller key was found.
+    fn get_next_smaller<'a>(&'a self, key: &[u8]) -> Option<&'a Node> {
         // Start at the highest skip link of the head node, and work down from there
         let mut current: *const Node = unsafe { transmute_copy(&self.head.as_ref()) };
         let mut level = self.head.skips.len() - 1;
@@ -125,11 +139,7 @@ impl<C: Comparator> SkipMap<C> {
                             current = next;
                             continue;
                         }
-                        _ => {
-                            if level == 0 {
-                                return &(*current);
-                            }
-                        }
+                        _ => (),
                     }
                 }
             }
@@ -138,7 +148,18 @@ impl<C: Comparator> SkipMap<C> {
             }
             level -= 1;
         }
-        return unsafe { &(*current) };
+
+        unsafe {
+            if current.is_null() || (*current).key.is_empty() {
+                // If we're past the end for some reason or at the head
+                return None;
+            } else if C::cmp(&(*current).key, key) != Ordering::Less {
+                return None;
+            } else {
+                println!("{:?}", ((&(*current).key, key)));
+                return Some(&(*current));
+            }
+        }
     }
 
     pub fn insert(&mut self, key: Vec<u8>, val: Vec<u8>) {
@@ -265,8 +286,11 @@ impl<'a, C: Comparator> LdbIterator for SkipMapIter<'a, C> {
         self.current = new.current;
     }
     fn seek(&mut self, key: &[u8]) {
-        let node = self.map.get_greater_or_equal(key);
-        self.current = unsafe { transmute_copy(&node) }
+        if let Some(node) = self.map.get_greater_or_equal(key) {
+            self.current = unsafe { transmute_copy(&node) }
+        } else {
+            self.reset();
+        }
     }
     fn valid(&self) -> bool {
         unsafe { !(*self.current).key.is_empty() }
@@ -281,17 +305,16 @@ impl<'a, C: Comparator> LdbIterator for SkipMapIter<'a, C> {
     fn prev(&mut self) -> Option<Self::Item> {
         // Going after the original implementation here; we just seek to the node before current().
         if let Some(current) = self.current() {
-            let prev = self.map.get_next_smaller(current.0);
-            self.current = unsafe { transmute_copy(&prev) };
+            if let Some(prev) = self.map.get_next_smaller(current.0) {
+                self.current = unsafe { transmute_copy(&prev) };
 
-            if !prev.key.is_empty() {
-                Some(unsafe { (&(*self.current).key, &(*self.current).value) })
-            } else {
-                None
+                if !prev.key.is_empty() {
+                    return Some(unsafe { (&(*self.current).key, &(*self.current).value) });
+                }
             }
-        } else {
-            None
         }
+        self.reset();
+        None
     }
 }
 
@@ -343,19 +366,19 @@ pub mod tests {
     #[test]
     fn test_find() {
         let skm = make_skipmap();
-        assert_eq!(skm.get_greater_or_equal(&"abf".as_bytes().to_vec()).key,
+        assert_eq!(skm.get_greater_or_equal(&"abf".as_bytes().to_vec()).unwrap().key,
                    "abf".as_bytes().to_vec());
-        assert_eq!(skm.get_greater_or_equal(&"ab{".as_bytes().to_vec()).key,
-                   "abz".as_bytes().to_vec());
-        assert_eq!(skm.get_greater_or_equal(&"aaa".as_bytes().to_vec()).key,
+        assert!(skm.get_greater_or_equal(&"ab{".as_bytes().to_vec()).is_none());
+        assert_eq!(skm.get_greater_or_equal(&"aaa".as_bytes().to_vec()).unwrap().key,
                    "aba".as_bytes().to_vec());
-        assert_eq!(skm.get_greater_or_equal(&"ab".as_bytes()).key.as_slice(),
+        assert_eq!(skm.get_greater_or_equal(&"ab".as_bytes()).unwrap().key.as_slice(),
                    "aba".as_bytes());
-        assert_eq!(skm.get_greater_or_equal(&"abc".as_bytes()).key.as_slice(),
+        assert_eq!(skm.get_greater_or_equal(&"abc".as_bytes()).unwrap().key.as_slice(),
                    "abc".as_bytes());
-        assert_eq!(skm.get_next_smaller(&"abd".as_bytes()).key.as_slice(),
+        assert!(skm.get_next_smaller(&"ab0".as_bytes()).is_none());
+        assert_eq!(skm.get_next_smaller(&"abd".as_bytes()).unwrap().key.as_slice(),
                    "abc".as_bytes());
-        assert_eq!(skm.get_next_smaller(&"ab{".as_bytes()).key.as_slice(),
+        assert_eq!(skm.get_next_smaller(&"ab{".as_bytes()).unwrap().key.as_slice(),
                    "abz".as_bytes());
     }
 
@@ -380,6 +403,13 @@ pub mod tests {
         assert!(!iter.valid());
         iter.next();
         assert!(iter.valid());
+        iter.reset();
+        assert!(!iter.valid());
+
+        iter.next();
+        assert!(iter.valid());
+        iter.prev();
+        assert!(!iter.valid());
     }
 
     #[test]
@@ -412,6 +442,8 @@ pub mod tests {
 
         iter.seek(&"".as_bytes().to_vec());
         assert!(iter.valid());
+        iter.prev();
+        assert!(!iter.valid());
 
         loop {
             if let Some(_) = iter.next() {
