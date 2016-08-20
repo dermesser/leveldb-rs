@@ -4,7 +4,7 @@ use filter::FilterPolicy;
 use filter_block::FilterBlockReader;
 use options::Options;
 use table_builder;
-use types::Comparator;
+use types::{Comparator, LdbIterator};
 
 use std::io::{Read, Seek, SeekFrom, Result};
 
@@ -32,11 +32,13 @@ impl TableFooter {
 pub struct Table<R: Read + Seek, C: Comparator, FP: FilterPolicy> {
     file: R,
     file_size: usize,
+
     opt: Options,
-    footer: TableFooter,
-    filters: Option<FilterBlockReader<FP>>,
-    indexblock: Block<C>,
     c: C,
+
+    footer: TableFooter,
+    indexblock: Block<C>,
+    filters: Option<FilterBlockReader<FP>>,
 }
 
 impl<R: Read + Seek, C: Comparator, FP: FilterPolicy> Table<R, C, FP> {
@@ -47,7 +49,7 @@ impl<R: Read + Seek, C: Comparator, FP: FilterPolicy> Table<R, C, FP> {
         let metaindexblock = try!(Table::<R, C, FP>::read_block(&mut file, &footer.metaindex));
 
         let mut filter_block_reader = None;
-        let mut filter_block_location = BlockHandle::new(0,0);
+        let mut filter_block_location = BlockHandle::new(0, 0);
         let mut filter_name = "filter.".as_bytes().to_vec();
         filter_name.extend_from_slice(fp.name().as_bytes());
 
@@ -59,8 +61,9 @@ impl<R: Read + Seek, C: Comparator, FP: FilterPolicy> Table<R, C, FP> {
         }
 
         if filter_block_location.size() > 0 {
-            let filter_block = try!(Table::<R, C, FP>::read_block(&mut file, &filter_block_location));
-             filter_block_reader = Some(FilterBlockReader::new(fp, filter_block.obtain()));
+            let filter_block = try!(Table::<R, C, FP>::read_block(&mut file,
+                                                                  &filter_block_location));
+            filter_block_reader = Some(FilterBlockReader::new(fp, filter_block.obtain()));
         }
 
         Ok(Table {
@@ -74,6 +77,7 @@ impl<R: Read + Seek, C: Comparator, FP: FilterPolicy> Table<R, C, FP> {
         })
     }
 
+    /// Reads the table footer.
     fn read_footer(f: &mut R, size: usize) -> Result<TableFooter> {
         try!(f.seek(SeekFrom::Start((size - table_builder::FULL_FOOTER_LENGTH) as u64)));
         let mut buf = [0; table_builder::FULL_FOOTER_LENGTH];
@@ -81,6 +85,7 @@ impl<R: Read + Seek, C: Comparator, FP: FilterPolicy> Table<R, C, FP> {
         Ok(TableFooter::parse(&buf))
     }
 
+    /// Reads a block at location.
     fn read_block(f: &mut R, location: &BlockHandle) -> Result<Block<C>> {
         try!(f.seek(SeekFrom::Start(location.offset() as u64)));
 
@@ -92,7 +97,19 @@ impl<R: Read + Seek, C: Comparator, FP: FilterPolicy> Table<R, C, FP> {
         Ok(Block::new_with_cmp(buf, C::default()))
     }
 
+    /// Returns the offset of the block that contains `key`.
     pub fn approx_offset_of(&self, key: &[u8]) -> usize {
-        unimplemented!()
+        let mut iter = self.indexblock.iter();
+
+        iter.seek(key);
+
+        if iter.valid() {
+            if let Some((_, val)) = iter.current() {
+                let location = BlockHandle::decode(val).0;
+                return location.offset();
+            }
+        }
+
+        return self.footer.metaindex.offset();
     }
 }
