@@ -50,6 +50,10 @@ impl<C: Comparator> Block<C> {
         }
     }
 
+    pub fn obtain(self) -> Vec<u8> {
+        self.data
+    }
+
     fn number_restarts(&self) -> usize {
         ((self.data.len() - self.restarts_off) / 4) - 1
     }

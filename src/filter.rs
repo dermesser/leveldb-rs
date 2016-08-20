@@ -1,7 +1,7 @@
 use integer_encoding::FixedInt;
 
 /// Encapsulates a filter algorithm allowing to search for keys more efficiently.
-pub trait FilterPolicy : Clone {
+pub trait FilterPolicy: Clone {
     /// Returns a string identifying this policy.
     fn name(&self) -> &'static str;
     /// Create a filter matching the given keys.
