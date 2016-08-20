@@ -3,7 +3,7 @@ use env::Logger;
 
 use std::collections::HashSet;
 use std::fs;
-use std::io::{Read, Write, Result, Error, ErrorKind};
+use std::io::{Result, Error, ErrorKind};
 use std::iter::FromIterator;
 use std::mem;
 use std::os::unix::io::{FromRawFd, IntoRawFd};

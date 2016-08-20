@@ -1,7 +1,7 @@
 use integer_encoding::FixedInt;
 
 /// Encapsulates a filter algorithm allowing to search for keys more efficiently.
-pub trait FilterPolicy {
+pub trait FilterPolicy : Clone {
     /// Returns a string identifying this policy.
     fn name(&self) -> &'static str;
     /// Create a filter matching the given keys.
@@ -11,6 +11,7 @@ pub trait FilterPolicy {
 }
 
 /// Used for tables that don't have filter blocks but need a type parameter.
+#[derive(Clone)]
 pub struct NoFilterPolicy;
 
 impl FilterPolicy for NoFilterPolicy {
@@ -28,6 +29,7 @@ impl FilterPolicy for NoFilterPolicy {
 const BLOOM_SEED: u32 = 0xbc9f1d34;
 
 /// A filter policy using a bloom filter internally.
+#[derive(Clone)]
 pub struct BloomPolicy {
     bits_per_key: u32,
     k: u32,
@@ -155,6 +157,7 @@ impl FilterPolicy for BloomPolicy {
 /// operations.
 /// A User Key is u8*.
 /// An Internal Key is u8* u8{8} (where the second part encodes a tag and a sequence number).
+#[derive(Clone)]
 pub struct InternalFilterPolicy<FP: FilterPolicy> {
     internal: FP,
 }

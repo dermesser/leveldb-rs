@@ -96,16 +96,16 @@ impl<'a, FP: FilterPolicy> FilterBlockBuilder<'a, FP> {
     }
 }
 
-pub struct FilterBlockReader<'a, FP: FilterPolicy> {
+pub struct FilterBlockReader<FP: FilterPolicy> {
     policy: FP,
-    block: &'a [u8],
+    block: Vec<u8>,
 
     offsets_offset: usize,
     filter_base_lg2: u32,
 }
 
-impl<'a, FP: FilterPolicy> FilterBlockReader<'a, FP> {
-    pub fn new(pol: FP, data: &'a [u8]) -> FilterBlockReader<'a, FP> {
+impl<FP: FilterPolicy> FilterBlockReader<FP> {
+    pub fn new(pol: FP, data: Vec<u8>) -> FilterBlockReader<FP> {
         assert!(data.len() >= 5);
 
         let fbase = data[data.len() - 1] as u32;
@@ -133,7 +133,7 @@ impl<'a, FP: FilterPolicy> FilterBlockReader<'a, FP> {
 
     /// blk_offset is the offset of the block containing key. Returns whether the key matches the
     /// filter for the block at blk_offset.
-    fn key_may_match(&self, blk_offset: usize, key: &[u8]) -> bool {
+    pub fn key_may_match(&self, blk_offset: usize, key: &[u8]) -> bool {
         let filter_begin = self.offset_of(get_filter_index(blk_offset, self.filter_base_lg2));
         let filter_end = self.offset_of(get_filter_index(blk_offset, self.filter_base_lg2) + 1);
 

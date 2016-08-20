@@ -170,7 +170,7 @@ impl<'a, 'b: 'a, C: 'b + Comparator> LdbIterator for MergingIter<'a, 'b, C> {
     }
     fn prev(&mut self) -> Option<Self::Item> {
         if let Some(current) = self.current {
-            if let Some((key, _)) = self.current() {
+            if let Some((_, _)) = self.current() {
                 self.update_direction(Direction::Rvrs);
                 self.iters[current].prev();
                 self.find_largest();

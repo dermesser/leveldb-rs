@@ -18,6 +18,7 @@ mod options;
 mod skipmap;
 mod snapshot;
 mod table_builder;
+mod table_reader;
 mod types;
 mod write_batch;
 
