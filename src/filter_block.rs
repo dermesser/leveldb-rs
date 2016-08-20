@@ -195,7 +195,7 @@ mod tests {
     #[test]
     fn test_filter_block_build_read() {
         let result = produce_filter_block();
-        let reader = FilterBlockReader::new(BloomPolicy::new(32), &result);
+        let reader = FilterBlockReader::new(BloomPolicy::new(32), result);
 
         assert_eq!(reader.offset_of(get_filter_index(5121, FILTER_BASE_LOG2)),
                    17); // third block in third filter
