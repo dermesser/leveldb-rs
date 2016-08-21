@@ -1,22 +1,24 @@
 use block::BlockContents;
 
 use std::collections::HashMap;
-use std::mem::{replace, transmute_copy};
+use std::mem::{swap, replace, transmute_copy};
+use std::fmt::Debug;
 
+type LRUHandle<T> = *mut LRUNode<T>;
 
 struct LRUNode<T> {
-    next: Option<Box<LRUNode<T>>>,
+    next: Option<Box<LRUNode<T>>>, // None in the list's last node
     prev: Option<*mut LRUNode<T>>,
     data: Option<T>, // if None, then we have reached the head node
 }
 
-pub struct LRUList<T> {
+struct LRUList<T> {
     head: LRUNode<T>,
     count: usize,
 }
-
-impl<T> LRUList<T> {
-    pub fn new() -> LRUList<T> {
+/// This is likely unstable; more investigation is needed into correct behavior!
+impl<T: Debug> LRUList<T> {
+    fn new() -> LRUList<T> {
         LRUList {
             head: LRUNode {
                 data: None,
@@ -28,23 +30,25 @@ impl<T> LRUList<T> {
     }
 
     /// Inserts new element at front (least recently used element)
-    pub fn insert(&mut self, elem: T) {
+    fn insert(&mut self, elem: T) -> LRUHandle<T> {
+        self.count += 1;
         // Not first element
         if self.head.next.is_some() {
             // todo: replace next by head.next; set head.next to new; set next.prev to new
             let mut new = Box::new(LRUNode {
                 data: Some(elem),
                 next: None,
-                prev: self.head.next.as_ref().clone().map(|next| next.prev).unwrap(),
+                prev: unsafe { Some(transmute_copy(&&self.head)) },
             });
+            let newp = unsafe { transmute_copy(&new.as_mut()) };
 
-            unsafe {
-                // Set up the node after the new one
-                self.head.next.as_mut().unwrap().prev = transmute_copy(&new.as_mut());
-                // Replace head.next with None and set the new node's next to that
-                new.next = replace(&mut self.head.next, None);
-                self.head.next = Some(new);
-            }
+            // Set up the node after the new one
+            self.head.next.as_mut().unwrap().prev = Some(newp);
+            // Replace head.next with None and set the new node's next to that
+            new.next = replace(&mut self.head.next, None);
+            self.head.next = Some(new);
+
+            newp
         } else {
             // First node; the only node right now is an empty head node
             let mut new = Box::new(LRUNode {
@@ -52,15 +56,18 @@ impl<T> LRUList<T> {
                 next: None,
                 prev: unsafe { Some(transmute_copy(&&self.head)) },
             });
+            let newp = unsafe { transmute_copy(&new.as_mut()) };
+
             // Set tail
-            self.head.prev = unsafe { Some(transmute_copy(&new.as_mut())) };
+            self.head.prev = Some(newp);
             // Set first node
             self.head.next = Some(new);
+
+            newp
         }
-        self.count += 1;
     }
 
-    pub fn remove_last(&mut self) -> Option<T> {
+    fn remove_last(&mut self) -> Option<T> {
         if self.head.prev.is_some() {
             let mut lasto = unsafe {
                 replace(&mut (*((*self.head.prev.unwrap()).prev.unwrap())).next,
@@ -79,8 +86,48 @@ impl<T> LRUList<T> {
         }
     }
 
-    pub fn count(&self) -> usize {
+
+    /// Reinserts the referenced node at the front.
+    fn reinsert_front(&mut self, node_handle: LRUHandle<T>) {
+        unsafe {
+            let prevp = (*node_handle).prev.unwrap();
+
+            // Remove current node from list by setting next.prev to current's prev node
+            if let Some(ref mut next) = (*node_handle).next {
+                next.prev = (*node_handle).prev;
+            }
+            // Also, update head.prev if we're reinserting the last element
+            if Some(node_handle) == self.head.prev {
+                self.head.prev = (*node_handle).prev;
+            }
+
+            // Then swap the previous element's next (Box of current node) with the current node's next
+            swap(&mut (*prevp).next, &mut (*node_handle).next);
+
+            // Here, the element is removed.
+            // To reinsert after head, swap the current node's next (Box of itself) with head's next
+            swap(&mut (*node_handle).next, &mut self.head.next);
+
+            // Proceed with setting references: Set the current node's prev to head...
+            (*node_handle).prev = transmute_copy(&&self.head);
+            // ...and the next node's prev to a reference to the current node.
+            if let Some(ref mut next) = (*node_handle).next {
+                next.prev = Some(node_handle);
+            }
+            assert!(self.head.next.is_some());
+        }
+    }
+
+    fn count(&self) -> usize {
         self.count
+    }
+
+    fn _testing_head_ref(&self) -> Option<&T> {
+        if let Some(ref first) = self.head.next {
+            first.data.as_ref()
+        } else {
+            None
+        }
     }
 }
 
@@ -96,7 +143,7 @@ pub struct BlockCache {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::LRUList;
 
     #[test]
     fn test_blockcache_lru_1() {
@@ -120,5 +167,32 @@ mod tests {
         assert_eq!(lru.count(), 0);
 
         assert_eq!(None, lru.remove_last());
+    }
+
+    #[test]
+    fn test_blockcache_lru_reinsert() {
+        let mut lru = LRUList::<usize>::new();
+
+        let handle1 = lru.insert(56);
+        let handle2 = lru.insert(22);
+        let handle3 = lru.insert(244);
+
+        assert_eq!(lru._testing_head_ref().map(|r| (*r)).unwrap(), 244);
+
+        lru.reinsert_front(handle1);
+
+        assert_eq!(lru._testing_head_ref().map(|r| (*r)).unwrap(), 56);
+
+        lru.reinsert_front(handle3);
+
+        assert_eq!(lru._testing_head_ref().map(|r| (*r)).unwrap(), 244);
+
+        lru.reinsert_front(handle2);
+
+        assert_eq!(lru._testing_head_ref().map(|r| (*r)).unwrap(), 22);
+
+        assert_eq!(lru.remove_last(), Some(56));
+        assert_eq!(lru.remove_last(), Some(244));
+        assert_eq!(lru.remove_last(), Some(22));
     }
 }
