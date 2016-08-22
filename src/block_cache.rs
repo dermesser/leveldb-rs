@@ -2,7 +2,6 @@ use block::BlockContents;
 
 use std::collections::HashMap;
 use std::mem::{swap, replace, transmute_copy};
-use std::fmt::Debug;
 
 type LRUHandle<T> = *mut LRUNode<T>;
 
@@ -17,7 +16,7 @@ struct LRUList<T> {
     count: usize,
 }
 /// This is likely unstable; more investigation is needed into correct behavior!
-impl<T: Debug> LRUList<T> {
+impl<T> LRUList<T> {
     fn new() -> LRUList<T> {
         LRUList {
             head: LRUNode {
@@ -34,7 +33,6 @@ impl<T: Debug> LRUList<T> {
         self.count += 1;
         // Not first element
         if self.head.next.is_some() {
-            // todo: replace next by head.next; set head.next to new; set next.prev to new
             let mut new = Box::new(LRUNode {
                 data: Some(elem),
                 next: None,
@@ -92,29 +90,31 @@ impl<T: Debug> LRUList<T> {
         unsafe {
             let prevp = (*node_handle).prev.unwrap();
 
-            // Remove current node from list by setting next.prev to current's prev node
-            if let Some(ref mut next) = (*node_handle).next {
-                next.prev = (*node_handle).prev;
-            }
-            // Also, update head.prev if we're reinserting the last element
-            if Some(node_handle) == self.head.prev {
-                self.head.prev = (*node_handle).prev;
+            // If not last node, update following node's prev
+            if let Some(next) = (*node_handle).next.as_mut() {
+                next.prev = Some(prevp);
+            } else {
+                // If last node, update head
+                self.head.prev = Some(prevp);
             }
 
-            // Then swap the previous element's next (Box of current node) with the current node's next
+            // Swap this.next with prev.next. After that, this.next refers to this (!)
             swap(&mut (*prevp).next, &mut (*node_handle).next);
-
-            // Here, the element is removed.
-            // To reinsert after head, swap the current node's next (Box of itself) with head's next
+            // To reinsert at head, swap head's next with this.next
             swap(&mut (*node_handle).next, &mut self.head.next);
+            // Update this' prev reference to point to head.
 
-            // Proceed with setting references: Set the current node's prev to head...
-            (*node_handle).prev = transmute_copy(&&self.head);
-            // ...and the next node's prev to a reference to the current node.
-            if let Some(ref mut next) = (*node_handle).next {
-                next.prev = Some(node_handle);
+            // Update the second node's prev reference.
+            if let Some(ref mut newnext) = (*node_handle).next {
+                (*node_handle).prev = newnext.prev;
+                newnext.prev = Some(node_handle);
+            } else {
+                // Only one node, being the last one; avoid head.prev pointing to head
+                self.head.prev = Some(node_handle);
             }
+
             assert!(self.head.next.is_some());
+            assert!(self.head.prev.is_some());
         }
     }
 
@@ -194,5 +194,40 @@ mod tests {
         assert_eq!(lru.remove_last(), Some(56));
         assert_eq!(lru.remove_last(), Some(244));
         assert_eq!(lru.remove_last(), Some(22));
+    }
+
+    #[test]
+    fn test_blockcache_lru_reinsert_2() {
+        let mut lru = LRUList::<usize>::new();
+
+        let handles = vec![
+            lru.insert(0),
+            lru.insert(1),
+            lru.insert(2),
+            lru.insert(3),
+            lru.insert(4),
+            lru.insert(5),
+            lru.insert(6),
+            lru.insert(7),
+            lru.insert(8),
+        ];
+
+        for i in 0..9 {
+            lru.reinsert_front(handles[i]);
+            assert_eq!(lru._testing_head_ref().map(|x| *x), Some(i));
+        }
+    }
+
+    #[test]
+    fn test_blockcache_lru_edge_cases() {
+        let mut lru = LRUList::<usize>::new();
+
+        let handle = lru.insert(3);
+
+        lru.reinsert_front(handle);
+        assert_eq!(lru._testing_head_ref().map(|x| *x), Some(3));
+        assert_eq!(lru.remove_last(), Some(3));
+        assert_eq!(lru.remove_last(), None);
+        assert_eq!(lru.remove_last(), None);
     }
 }
