@@ -54,7 +54,7 @@ impl<'a> LdbIterator for TestLdbIter<'a> {
     fn seek(&mut self, k: &[u8]) {
         self.ix = 0;
         while self.ix < self.v.len() &&
-              StandardComparator::cmp(self.v[self.ix].0, k) == Ordering::Less {
+              StandardComparator.cmp(self.v[self.ix].0, k) == Ordering::Less {
             self.ix += 1;
         }
     }

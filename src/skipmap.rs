@@ -34,7 +34,6 @@ impl SkipMap<StandardComparator> {
     }
 }
 
-
 impl<C: Comparator> SkipMap<C> {
     pub fn new_with_cmp(c: C) -> SkipMap<C> {
         let mut s = Vec::new();
@@ -89,7 +88,7 @@ impl<C: Comparator> SkipMap<C> {
         loop {
             unsafe {
                 if let Some(next) = (*current).skips[level] {
-                    let ord = C::cmp((*next).key.as_slice(), key);
+                    let ord = self.cmp.cmp((*next).key.as_slice(), key);
 
                     match ord {
                         Ordering::Less => {
@@ -114,7 +113,7 @@ impl<C: Comparator> SkipMap<C> {
         unsafe {
             if current.is_null() {
                 return None;
-            } else if C::cmp(&(*current).key, key) == Ordering::Less {
+            } else if self.cmp.cmp(&(*current).key, key) == Ordering::Less {
                 return None;
             } else {
                 return Some(&(*current));
@@ -132,7 +131,7 @@ impl<C: Comparator> SkipMap<C> {
         loop {
             unsafe {
                 if let Some(next) = (*current).skips[level] {
-                    let ord = C::cmp((*next).key.as_slice(), key);
+                    let ord = self.cmp.cmp((*next).key.as_slice(), key);
 
                     match ord {
                         Ordering::Less => {
@@ -153,10 +152,9 @@ impl<C: Comparator> SkipMap<C> {
             if current.is_null() || (*current).key.is_empty() {
                 // If we're past the end for some reason or at the head
                 return None;
-            } else if C::cmp(&(*current).key, key) != Ordering::Less {
+            } else if self.cmp.cmp(&(*current).key, key) != Ordering::Less {
                 return None;
             } else {
-                println!("{:?}", ((&(*current).key, key)));
                 return Some(&(*current));
             }
         }
@@ -180,7 +178,7 @@ impl<C: Comparator> SkipMap<C> {
             unsafe {
                 if let Some(next) = (*current).skips[level] {
                     // If the wanted position is after the current node
-                    let ord = C::cmp(&(*next).key, &key);
+                    let ord = self.cmp.cmp(&(*next).key, &key);
 
                     assert!(ord != Ordering::Equal, "No duplicates allowed");
 

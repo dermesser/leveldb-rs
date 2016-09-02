@@ -193,7 +193,8 @@ impl<'a, C: 'a + Comparator> LdbIterator for BlockIter<'a, C> {
             // At a restart, the shared part is supposed to be 0.
             assert_eq!(shared, 0);
 
-            let cmp = C::cmp(to, &self.block.data[self.offset..self.offset + non_shared]);
+            let cmp =
+                self.block.cmp.cmp(to, &self.block.data[self.offset..self.offset + non_shared]);
 
             if cmp == Ordering::Less {
                 right = middle - 1;
@@ -208,7 +209,7 @@ impl<'a, C: 'a + Comparator> LdbIterator for BlockIter<'a, C> {
 
         // Linear search from here on
         while let Some((k, _)) = self.next() {
-            if C::cmp(k.as_slice(), to) >= Ordering::Equal {
+            if self.block.cmp.cmp(k.as_slice(), to) >= Ordering::Equal {
                 return;
             }
         }
@@ -273,7 +274,8 @@ impl<C: Comparator> BlockBuilder<C> {
 
     pub fn add(&mut self, key: &[u8], val: &[u8]) {
         assert!(self.counter <= self.opt.block_restart_interval);
-        assert!(self.buffer.is_empty() || C::cmp(self.last_key.as_slice(), key) == Ordering::Less);
+        assert!(self.buffer.is_empty() ||
+                self.cmp.cmp(self.last_key.as_slice(), key) == Ordering::Less);
 
         let mut shared = 0;
 

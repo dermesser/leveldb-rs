@@ -17,7 +17,7 @@ pub const FULL_FOOTER_LENGTH: usize = FOOTER_LENGTH + 8;
 pub const MAGIC_FOOTER_NUMBER: u64 = 0xdb4775248b80fb57;
 pub const MAGIC_FOOTER_ENCODED: [u8; 8] = [0x57, 0xfb, 0x80, 0x8b, 0x24, 0x75, 0x47, 0xdb];
 
-fn find_shortest_sep<C: Comparator>(lo: &[u8], hi: &[u8]) -> Vec<u8> {
+fn find_shortest_sep<C: Comparator>(c: &C, lo: &[u8], hi: &[u8]) -> Vec<u8> {
     let min;
 
     if lo.len() < hi.len() {
@@ -38,7 +38,7 @@ fn find_shortest_sep<C: Comparator>(lo: &[u8], hi: &[u8]) -> Vec<u8> {
         if lo[diff_at] < 0xff && lo[diff_at] + 1 < hi[diff_at] {
             let mut result = Vec::from(&lo[0..diff_at + 1]);
             result[diff_at] += 1;
-            assert_eq!(C::cmp(&result, hi), Ordering::Less);
+            assert_eq!(c.cmp(&result, hi), Ordering::Less);
             return result;
         }
         return Vec::from(lo);
@@ -153,7 +153,8 @@ impl<'a, C: Comparator, Dst: Write, FilterPol: FilterPolicy> TableBuilder<'a, C,
 
     pub fn add(&mut self, key: &'a [u8], val: &[u8]) {
         assert!(self.data_block.is_some());
-        assert!(self.num_entries == 0 || C::cmp(&self.prev_block_last_key, key) == Ordering::Less);
+        assert!(self.num_entries == 0 ||
+                self.cmp.cmp(&self.prev_block_last_key, key) == Ordering::Less);
 
 
         if self.data_block.as_ref().unwrap().size_estimate() > self.o.block_size {
@@ -176,7 +177,7 @@ impl<'a, C: Comparator, Dst: Write, FilterPol: FilterPolicy> TableBuilder<'a, C,
         assert!(self.data_block.is_some());
 
         let block = self.data_block.take().unwrap();
-        let sep = find_shortest_sep::<C>(block.last_key(), next_key);
+        let sep = find_shortest_sep(&self.cmp, block.last_key(), next_key);
         self.prev_block_last_key = Vec::from(block.last_key());
         let contents = block.finish();
 
@@ -268,18 +269,19 @@ mod tests {
 
     #[test]
     fn test_shortest_sep() {
-        assert_eq!(find_shortest_sep::<StandardComparator>("abcd".as_bytes(), "abcf".as_bytes()),
+        assert_eq!(find_shortest_sep(&StandardComparator, "abcd".as_bytes(), "abcf".as_bytes()),
                    "abce".as_bytes());
-        assert_eq!(find_shortest_sep::<StandardComparator>("abcdefghi".as_bytes(),
-                                                           "abcffghi".as_bytes()),
+        assert_eq!(find_shortest_sep(&StandardComparator,
+                                     "abcdefghi".as_bytes(),
+                                     "abcffghi".as_bytes()),
                    "abce".as_bytes());
-        assert_eq!(find_shortest_sep::<StandardComparator>("a".as_bytes(), "a".as_bytes()),
+        assert_eq!(find_shortest_sep(&StandardComparator, "a".as_bytes(), "a".as_bytes()),
                    "a".as_bytes());
-        assert_eq!(find_shortest_sep::<StandardComparator>("a".as_bytes(), "b".as_bytes()),
+        assert_eq!(find_shortest_sep(&StandardComparator, "a".as_bytes(), "b".as_bytes()),
                    "a".as_bytes());
-        assert_eq!(find_shortest_sep::<StandardComparator>("abc".as_bytes(), "zzz".as_bytes()),
+        assert_eq!(find_shortest_sep(&StandardComparator, "abc".as_bytes(), "zzz".as_bytes()),
                    "b".as_bytes());
-        assert_eq!(find_shortest_sep::<StandardComparator>("".as_bytes(), "".as_bytes()),
+        assert_eq!(find_shortest_sep(&StandardComparator, "".as_bytes(), "".as_bytes()),
                    "".as_bytes());
     }
 

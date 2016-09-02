@@ -24,7 +24,7 @@ enum Direction {
 pub struct MergingIter<'a, 'b: 'a, C: Comparator> {
     iters: Vec<&'a mut LdbIterator<Item = (&'b [u8], &'b [u8])>>,
     current: Option<usize>,
-    c: C,
+    cmp: C,
     direction: Direction,
 }
 
@@ -37,7 +37,7 @@ impl<'a, 'b: 'a, C: 'b + Comparator> MergingIter<'a, 'b, C> {
             iters: iters,
             current: None,
             direction: Direction::Fwd,
-            c: c,
+            cmp: c,
         };
         mi
     }
@@ -64,7 +64,7 @@ impl<'a, 'b: 'a, C: 'b + Comparator> MergingIter<'a, 'b, C> {
                             if i != current {
                                 self.iters[i].seek(key);
                                 if let Some((current_key, _)) = self.iters[i].current() {
-                                    if C::cmp(current_key, key) == Ordering::Equal {
+                                    if self.cmp.cmp(current_key, key) == Ordering::Equal {
                                         self.iters[i].next();
                                     }
                                 }
@@ -109,7 +109,7 @@ impl<'a, 'b: 'a, C: 'b + Comparator> MergingIter<'a, 'b, C> {
         for i in 1..self.iters.len() {
             if let Some(current) = self.iters[i].current() {
                 if let Some(smallest) = self.iters[next_ix].current() {
-                    if C::cmp(current.0, smallest.0) == ord {
+                    if self.cmp.cmp(current.0, smallest.0) == ord {
                         next_ix = i;
                     }
                 } else {
