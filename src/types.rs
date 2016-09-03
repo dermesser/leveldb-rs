@@ -1,5 +1,4 @@
 use std::cmp::Ordering;
-use std::default::Default;
 
 pub enum ValueType {
     TypeDeletion = 0,
