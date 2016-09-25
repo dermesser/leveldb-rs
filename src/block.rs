@@ -35,7 +35,6 @@ pub struct BlockIter<C: Comparator> {
     offset: usize,
     // offset of restarts area
     restarts_off: usize,
-    // start of current entry
     current_entry_offset: usize,
     // tracks the last restart we encountered
     current_restart_ix: usize,
@@ -117,6 +116,23 @@ impl<C: Comparator> BlockIter<C> {
         self.key.resize(shared, 0);
         self.key.extend_from_slice(&self.block[self.offset..self.offset + non_shared]);
     }
+
+    pub fn seek_to_last(&mut self) {
+        if self.number_restarts() > 0 {
+            let restart = self.get_restart_point(self.number_restarts() - 1);
+
+            self.offset = restart;
+            self.current_entry_offset = restart;
+            self.current_restart_ix = self.number_restarts() - 1;
+        } else {
+            self.reset();
+        }
+
+        while let Some((_, _)) = self.next() {
+        }
+
+        self.prev();
+    }
 }
 
 impl<C: Comparator> Iterator for BlockIter<C> {
@@ -177,8 +193,8 @@ impl<C: Comparator> LdbIterator for BlockIter<C> {
             }
         }
         result
-
     }
+
     fn seek(&mut self, to: &[u8]) {
         self.reset();
 
@@ -467,5 +483,31 @@ mod tests {
         assert!(block.valid());
         assert_eq!(block.current(),
                    Some(("key1".as_bytes().to_vec(), "value1".as_bytes().to_vec())));
+    }
+
+    #[test]
+    fn test_block_seek_to_last() {
+        let mut o = Options::default();
+
+        // Test with different number of restarts
+        for block_restart_interval in vec![2, 6, 10] {
+            o.block_restart_interval = block_restart_interval;
+
+            let data = get_data();
+            let mut builder = BlockBuilder::new(o, StandardComparator);
+
+            for &(k, v) in data.iter() {
+                builder.add(k, v);
+            }
+
+            let block_contents = builder.finish();
+
+            let mut block = BlockIter::new(block_contents, StandardComparator);
+
+            block.seek_to_last();
+            assert!(block.valid());
+            assert_eq!(block.current(),
+                       Some(("prefix_key3".as_bytes().to_vec(), "value".as_bytes().to_vec())));
+        }
     }
 }

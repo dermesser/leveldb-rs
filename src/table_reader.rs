@@ -153,6 +153,21 @@ impl<'a, C: Comparator, R: Read + Seek, FP: FilterPolicy> Iterator for TableIter
     }
 }
 
+impl<'a, C: Comparator, R: Read + Seek, FP: FilterPolicy> LdbIterator for TableIterator<'a,
+                                                                                        R,
+                                                                                        C,
+                                                                                        FP> {
+    fn seek(&mut self, key: &[u8]) {
+        // first seek in index block, then set current_block and seek there
+        unimplemented!()
+    }
+
+    fn prev(&mut self) -> Option<Self::Item> {
+        // use BlockIter::seek_to_last
+        unimplemented!()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use filter::BloomPolicy;
