@@ -4,6 +4,7 @@ use integer_encoding::VarInt;
 /// used typically as file-internal pointer in table (SSTable) files. For example, the index block
 /// in an SSTable is a block of (key = largest key in block) -> (value = encoded blockhandle of
 /// block).
+#[derive(Debug)]
 pub struct BlockHandle {
     offset: usize,
     size: usize,

@@ -50,6 +50,7 @@ fn find_shortest_sep<'a, C: Comparator>(c: &C,
 }
 
 /// Footer is a helper for encoding/decoding a table footer.
+#[derive(Debug)]
 pub struct Footer {
     pub meta_index: BlockHandle,
     pub index: BlockHandle,
@@ -216,9 +217,11 @@ impl<'a, C: Comparator, Dst: Write, FilterPol: FilterPolicy> TableBuilder<'a, C,
         let _ = self.dst.write(&[t as u8; 1]);
         let _ = self.dst.write(&buf);
 
+        let handle = BlockHandle::new(self.offset, c.len());
+
         self.offset += c.len() + 1 + buf.len();
 
-        BlockHandle::new(self.offset, c.len())
+        handle
     }
 
     pub fn finish(mut self) {
@@ -248,7 +251,8 @@ impl<'a, C: Comparator, Dst: Write, FilterPol: FilterPolicy> TableBuilder<'a, C,
         }
 
         // write metaindex block
-        let meta_ix_handle = self.write_block(meta_ix_block.finish(), ctype);
+        let meta_ix = meta_ix_block.finish();
+        let meta_ix_handle = self.write_block(meta_ix, ctype);
 
         // write index block
         let index_cont = self.index_block.take().unwrap().finish();

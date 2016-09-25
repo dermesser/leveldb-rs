@@ -27,6 +27,7 @@ pub type BlockContents = Vec<u8>;
 /// A RESTART is a fixed u32 pointing to the beginning of an ENTRY.
 ///
 /// N_RESTARTS contains the number of restarts.
+#[derive(Debug)]
 pub struct BlockIter<C: Comparator> {
     block: Rc<BlockContents>,
     cmp: C,
@@ -83,7 +84,7 @@ impl<C: Comparator> BlockIter<C> {
     }
 
     fn number_restarts(&self) -> usize {
-        ((self.block.len() - self.restarts_off) / 4) - 1
+        u32::decode_fixed(&self.block[self.block.len() - 4..]) as usize
     }
 
     fn get_restart_point(&self, ix: usize) -> usize {
@@ -182,7 +183,11 @@ impl<C: Comparator> LdbIterator for BlockIter<C> {
         self.reset();
 
         let mut left = 0;
-        let mut right = self.number_restarts() - 1;
+        let mut right = if self.number_restarts() == 0 {
+            0
+        } else {
+            self.number_restarts() - 1
+        };
 
         // Do a binary search over the restart points.
         while left < right {
@@ -303,7 +308,7 @@ impl<C: Comparator> BlockBuilder<C> {
         self.buffer.extend_from_slice(&buf[0..sz]);
         sz = non_shared.encode_var(&mut buf[..]);
         self.buffer.extend_from_slice(&buf[0..sz]);
-        sz = val.len().encode_var(&mut buf[0..sz]);
+        sz = val.len().encode_var(&mut buf[..]);
         self.buffer.extend_from_slice(&buf[0..sz]);
 
         self.buffer.extend_from_slice(&key[shared..]);
