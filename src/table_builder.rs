@@ -18,7 +18,10 @@ pub const FULL_FOOTER_LENGTH: usize = FOOTER_LENGTH + 8;
 pub const MAGIC_FOOTER_NUMBER: u64 = 0xdb4775248b80fb57;
 pub const MAGIC_FOOTER_ENCODED: [u8; 8] = [0x57, 0xfb, 0x80, 0x8b, 0x24, 0x75, 0x47, 0xdb];
 
-fn find_shortest_sep<'a, C: Comparator>(c: &C, lo: InternalKey<'a>, hi: InternalKey<'a>) -> Vec<u8> {
+fn find_shortest_sep<'a, C: Comparator>(c: &C,
+                                        lo: InternalKey<'a>,
+                                        hi: InternalKey<'a>)
+                                        -> Vec<u8> {
     let min;
 
     if lo.len() < hi.len() {

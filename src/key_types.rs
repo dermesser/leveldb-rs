@@ -6,9 +6,9 @@ use integer_encoding::{FixedInt, VarInt};
 // The following typedefs are used to distinguish between the different key formats used internally
 // by different modules.
 
-/// A MemtableKey consists of the following elements: [keylen, key, tag, (vallen, value)] where keylen is a varint32
-/// encoding the length of key+tag. tag is a fixed 8 bytes segment encoding the entry type and the
-/// sequence number. vallen and value are optional components at the end.
+/// A MemtableKey consists of the following elements: [keylen, key, tag, (vallen, value)] where
+/// keylen is a varint32 encoding the length of key+tag. tag is a fixed 8 bytes segment encoding
+/// the entry type and the sequence number. vallen and value are optional components at the end.
 pub type MemtableKey<'a> = &'a [u8];
 
 /// A UserKey is the actual key supplied by the calling application, without any internal
