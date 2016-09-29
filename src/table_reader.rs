@@ -1,4 +1,4 @@
-use block::BlockIter;
+use block::{Block, BlockIter};
 use blockhandle::BlockHandle;
 use filter::FilterPolicy;
 use filter_block::FilterBlockReader;
@@ -31,9 +31,9 @@ fn read_bytes<R: Read + Seek>(f: &mut R, location: &BlockHandle) -> Result<Vec<u
 fn read_block<R: Read + Seek, C: Comparator>(cmp: &C,
                                              f: &mut R,
                                              location: &BlockHandle)
-                                             -> Result<BlockIter<C>> {
+                                             -> Result<Block<C>> {
     let buf = try!(read_bytes(f, location));
-    Ok(BlockIter::new(buf, *cmp))
+    Ok(Block::new(buf, *cmp))
 }
 
 pub struct Table<R: Read + Seek, C: Comparator, FP: FilterPolicy> {
@@ -44,7 +44,7 @@ pub struct Table<R: Read + Seek, C: Comparator, FP: FilterPolicy> {
     cmp: C,
 
     footer: Footer,
-    indexblock: BlockIter<C>,
+    indexblock: Block<C>,
     filters: Option<FilterBlockReader<FP>>,
 }
 
@@ -53,14 +53,16 @@ impl<R: Read + Seek, C: Comparator, FP: FilterPolicy> Table<R, C, FP> {
         let footer = try!(read_footer(&mut file, size));
 
         let indexblock = try!(read_block(&cmp, &mut file, &footer.index));
-        let mut metaindexblock = try!(read_block(&cmp, &mut file, &footer.meta_index));
+        let metaindexblock = try!(read_block(&cmp, &mut file, &footer.meta_index));
 
         let mut filter_block_reader = None;
         let mut filter_name = "filter.".as_bytes().to_vec();
         filter_name.extend_from_slice(fp.name().as_bytes());
 
-        metaindexblock.seek(&filter_name);
-        if let Some((_key, val)) = metaindexblock.current() {
+        let mut metaindexiter = metaindexblock.iter();
+
+        metaindexiter.seek(&filter_name);
+        if let Some((_key, val)) = metaindexiter.current() {
             let filter_block_location = BlockHandle::decode(&val).0;
 
             if filter_block_location.size() > 0 {
@@ -68,7 +70,8 @@ impl<R: Read + Seek, C: Comparator, FP: FilterPolicy> Table<R, C, FP> {
                 filter_block_reader = Some(FilterBlockReader::new_owned(fp, buf));
             }
         }
-        metaindexblock.reset();
+
+        metaindexiter.reset();
 
         Ok(Table {
             file: file,
@@ -81,14 +84,13 @@ impl<R: Read + Seek, C: Comparator, FP: FilterPolicy> Table<R, C, FP> {
         })
     }
 
-    fn read_block_(&mut self, location: &BlockHandle) -> Result<BlockIter<C>> {
+    fn read_block_(&mut self, location: &BlockHandle) -> Result<Block<C>> {
         read_block(&self.cmp, &mut self.file, location)
     }
 
     /// Returns the offset of the block that contains `key`.
     pub fn approx_offset_of(&self, key: &[u8]) -> usize {
-        // cheap clone!
-        let mut iter = self.indexblock.clone();
+        let mut iter = self.indexblock.iter();
 
         iter.seek(key);
 
@@ -103,8 +105,8 @@ impl<R: Read + Seek, C: Comparator, FP: FilterPolicy> Table<R, C, FP> {
     // Iterators read from the file; thus only one iterator can be borrowed (mutably) per scope
     fn iter<'a>(&'a mut self) -> TableIterator<'a, R, C, FP> {
         let mut iter = TableIterator {
-            current_block: self.indexblock.clone(), // just for filling in here
-            index_block: self.indexblock.clone(),
+            current_block: self.indexblock.iter(), // just for filling in here
+            index_block: self.indexblock.iter(),
             table: self,
         };
         iter.skip_to_next_entry(); // initialize current_block
@@ -126,7 +128,7 @@ impl<'a, C: Comparator, R: Read + Seek, FP: FilterPolicy> TableIterator<'a, R, C
         if let Some((_key, val)) = self.index_block.next() {
             let (new_block_h, _) = BlockHandle::decode(&val);
             if let Ok(block) = self.table.read_block_(&new_block_h) {
-                self.current_block = block;
+                self.current_block = block.iter();
                 true
             } else {
                 false
@@ -163,7 +165,7 @@ impl<'a, C: Comparator, R: Read + Seek, FP: FilterPolicy> LdbIterator for TableI
     }
 
     fn prev(&mut self) -> Option<Self::Item> {
-        // use BlockIter::seek_to_last
+        use BlockIter::seek_to_last;
         unimplemented!()
     }
 }
