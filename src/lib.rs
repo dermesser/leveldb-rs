@@ -7,7 +7,7 @@ extern crate rand;
 
 mod block;
 mod blockhandle;
-mod block_cache;
+mod cache;
 mod disk_env;
 mod env;
 mod filter;
