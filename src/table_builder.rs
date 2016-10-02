@@ -161,7 +161,6 @@ impl<'a, C: Comparator, Dst: Write, FilterPol: FilterPolicy> TableBuilder<'a, C,
         assert!(self.num_entries == 0 ||
                 self.cmp.cmp(&self.prev_block_last_key, key) == Ordering::Less);
 
-
         if self.data_block.as_ref().unwrap().size_estimate() > self.o.block_size {
             self.write_data_block(key);
         }

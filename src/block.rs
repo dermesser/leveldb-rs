@@ -474,6 +474,11 @@ mod tests {
         assert_eq!(block.current(),
                    Some(("prefix_key2".as_bytes().to_vec(), "value".as_bytes().to_vec())));
 
+        block.seek(&"prefix_key0".as_bytes());
+        assert!(block.valid());
+        assert_eq!(block.current(),
+                   Some(("prefix_key1".as_bytes().to_vec(), "value".as_bytes().to_vec())));
+
         block.seek(&"key1".as_bytes());
         assert!(block.valid());
         assert_eq!(block.current(),
