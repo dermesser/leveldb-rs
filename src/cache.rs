@@ -156,8 +156,8 @@ type CacheEntry<T> = (T, LRUHandle<CacheKey>);
 /// Based on a HashMap; the elements are linked in order to support the LRU ordering.
 pub struct Cache<T> {
     // note: CacheKeys (Vec<u8>) are duplicated between list and map. If this turns out to be a
-    // performance bottleneck, another layer of indirection™ can solve this by mapping the key to a
-    // numeric handle that keys both list and map.
+    // performance bottleneck, another layer of indirection™ can solve this by mapping the key
+    // to a numeric handle that keys both list and map.
     list: LRUList<CacheKey>,
     map: HashMap<CacheKey, CacheEntry<T>>,
     cap: usize,
