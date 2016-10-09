@@ -126,7 +126,8 @@ impl VersionEdit {
         let mut buf = Vec::with_capacity(256);
 
         if let Some(ref cmp) = self.comparator {
-            buf.write_varint(EditTag::Comparator as u32).is_ok(); // swallow errors, because it's a pure in-memory write
+            // swallow errors, because it's a pure in-memory write
+            buf.write_varint(EditTag::Comparator as u32).is_ok();
             // data is prefixed by a varint32 describing the length of the following chunk
             buf.write_varint(cmp.len()).is_ok();
             buf.write(cmp.as_bytes()).is_ok();
@@ -188,16 +189,11 @@ impl VersionEdit {
             if let Some(tag) = tag_to_enum(tag) {
                 match tag {
                     EditTag::Comparator => {
-                        if let Ok(buf) = read_length_prefixed(&mut reader) {
-                            if let Ok(c) = String::from_utf8(buf) {
-                                ve.comparator = Some(c);
-                            } else {
-                                return Err(Status::Corruption("Bad comparator encoding"
-                                    .to_string()));
-                            }
+                        let buf = try!(read_length_prefixed(&mut reader));
+                        if let Ok(c) = String::from_utf8(buf) {
+                            ve.comparator = Some(c);
                         } else {
-                            return Err(Status::IOError("Couldn't read comparator name"
-                                .to_string()));
+                            return Err(Status::Corruption("Bad comparator encoding".to_string()));
                         }
                     }
 
@@ -229,14 +225,12 @@ impl VersionEdit {
                     EditTag::CompactPointer => {
                         // Monads by indentation...
                         if let Ok(lvl) = reader.read_varint() {
-                            if let Ok(key) = read_length_prefixed(&mut reader) {
-                                ve.compaction_ptrs.push(CompactionPointer {
-                                    level: lvl,
-                                    key: key,
-                                });
-                            } else {
-                                return Err(Status::IOError("Couldn't read key".to_string()));
-                            }
+                            let key = try!(read_length_prefixed(&mut reader));
+
+                            ve.compaction_ptrs.push(CompactionPointer {
+                                level: lvl,
+                                key: key,
+                            });
                         } else {
                             return Err(Status::IOError("Couldn't read level".to_string()));
                         }
@@ -258,22 +252,16 @@ impl VersionEdit {
                         if let Ok(lvl) = reader.read_varint() {
                             if let Ok(num) = reader.read_varint() {
                                 if let Ok(size) = reader.read_varint() {
-                                    if let (Ok(smallest), Ok(largest)) =
-                                           (read_length_prefixed(&mut reader),
-                                            read_length_prefixed(&mut reader)) {
-                                        ve.new_files.push((lvl,
-                                                           FileMetaData {
-                                            num: num,
-                                            size: size,
-                                            smallest: smallest,
-                                            largest: largest,
-                                            allowed_seeks: 0,
-                                        }))
-                                    } else {
-                                        return Err(Status::IOError("Couldn't read \
-                                                                    smallest/largest keys"
-                                            .to_string()));
-                                    }
+                                    let smallest = try!(read_length_prefixed(&mut reader));
+                                    let largest = try!(read_length_prefixed(&mut reader));
+                                    ve.new_files.push((lvl,
+                                                       FileMetaData {
+                                        num: num,
+                                        size: size,
+                                        smallest: smallest,
+                                        largest: largest,
+                                        allowed_seeks: 0,
+                                    }))
                                 } else {
                                     return Err(Status::IOError("Couldn't read file size"
                                         .to_string()));
