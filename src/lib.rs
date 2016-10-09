@@ -22,6 +22,7 @@ mod snapshot;
 mod table_builder;
 mod table_reader;
 mod types;
+mod version_edit;
 mod write_batch;
 
 mod test_util;
