@@ -1,11 +1,18 @@
 use memtable::MemTable;
 use types::{Comparator, SequenceNumber, ValueType};
-use integer_encoding::{VarInt, FixedInt};
+use integer_encoding::{VarInt, VarIntWriter, FixedInt};
+
+use std::io::Write;
 
 const SEQNUM_OFFSET: usize = 0;
 const COUNT_OFFSET: usize = 8;
 const HEADER_SIZE: usize = 12;
 
+/// A WriteBatch contains entries to be written to a MemTable (for example) in a compact form.
+///
+/// The storage format is (with the respective length in bytes)
+///
+/// [tag: 1, keylen: ~var, key: keylen, vallen: ~var, val: vallen]
 pub struct WriteBatch {
     entries: Vec<u8>,
 }
@@ -24,22 +31,11 @@ impl WriteBatch {
 
     #[allow(unused_assignments)]
     pub fn put(&mut self, k: &[u8], v: &[u8]) {
-        let mut ix = self.entries.len();
-
-        self.entries.push(ValueType::TypeValue as u8);
-        ix += 1;
-
-        self.entries.resize(ix + k.len().required_space(), 0);
-        ix += k.len().encode_var(&mut self.entries[ix..]);
-
-        self.entries.extend_from_slice(k);
-        ix += k.len();
-
-        self.entries.resize(ix + v.len().required_space(), 0);
-        ix += v.len().encode_var(&mut self.entries[ix..]);
-
-        self.entries.extend_from_slice(v);
-        ix += v.len();
+        self.entries.write(&[ValueType::TypeValue as u8]).unwrap();
+        self.entries.write_varint(k.len()).unwrap();
+        self.entries.write(k).unwrap();
+        self.entries.write_varint(v.len()).unwrap();
+        self.entries.write(v).unwrap();
 
         let c = self.count();
         self.set_count(c + 1);
@@ -47,16 +43,9 @@ impl WriteBatch {
 
     #[allow(unused_assignments)]
     pub fn delete(&mut self, k: &[u8]) {
-        let mut ix = self.entries.len();
-
-        self.entries.push(ValueType::TypeDeletion as u8);
-        ix += 1;
-
-        self.entries.resize(ix + k.len().required_space(), 0);
-        ix += k.len().encode_var(&mut self.entries[ix..]);
-
-        self.entries.extend_from_slice(k);
-        ix += k.len();
+        self.entries.write(&[ValueType::TypeDeletion as u8]).unwrap();
+        self.entries.write_varint(k.len()).unwrap();
+        self.entries.write(k).unwrap();
 
         let c = self.count();
         self.set_count(c + 1);
