@@ -1,7 +1,7 @@
 use types::{Comparator, StandardComparator, LdbIterator};
 use rand::{Rng, SeedableRng, StdRng};
 use std::cmp::Ordering;
-use std::mem::{replace, size_of, transmute_copy};
+use std::mem::{replace, size_of};
 
 const MAX_HEIGHT: usize = 12;
 const BRANCHING_FACTOR: u32 = 4;
@@ -82,7 +82,7 @@ impl<C: Comparator> SkipMap<C> {
     /// Returns None if the given key lies past the greatest key in the table.
     fn get_greater_or_equal<'a>(&'a self, key: &[u8]) -> Option<&'a Node> {
         // Start at the highest skip link of the head node, and work down from there
-        let mut current: *const Node = unsafe { transmute_copy(&self.head.as_ref()) };
+        let mut current = self.head.as_ref() as *const Node;
         let mut level = self.head.skips.len() - 1;
 
         loop {
@@ -125,7 +125,7 @@ impl<C: Comparator> SkipMap<C> {
     /// Returns None if no smaller key was found.
     fn get_next_smaller<'a>(&'a self, key: &[u8]) -> Option<&'a Node> {
         // Start at the highest skip link of the head node, and work down from there
-        let mut current: *const Node = unsafe { transmute_copy(&self.head.as_ref()) };
+        let mut current = self.head.as_ref() as *const Node;
         let mut level = self.head.skips.len() - 1;
 
         loop {
@@ -168,7 +168,7 @@ impl<C: Comparator> SkipMap<C> {
         let mut prevs: Vec<Option<*mut Node>> = Vec::with_capacity(new_height);
 
         let mut level = MAX_HEIGHT - 1;
-        let mut current: *mut Node = unsafe { transmute_copy(&self.head.as_mut()) };
+        let mut current = self.head.as_mut() as *mut Node;
         // Initialize all prevs entries with *head
         prevs.resize(new_height, Some(current));
 
@@ -209,7 +209,7 @@ impl<C: Comparator> SkipMap<C> {
             key: key,
             value: val,
         });
-        let newp = unsafe { transmute_copy(&(new.as_mut())) };
+        let newp = new.as_mut() as *mut Node;
 
         for i in 0..new_height {
             if let Some(prev) = prevs[i] {
@@ -235,13 +235,13 @@ impl<C: Comparator> SkipMap<C> {
     pub fn iter<'a>(&'a self) -> SkipMapIter<'a, C> {
         SkipMapIter {
             map: self,
-            current: unsafe { transmute_copy(&self.head.as_ref()) },
+            current: self.head.as_ref() as *const Node,
         }
     }
 
     /// Runs through the skipmap and prints everything including addresses
     fn dbg_print(&self) {
-        let mut current: *const Node = unsafe { transmute_copy(&self.head.as_ref()) };
+        let mut current = self.head.as_ref() as *const Node;
         loop {
             unsafe {
                 println!("{:?} {:?}/{:?} - {:?}",
@@ -271,7 +271,7 @@ impl<'a, C: Comparator + 'a> Iterator for SkipMapIter<'a, C> {
         // we first go to the next element, then return that -- in order to skip the head node
         unsafe {
             (*self.current).next.as_ref().map(|next| {
-                self.current = transmute_copy(&next.as_ref());
+                self.current = next.as_ref() as *const Node;
                 ((*self.current).key.as_slice(), (*self.current).value.as_slice())
             })
         }
@@ -285,7 +285,7 @@ impl<'a, C: Comparator> LdbIterator for SkipMapIter<'a, C> {
     }
     fn seek(&mut self, key: &[u8]) {
         if let Some(node) = self.map.get_greater_or_equal(key) {
-            self.current = unsafe { transmute_copy(&node) }
+            self.current = node as *const Node
         } else {
             self.reset();
         }
@@ -304,7 +304,7 @@ impl<'a, C: Comparator> LdbIterator for SkipMapIter<'a, C> {
         // Going after the original implementation here; we just seek to the node before current().
         if let Some(current) = self.current() {
             if let Some(prev) = self.map.get_next_smaller(current.0) {
-                self.current = unsafe { transmute_copy(&prev) };
+                self.current = prev as *const Node;
 
                 if !prev.key.is_empty() {
                     return Some(unsafe { (&(*self.current).key, &(*self.current).value) });
