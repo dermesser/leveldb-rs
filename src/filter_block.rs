@@ -139,6 +139,10 @@ impl<FP: FilterPolicy> FilterBlockReader<FP> {
     /// blk_offset is the offset of the block containing key. Returns whether the key matches the
     /// filter for the block at blk_offset.
     pub fn key_may_match(&self, blk_offset: usize, key: &[u8]) -> bool {
+        if get_filter_index(blk_offset, self.filter_base_lg2) > self.num() {
+            return true
+        }
+
         let filter_begin = self.offset_of(get_filter_index(blk_offset, self.filter_base_lg2));
         let filter_end = self.offset_of(get_filter_index(blk_offset, self.filter_base_lg2) + 1);
 
@@ -178,6 +182,7 @@ mod tests {
 
         // second block
         bld.start_block(5000);
+
         for k in keys.iter() {
             bld.add_key(k);
         }

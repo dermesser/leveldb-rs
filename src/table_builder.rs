@@ -202,12 +202,11 @@ impl<'a, C: Comparator, Dst: Write, FilterPol: FilterPolicy> TableBuilder<'a, C,
 
         let ctype = self.o.compression_type;
 
-        // Use offset of block that the keys are in.
+        self.write_block(contents, ctype);
+
         if let Some(ref mut fblock) = self.filter_block {
             fblock.start_block(self.offset);
         }
-
-        self.write_block(contents, ctype);
     }
 
     /// Calculates the checksum, writes the block to disk and updates the offset.
