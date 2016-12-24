@@ -204,11 +204,16 @@ mod tests {
         let reader = FilterBlockReader::new_owned(BloomPolicy::new(32), result);
 
         assert_eq!(reader.offset_of(get_filter_index(5121, FILTER_BASE_LOG2)),
-                   17); // third block in third filter
+                   17); // third block in third filter\
+
+        let unknown_keys = vec!["xsb".as_bytes(), "9sad".as_bytes(), "assssaaaass".as_bytes()];
 
         for block_offset in vec![0, 5000, 5, 5500].into_iter() {
             for key in get_keys().iter() {
                 assert!(reader.key_may_match(block_offset, key));
+            }
+            for key in unknown_keys.iter() {
+                assert!(!reader.key_may_match(block_offset, key));
             }
         }
     }

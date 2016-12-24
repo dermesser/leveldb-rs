@@ -50,6 +50,10 @@ impl<C: Comparator> Block<C> {
         }
     }
 
+    pub fn contents(&self) -> Rc<BlockContents> {
+        self.block.clone()
+    }
+
     pub fn new(contents: BlockContents, cmp: C) -> Block<C> {
         assert!(contents.len() > 4);
         Block {

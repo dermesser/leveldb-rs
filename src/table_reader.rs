@@ -2,12 +2,15 @@ use block::{Block, BlockIter};
 use blockhandle::BlockHandle;
 use filter::FilterPolicy;
 use filter_block::FilterBlockReader;
-use options::Options;
+use options::{self, CompressionType, Options};
 use table_builder::{self, Footer};
 use types::{Comparator, LdbIterator};
 
-use std::io::{Read, Seek, SeekFrom, Result};
+use std::io::{self, Read, Seek, SeekFrom, Result};
 use std::cmp::Ordering;
+
+use integer_encoding::FixedInt;
+use crc::crc32::{self, Hasher32};
 
 /// Reads the table footer.
 fn read_footer<R: Read + Seek>(f: &mut R, size: usize) -> Result<Footer> {
@@ -32,9 +35,40 @@ fn read_bytes<R: Read + Seek>(f: &mut R, location: &BlockHandle) -> Result<Vec<u
 fn read_block<R: Read + Seek, C: Comparator>(cmp: &C,
                                              f: &mut R,
                                              location: &BlockHandle)
-                                             -> Result<Block<C>> {
+                                             -> Result<TableBlock<C>> {
+    // The block is denoted by offset and length in BlockHandle. A block in an encoded
+    // table is followed by 1B compression type and 4B checksum.
     let buf = try!(read_bytes(f, location));
-    Ok(Block::new(buf, *cmp))
+    let compress = try!(read_bytes(f,
+                                   &BlockHandle::new(location.offset() + location.size(),
+                                                     table_builder::TABLE_BLOCK_COMPRESS_LEN)));
+    let cksum = try!(read_bytes(f,
+                                &BlockHandle::new(location.offset() + location.size() +
+                                                  table_builder::TABLE_BLOCK_COMPRESS_LEN,
+                                                  table_builder::TABLE_BLOCK_CKSUM_LEN)));
+    Ok(TableBlock {
+        block: Block::new(buf, *cmp),
+        checksum: u32::decode_fixed(&cksum),
+        compression: options::int_to_compressiontype(compress[0] as u32)
+            .unwrap_or(CompressionType::CompressionNone),
+    })
+}
+
+struct TableBlock<C: Comparator> {
+    block: Block<C>,
+    checksum: u32,
+    compression: CompressionType,
+}
+
+impl<C: Comparator> TableBlock<C> {
+    /// Verify checksum of block
+    fn verify(&self) -> bool {
+        let mut digest = crc32::Digest::new(crc32::CASTAGNOLI);
+        digest.write(&self.block.contents());
+        digest.write(&[self.compression as u8; 1]);
+
+        digest.sum32() == self.checksum
+    }
 }
 
 pub struct Table<R: Read + Seek, C: Comparator, FP: FilterPolicy> {
@@ -56,13 +90,19 @@ impl<R: Read + Seek, C: Comparator, FP: FilterPolicy> Table<R, C, FP> {
         let indexblock = try!(read_block(&cmp, &mut file, &footer.index));
         let metaindexblock = try!(read_block(&cmp, &mut file, &footer.meta_index));
 
+        if !indexblock.verify() || !metaindexblock.verify() {
+            return Err(io::Error::new(io::ErrorKind::InvalidData,
+                                      "Indexblock/Metaindexblock failed verification"));
+        }
+
         let mut filter_block_reader = None;
         let mut filter_name = "filter.".as_bytes().to_vec();
         filter_name.extend_from_slice(fp.name().as_bytes());
 
-        let mut metaindexiter = metaindexblock.iter();
+        let mut metaindexiter = metaindexblock.block.iter();
 
         metaindexiter.seek(&filter_name);
+
         if let Some((_key, val)) = metaindexiter.current() {
             let filter_block_location = BlockHandle::decode(&val).0;
 
@@ -81,12 +121,18 @@ impl<R: Read + Seek, C: Comparator, FP: FilterPolicy> Table<R, C, FP> {
             opt: opt,
             footer: footer,
             filters: filter_block_reader,
-            indexblock: indexblock,
+            indexblock: indexblock.block,
         })
     }
 
-    fn read_block_(&mut self, location: &BlockHandle) -> Result<Block<C>> {
-        read_block(&self.cmp, &mut self.file, location)
+    fn read_block(&mut self, location: &BlockHandle) -> Result<TableBlock<C>> {
+        let b = try!(read_block(&self.cmp, &mut self.file, location));
+
+        if !b.verify() {
+            Err(io::Error::new(io::ErrorKind::InvalidData, "Data block failed verification"))
+        } else {
+            Ok(b)
+        }
     }
 
     /// Returns the offset of the block that contains `key`.
@@ -141,8 +187,8 @@ impl<'a, C: Comparator, R: Read + Seek, FP: FilterPolicy> TableIterator<'a, R, C
     fn load_block(&mut self, handle: &[u8]) -> Result<()> {
         let (new_block_handle, _) = BlockHandle::decode(handle);
 
-        let block = try!(self.table.read_block_(&new_block_handle));
-        self.current_block = block.iter();
+        let block = try!(self.table.read_block(&new_block_handle));
+        self.current_block = block.block.iter();
 
         Ok(())
     }

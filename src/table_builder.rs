@@ -18,6 +18,9 @@ pub const FULL_FOOTER_LENGTH: usize = FOOTER_LENGTH + 8;
 pub const MAGIC_FOOTER_NUMBER: u64 = 0xdb4775248b80fb57;
 pub const MAGIC_FOOTER_ENCODED: [u8; 8] = [0x57, 0xfb, 0x80, 0x8b, 0x24, 0x75, 0x47, 0xdb];
 
+pub const TABLE_BLOCK_COMPRESS_LEN: usize = 1;
+pub const TABLE_BLOCK_CKSUM_LEN: usize = 4;
+
 fn find_shortest_sep<'a, C: Comparator>(c: &C,
                                         lo: InternalKey<'a>,
                                         hi: InternalKey<'a>)
@@ -200,25 +203,25 @@ impl<'a, C: Comparator, Dst: Write, FilterPol: FilterPolicy> TableBuilder<'a, C,
         }
     }
 
-    fn write_block(&mut self, c: BlockContents, t: CompressionType) -> BlockHandle {
+    fn write_block(&mut self, block: BlockContents, t: CompressionType) -> BlockHandle {
         // compression is still unimplemented
         assert_eq!(t, CompressionType::CompressionNone);
 
         let mut buf = [0 as u8; 4];
         let mut digest = crc32::Digest::new(crc32::CASTAGNOLI);
 
-        digest.write(&c);
+        digest.write(&block);
         digest.write(&[self.o.compression_type as u8; 1]);
         digest.sum32().encode_fixed(&mut buf);
 
         // TODO: Handle errors here.
-        let _ = self.dst.write(&c);
+        let _ = self.dst.write(&block);
         let _ = self.dst.write(&[t as u8; 1]);
         let _ = self.dst.write(&buf);
 
-        let handle = BlockHandle::new(self.offset, c.len());
+        let handle = BlockHandle::new(self.offset, block.len());
 
-        self.offset += c.len() + 1 + buf.len();
+        self.offset += block.len() + 1 + buf.len();
 
         handle
     }

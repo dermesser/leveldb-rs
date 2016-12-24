@@ -8,6 +8,14 @@ pub enum CompressionType {
     CompressionSnappy = 1,
 }
 
+pub fn int_to_compressiontype(i: u32) -> Option<CompressionType> {
+    match i {
+        0 => Some(CompressionType::CompressionNone),
+        1 => Some(CompressionType::CompressionSnappy),
+        _ => None
+    }
+}
+
 /// [not all member types implemented yet]
 ///
 #[derive(Clone, Copy)]
