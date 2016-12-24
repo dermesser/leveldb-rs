@@ -136,6 +136,10 @@ impl<'a, C: Comparator, Dst: Write> TableBuilder<'a, C, Dst, NoFilterPolicy> {
     }
 }
 
+/// TableBuilder is used for building a new SSTable. It groups entries into blocks,
+/// calculating checksums and bloom filters.
+/// It's recommended that you use InternalFilterPolicy as FilterPol, as that policy extracts the
+/// underlying user keys from the InternalKeys used as keys in the table.
 impl<'a, C: Comparator, Dst: Write, FilterPol: FilterPolicy> TableBuilder<'a, C, Dst, FilterPol> {
     pub fn new(opt: Options,
                cmp: C,
@@ -180,6 +184,7 @@ impl<'a, C: Comparator, Dst: Write, FilterPol: FilterPolicy> TableBuilder<'a, C,
 
     /// Writes an index entry for the current data_block where `next_key` is the first key of the
     /// next block.
+    /// Calls write_block() for writing the block to disk.
     fn write_data_block<'b>(&mut self, next_key: InternalKey<'b>) {
         assert!(self.data_block.is_some());
 
@@ -196,32 +201,35 @@ impl<'a, C: Comparator, Dst: Write, FilterPol: FilterPolicy> TableBuilder<'a, C,
         self.data_block = Some(BlockBuilder::new(self.o, self.cmp));
 
         let ctype = self.o.compression_type;
-        self.write_block(contents, ctype);
 
+        // Use offset of block that the keys are in.
         if let Some(ref mut fblock) = self.filter_block {
             fblock.start_block(self.offset);
         }
+
+        self.write_block(contents, ctype);
     }
 
+    /// Calculates the checksum, writes the block to disk and updates the offset.
     fn write_block(&mut self, block: BlockContents, t: CompressionType) -> BlockHandle {
         // compression is still unimplemented
         assert_eq!(t, CompressionType::CompressionNone);
 
-        let mut buf = [0 as u8; 4];
+        let mut buf = [0 as u8; TABLE_BLOCK_CKSUM_LEN];
         let mut digest = crc32::Digest::new(crc32::CASTAGNOLI);
 
         digest.write(&block);
-        digest.write(&[self.o.compression_type as u8; 1]);
+        digest.write(&[self.o.compression_type as u8; TABLE_BLOCK_COMPRESS_LEN]);
         digest.sum32().encode_fixed(&mut buf);
 
         // TODO: Handle errors here.
         let _ = self.dst.write(&block);
-        let _ = self.dst.write(&[t as u8; 1]);
+        let _ = self.dst.write(&[t as u8; TABLE_BLOCK_COMPRESS_LEN]);
         let _ = self.dst.write(&buf);
 
         let handle = BlockHandle::new(self.offset, block.len());
 
-        self.offset += block.len() + 1 + buf.len();
+        self.offset += block.len() + TABLE_BLOCK_COMPRESS_LEN + TABLE_BLOCK_CKSUM_LEN;
 
         handle
     }

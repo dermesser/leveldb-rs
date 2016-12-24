@@ -131,7 +131,6 @@ impl<FP: FilterPolicy> FilterBlockReader<FP> {
     }
 
     /// Returns the offset of the offset with index i.
-    #[inline]
     fn offset_of(&self, i: u32) -> usize {
         let offset_offset = self.offsets_offset + 4 * i as usize;
         u32::decode_fixed(&self.block[offset_offset..offset_offset + 4]) as usize
@@ -190,7 +189,7 @@ mod tests {
     fn test_filter_block_builder() {
         let result = produce_filter_block();
         // 2 blocks of 4 filters of 4 bytes plus 1B for `k`; plus three filter offsets (because of
-        //   the block offset of 5000); plus footer
+        //   the block offsets of 0 and 5000); plus footer
         assert_eq!(result.len(), 2 * (get_keys().len() * 4 + 1) + (3 * 4) + 5);
         assert_eq!(result,
                    vec![234, 195, 25, 155, 61, 141, 173, 140, 221, 28, 222, 92, 220, 112, 234,
@@ -204,13 +203,14 @@ mod tests {
         let reader = FilterBlockReader::new_owned(BloomPolicy::new(32), result);
 
         assert_eq!(reader.offset_of(get_filter_index(5121, FILTER_BASE_LOG2)),
-                   17); // third block in third filter\
+                   17); // third block in third filter
 
         let unknown_keys = vec!["xsb".as_bytes(), "9sad".as_bytes(), "assssaaaass".as_bytes()];
 
-        for block_offset in vec![0, 5000, 5, 5500].into_iter() {
+        for block_offset in vec![0, 1024, 5000, 6025].into_iter() {
             for key in get_keys().iter() {
-                assert!(reader.key_may_match(block_offset, key));
+                assert!(reader.key_may_match(block_offset, key),
+                        format!("{} {:?} ", block_offset, key));
             }
             for key in unknown_keys.iter() {
                 assert!(!reader.key_may_match(block_offset, key));
