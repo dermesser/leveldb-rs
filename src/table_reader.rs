@@ -96,9 +96,9 @@ impl<R: Read + Seek, C: Comparator, FP: FilterPolicy> Table<R, C, FP> {
                                       "Indexblock/Metaindexblock failed verification"));
         }
 
+        // Open filter block for reading
         let mut filter_block_reader = None;
-        let mut filter_name = "filter.".as_bytes().to_vec();
-        filter_name.extend_from_slice(fp.name().as_bytes());
+        let filter_name = format!("filter.{}", fp.name()).as_bytes().to_vec();
 
         let mut metaindexiter = metaindexblock.block.iter();
 
@@ -154,6 +154,7 @@ impl<R: Read + Seek, C: Comparator, FP: FilterPolicy> Table<R, C, FP> {
     fn iter<'a>(&'a mut self) -> TableIterator<'a, R, C, FP> {
         let iter = TableIterator {
             current_block: self.indexblock.iter(), // just for filling in here
+            current_block_off: 0,
             index_block: self.indexblock.iter(),
             table: self,
             init: false,
@@ -180,6 +181,7 @@ impl<R: Read + Seek, C: Comparator, FP: FilterPolicy> Table<R, C, FP> {
 pub struct TableIterator<'a, R: 'a + Read + Seek, C: 'a + Comparator, FP: 'a + FilterPolicy> {
     table: &'a mut Table<R, C, FP>,
     current_block: BlockIter<C>,
+    current_block_off: usize,
     index_block: BlockIter<C>,
 
     init: bool,
@@ -202,6 +204,7 @@ impl<'a, C: Comparator, R: Read + Seek, FP: FilterPolicy> TableIterator<'a, R, C
 
         let block = try!(self.table.read_block(&new_block_handle));
         self.current_block = block.block.iter();
+        self.current_block_off = new_block_handle.offset();
 
         Ok(())
     }
@@ -342,6 +345,7 @@ mod tests {
             }
 
             b.finish();
+
         }
 
         let size = d.len();
@@ -362,6 +366,9 @@ mod tests {
                                    BloomPolicy::new(4),
                                    Options::default())
             .unwrap();
+
+        assert!(table.filters.is_some());
+        assert_eq!(table.filters.as_ref().unwrap().num(), 1);
 
         {
             let iter = table.iter();
@@ -404,7 +411,31 @@ mod tests {
         }
 
         assert_eq!(i, data.len());
-        println!("tot len: {}", data.len());
+    }
+
+    #[test]
+    fn test_table_iterator_filter() {
+        let (src, size) = build_table();
+        let data = build_data();
+
+        let mut table = Table::new(Cursor::new(&src as &[u8]),
+                                   size,
+                                   StandardComparator,
+                                   BloomPolicy::new(4),
+                                   Options::default())
+            .unwrap();
+        let filter_reader = table.filters.clone().unwrap();
+        let mut iter = table.iter();
+
+        loop {
+            if let Some((k, _)) = iter.next() {
+                assert!(filter_reader.key_may_match(iter.current_block_off, &k));
+                assert!(!filter_reader.key_may_match(iter.current_block_off,
+                                                     "somerandomkey".as_bytes()));
+            } else {
+                break;
+            }
+        }
     }
 
     #[test]

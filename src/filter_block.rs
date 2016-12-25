@@ -98,6 +98,7 @@ impl<'a, FP: FilterPolicy> FilterBlockBuilder<'a, FP> {
     }
 }
 
+#[derive(Clone)]
 pub struct FilterBlockReader<FP: FilterPolicy> {
     policy: FP,
     block: Rc<Vec<u8>>,
@@ -126,7 +127,7 @@ impl<FP: FilterPolicy> FilterBlockReader<FP> {
     }
 
     /// Returns number of filters
-    fn num(&self) -> u32 {
+    pub fn num(&self) -> u32 {
         ((self.block.len() - self.offsets_offset - 5) / 4) as u32
     }
 
@@ -140,7 +141,7 @@ impl<FP: FilterPolicy> FilterBlockReader<FP> {
     /// filter for the block at blk_offset.
     pub fn key_may_match(&self, blk_offset: usize, key: &[u8]) -> bool {
         if get_filter_index(blk_offset, self.filter_base_lg2) > self.num() {
-            return true
+            return true;
         }
 
         let filter_begin = self.offset_of(get_filter_index(blk_offset, self.filter_base_lg2));

@@ -237,9 +237,8 @@ impl<'a, C: Comparator, Dst: Write, FilterPol: FilterPolicy> TableBuilder<'a, C,
         assert!(self.data_block.is_some());
         let ctype = self.o.compression_type;
 
-        // If there's a pending data block, write that one
-        let flush_last_block = self.data_block.as_ref().unwrap().entries() > 0;
-        if flush_last_block {
+        // If there's a pending data block, write it
+        if self.data_block.as_ref().unwrap().entries() > 0 {
             self.write_data_block(&[0xff as u8; 1]);
         }
 
@@ -329,6 +328,7 @@ mod tests {
             b.add(k.as_bytes(), v.as_bytes());
         }
 
+        assert!(b.filter_block.is_some());
         b.finish();
     }
 
