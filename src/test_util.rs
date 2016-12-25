@@ -1,7 +1,4 @@
-use types::LdbIterator;
-use types::Comparator;
-use types::StandardComparator;
-
+use types::{cmp, LdbIterator};
 use std::cmp::Ordering;
 
 pub struct TestLdbIter<'a> {
@@ -53,8 +50,7 @@ impl<'a> LdbIterator for TestLdbIter<'a> {
     }
     fn seek(&mut self, k: &[u8]) {
         self.ix = 0;
-        while self.ix < self.v.len() &&
-              StandardComparator.cmp(self.v[self.ix].0, k) == Ordering::Less {
+        while self.ix < self.v.len() && cmp(self.v[self.ix].0, k) == Ordering::Less {
             self.ix += 1;
         }
     }

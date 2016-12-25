@@ -26,7 +26,6 @@ pub struct Options {
     // pub logger: Logger,
     pub write_buffer_size: usize,
     pub max_open_files: usize,
-    // pub block_cache: Cache,
     pub block_size: usize,
     pub block_restart_interval: usize,
     pub compression_type: CompressionType,

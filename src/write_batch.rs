@@ -1,5 +1,5 @@
 use memtable::MemTable;
-use types::{Comparator, SequenceNumber, ValueType};
+use types::{SequenceNumber, ValueType};
 use integer_encoding::{VarInt, VarIntWriter, FixedInt};
 
 use std::io::Write;
@@ -82,7 +82,7 @@ impl WriteBatch {
         }
     }
 
-    pub fn insert_into_memtable<C: Comparator>(&self, seq: SequenceNumber, mt: &mut MemTable<C>) {
+    pub fn insert_into_memtable(&self, seq: SequenceNumber, mt: &mut MemTable) {
         let mut sequence_num = seq;
 
         for (k, v) in self.iter() {
