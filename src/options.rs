@@ -1,6 +1,17 @@
+use block::Block;
+use cache::Cache;
 use types::SequenceNumber;
 
 use std::default::Default;
+use std::sync::Mutex;
+use std::sync::Arc;
+
+const KB: usize = 1 << 10;
+const MB: usize = KB * KB;
+
+const BLOCK_MAX_SIZE: usize = 4 * KB;
+const BLOCK_CACHE_CAPACITY: usize = 8 * MB;
+const WRITE_BUFFER_SIZE: usize = 4 * MB;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum CompressionType {
@@ -18,7 +29,7 @@ pub fn int_to_compressiontype(i: u32) -> Option<CompressionType> {
 
 /// [not all member types implemented yet]
 ///
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct Options {
     pub create_if_missing: bool,
     pub error_if_exists: bool,
@@ -26,7 +37,7 @@ pub struct Options {
     // pub logger: Logger,
     pub write_buffer_size: usize,
     pub max_open_files: usize,
-    // pub block_cache: Cache,
+    pub block_cache: Arc<Mutex<Cache<Block>>>,
     pub block_size: usize,
     pub block_restart_interval: usize,
     pub compression_type: CompressionType,
@@ -39,9 +50,10 @@ impl Default for Options {
             create_if_missing: true,
             error_if_exists: false,
             paranoid_checks: false,
-            write_buffer_size: 4 * (1 << 20),
+            write_buffer_size: WRITE_BUFFER_SIZE,
             max_open_files: 1 << 10,
-            block_size: 4 * (1 << 10),
+            block_cache: Arc::new(Mutex::new(Cache::new(BLOCK_CACHE_CAPACITY / BLOCK_MAX_SIZE))), /* 2000 elements */
+            block_size: BLOCK_MAX_SIZE,
             block_restart_interval: 16,
             reuse_logs: false,
             compression_type: CompressionType::CompressionNone,

@@ -144,8 +144,6 @@ impl<FP: FilterPolicy> FilterBlockReader<FP> {
             return true;
         }
 
-        println!("{:?}", key);
-
         let filter_begin = self.offset_of(get_filter_index(blk_offset, self.filter_base_lg2));
         let filter_end = self.offset_of(get_filter_index(blk_offset, self.filter_base_lg2) + 1);
 
