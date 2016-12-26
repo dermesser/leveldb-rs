@@ -486,7 +486,7 @@ mod tests {
             o.block_restart_interval = block_restart_interval;
 
             let data = get_data();
-            let mut builder = BlockBuilder::new(o);
+            let mut builder = BlockBuilder::new(o.clone());
 
             for &(k, v) in data.iter() {
                 builder.add(k, v);
