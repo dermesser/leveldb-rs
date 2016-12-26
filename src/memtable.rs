@@ -1,10 +1,11 @@
 use std::cmp::Ordering;
 
-use key_types::{LookupKey, UserKey, InternalKey, parse_memtable_key, build_memtable_key};
+use key_types::{LookupKey, UserKey, InternalKey, MemtableKey, parse_memtable_key, build_memtable_key};
 use types::{ValueType, SequenceNumber, Status, LdbIterator, cmp};
 use skipmap::{SkipMap, SkipMapIter};
 
 /// Provides Insert/Get/Iterate, based on the SkipMap implementation.
+/// MemTable uses MemtableKeys internally, that is, it stores key and value in the [Skipmap] key.
 pub struct MemTable {
     map: SkipMap,
 }
@@ -27,7 +28,7 @@ impl MemTable {
         iter.seek(key.memtable_key());
 
         if let Some(e) = iter.current() {
-            let foundkey = e.0;
+            let foundkey: MemtableKey = e.0;
             let (lkeylen, lkeyoff, _, _, _) = parse_memtable_key(key.memtable_key());
             let (fkeylen, fkeyoff, tag, vallen, valoff) = parse_memtable_key(foundkey);
 
