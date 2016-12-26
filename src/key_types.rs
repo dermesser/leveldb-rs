@@ -1,10 +1,15 @@
+use options::{CompressionType, int_to_compressiontype};
+use types::{ValueType, SequenceNumber, cmp};
 
-use types::{ValueType, SequenceNumber};
+use std::cmp::Ordering;
 
 use integer_encoding::{FixedInt, VarInt};
 
 // The following typedefs are used to distinguish between the different key formats used internally
 // by different modules.
+
+// TODO: At some point, convert those into actual types with conversions between them. That's a lot
+// of boilerplate, but increases type safety.
 
 /// A MemtableKey consists of the following elements: [keylen, key, tag, (vallen, value)] where
 /// keylen is a varint32 encoding the length of key+tag. tag is a fixed 8 bytes segment encoding
@@ -138,6 +143,52 @@ pub fn parse_memtable_key<'a>(mkey: MemtableKey<'a>) -> (usize, usize, u64, usiz
         return (keylen - 8, keyoff, tag, vallen, valoff);
     } else {
         return (keylen - 8, keyoff, 0, 0, 0);
+    }
+}
+
+pub fn parse_internal_key<'a>(ikey: InternalKey<'a>) -> (CompressionType, u64, UserKey<'a>) {
+    assert!(ikey.len() >= 8);
+
+    let (ctype, seq) = parse_tag(FixedInt::decode_fixed(&ikey[ikey.len() - 8..]));
+    let ctype = int_to_compressiontype(ctype as u32).unwrap_or(CompressionType::CompressionNone);
+
+    return (ctype, seq, &ikey[0..ikey.len() - 8]);
+}
+
+/// An internal comparator wrapping a user-supplied comparator. This comparator is used to compare
+/// memtable keys, which contain length prefixes and a sequence number.
+/// The ordering is determined by asking the wrapped comparator; ties are broken by *reverse*
+/// ordering the sequence numbers. (This means that when having an entry abx/4 and searching for
+/// abx/5, then abx/4 is counted as "greater-or-equal", making snapshot functionality work at all)
+pub fn memtable_key_cmp(a: &[u8], b: &[u8]) -> Ordering {
+    let (akeylen, akeyoff, atag, _, _) = parse_memtable_key(a);
+    let (bkeylen, bkeyoff, btag, _, _) = parse_memtable_key(b);
+
+    let userkey_a = &a[akeyoff..akeyoff + akeylen];
+    let userkey_b = &b[bkeyoff..bkeyoff + bkeylen];
+
+    match cmp(userkey_a, userkey_b) {
+        Ordering::Less => Ordering::Less,
+        Ordering::Greater => Ordering::Greater,
+        Ordering::Equal => {
+            let (_, aseq) = parse_tag(atag);
+            let (_, bseq) = parse_tag(btag);
+
+            // reverse!
+            bseq.cmp(&aseq)
+        }
+    }
+}
+
+/// Same as memtable_key_cmp, but for InternalKeys.
+pub fn internal_key_cmp(a: &[u8], b: &[u8]) -> Ordering {
+    let (_, seqa, keya) = parse_internal_key(a);
+    let (_, seqb, keyb) = parse_internal_key(b);
+
+    match cmp(keya, keyb) {
+        Ordering::Less => Ordering::Less,
+        Ordering::Greater => Ordering::Greater,
+        Ordering::Equal => seqb.cmp(&seqa),
     }
 }
 

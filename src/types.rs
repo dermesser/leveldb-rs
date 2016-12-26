@@ -21,6 +21,8 @@ pub enum Status {
     IOError(String),
 }
 
+pub type CmpFn = Fn(&[u8], &[u8]) -> Ordering;
+
 pub fn cmp(a: &[u8], b: &[u8]) -> Ordering {
     a.cmp(b)
 }

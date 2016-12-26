@@ -162,6 +162,12 @@ pub struct InternalFilterPolicy<FP: FilterPolicy> {
     internal: FP,
 }
 
+impl<FP: FilterPolicy> InternalFilterPolicy<FP> {
+    pub fn new(inner: FP) -> InternalFilterPolicy<FP> {
+        InternalFilterPolicy { internal: inner }
+    }
+}
+
 impl<FP: FilterPolicy> FilterPolicy for InternalFilterPolicy<FP> {
     fn name(&self) -> &'static str {
         self.internal.name()
@@ -187,6 +193,7 @@ impl<FP: FilterPolicy> FilterPolicy for InternalFilterPolicy<FP> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use key_types::LookupKey;
 
     const _BITS_PER_KEY: u32 = 12;
 
@@ -197,11 +204,26 @@ mod tests {
                         "908070605040302010".as_bytes()];
         data
     }
+
     fn create_filter() -> Vec<u8> {
         let fpol = BloomPolicy::new(_BITS_PER_KEY);
         let filter = fpol.create_filter(&input_data());
 
         assert_eq!(filter, vec![194, 148, 129, 140, 192, 196, 132, 164, 8]);
+        filter
+    }
+
+
+    fn create_internalkey_filter() -> Vec<u8> {
+        let fpol = InternalFilterPolicy::new(BloomPolicy::new(_BITS_PER_KEY));
+        let input: Vec<Vec<u8>> = input_data()
+            .into_iter()
+            .map(|k| LookupKey::new(k, 123).internal_key().to_vec())
+            .collect();
+        let input_ = input.iter().map(|k| k.as_slice()).collect();
+
+        let filter = fpol.create_filter(&input_);
+
         filter
     }
 
@@ -213,6 +235,12 @@ mod tests {
         for k in input_data().iter() {
             assert!(fp.key_may_match(k, &f));
         }
+    }
+
+    // This test verifies that InternalFilterPolicy works correctly.
+    #[test]
+    fn test_filter_internal_keys_identical() {
+        assert_eq!(create_filter(), create_internalkey_filter());
     }
 
     #[test]

@@ -11,7 +11,7 @@ pub struct MemTable {
 
 impl MemTable {
     pub fn new() -> MemTable {
-        MemTable { map: SkipMap::new() }
+        MemTable { map: SkipMap::new_memtable_map() }
     }
     pub fn approx_mem_usage(&self) -> usize {
         self.map.approx_memory()
