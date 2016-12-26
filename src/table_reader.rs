@@ -1,5 +1,6 @@
 use block::{Block, BlockIter};
 use blockhandle::BlockHandle;
+use cache::CacheID;
 use filter::{InternalFilterPolicy, FilterPolicy};
 use filter_block::FilterBlockReader;
 use options::{self, CompressionType, Options};
@@ -72,6 +73,7 @@ impl TableBlock {
 pub struct Table<R: Read + Seek, FP: FilterPolicy> {
     file: R,
     file_size: usize,
+    cache_id: CacheID,
 
     opt: Options,
     cmp: Box<CmpFn>,
@@ -113,9 +115,12 @@ impl<R: Read + Seek, FP: FilterPolicy> Table<R, FP> {
 
         metaindexiter.reset();
 
+        let cache_id = opt.block_cache.lock().unwrap().new_cache_id();
+
         Ok(Table {
             file: file,
             file_size: size,
+            cache_id: cache_id,
             opt: opt,
             cmp: Box::new(cmp),
             footer: footer,

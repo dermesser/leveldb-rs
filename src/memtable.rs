@@ -1,6 +1,7 @@
 use std::cmp::Ordering;
 
-use key_types::{LookupKey, UserKey, InternalKey, MemtableKey, parse_memtable_key, build_memtable_key};
+use key_types::{LookupKey, UserKey, InternalKey, MemtableKey, parse_memtable_key,
+                build_memtable_key};
 use types::{ValueType, SequenceNumber, Status, LdbIterator, cmp};
 use skipmap::{SkipMap, SkipMapIter};
 
