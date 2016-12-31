@@ -1,10 +1,9 @@
 use block::Block;
 use cache::Cache;
-use types::SequenceNumber;
+use types::{Cmp, DefaultCmp, SequenceNumber};
 
 use std::default::Default;
-use std::sync::Mutex;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 const KB: usize = 1 << 10;
 const MB: usize = KB * KB;
@@ -31,6 +30,10 @@ pub fn int_to_compressiontype(i: u32) -> Option<CompressionType> {
 ///
 #[derive(Clone)]
 pub struct Options {
+    // NOTE: do NOT set this to something different than DefaultCmp, otherwise some things will
+    // break (at the moment). Comparators would need extra functionality to fix this (e.g., string
+    // separator finding)
+    pub cmp: Arc<Box<Cmp>>,
     pub create_if_missing: bool,
     pub error_if_exists: bool,
     pub paranoid_checks: bool,
@@ -47,6 +50,7 @@ pub struct Options {
 impl Default for Options {
     fn default() -> Options {
         Options {
+            cmp: Arc::new(Box::new(DefaultCmp)),
             create_if_missing: true,
             error_if_exists: false,
             paranoid_checks: false,

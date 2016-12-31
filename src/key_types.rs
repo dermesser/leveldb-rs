@@ -1,7 +1,8 @@
 use options::{CompressionType, int_to_compressiontype};
-use types::{ValueType, SequenceNumber, cmp};
+use types::{ValueType, SequenceNumber, Cmp};
 
 use std::cmp::Ordering;
+use std::sync::Arc;
 
 use integer_encoding::{FixedInt, VarInt};
 
@@ -28,6 +29,7 @@ pub type InternalKey<'a> = &'a [u8];
 /// A LookupKey is the first part of a memtable key, consisting of [keylen: varint32, key: *u8,
 /// tag: u64]
 /// keylen is the length of key plus 8 (for the tag; this for LevelDB compatibility)
+#[derive(Clone, Debug)]
 pub struct LookupKey {
     key: Vec<u8>,
     key_offset: usize,
@@ -146,6 +148,7 @@ pub fn parse_memtable_key<'a>(mkey: MemtableKey<'a>) -> (usize, usize, u64, usiz
     }
 }
 
+/// Parse a key in InternalKey format.
 pub fn parse_internal_key<'a>(ikey: InternalKey<'a>) -> (CompressionType, u64, UserKey<'a>) {
     assert!(ikey.len() >= 8);
 
@@ -155,40 +158,51 @@ pub fn parse_internal_key<'a>(ikey: InternalKey<'a>) -> (CompressionType, u64, U
     return (ctype, seq, &ikey[0..ikey.len() - 8]);
 }
 
+/// Same as memtable_key_cmp, but for InternalKeys.
+#[derive(Clone)]
+pub struct InternalKeyCmp(pub Arc<Box<Cmp>>);
+
+impl Cmp for InternalKeyCmp {
+    fn cmp(&self, a: &[u8], b: &[u8]) -> Ordering {
+        let (_, seqa, keya) = parse_internal_key(a);
+        let (_, seqb, keyb) = parse_internal_key(b);
+
+        match self.0.cmp(keya, keyb) {
+            Ordering::Less => Ordering::Less,
+            Ordering::Greater => Ordering::Greater,
+            // reverse comparison!
+            Ordering::Equal => seqb.cmp(&seqa),
+        }
+    }
+}
+
 /// An internal comparator wrapping a user-supplied comparator. This comparator is used to compare
 /// memtable keys, which contain length prefixes and a sequence number.
 /// The ordering is determined by asking the wrapped comparator; ties are broken by *reverse*
 /// ordering the sequence numbers. (This means that when having an entry abx/4 and searching for
 /// abx/5, then abx/4 is counted as "greater-or-equal", making snapshot functionality work at all)
-pub fn memtable_key_cmp(a: &[u8], b: &[u8]) -> Ordering {
-    let (akeylen, akeyoff, atag, _, _) = parse_memtable_key(a);
-    let (bkeylen, bkeyoff, btag, _, _) = parse_memtable_key(b);
+#[derive(Clone)]
+pub struct MemtableKeyCmp(pub Arc<Box<Cmp>>);
 
-    let userkey_a = &a[akeyoff..akeyoff + akeylen];
-    let userkey_b = &b[bkeyoff..bkeyoff + bkeylen];
+impl Cmp for MemtableKeyCmp {
+    fn cmp(&self, a: &[u8], b: &[u8]) -> Ordering {
+        let (akeylen, akeyoff, atag, _, _) = parse_memtable_key(a);
+        let (bkeylen, bkeyoff, btag, _, _) = parse_memtable_key(b);
 
-    match cmp(userkey_a, userkey_b) {
-        Ordering::Less => Ordering::Less,
-        Ordering::Greater => Ordering::Greater,
-        Ordering::Equal => {
-            let (_, aseq) = parse_tag(atag);
-            let (_, bseq) = parse_tag(btag);
+        let userkey_a = &a[akeyoff..akeyoff + akeylen];
+        let userkey_b = &b[bkeyoff..bkeyoff + bkeylen];
 
-            // reverse!
-            bseq.cmp(&aseq)
+        match self.0.cmp(userkey_a, userkey_b) {
+            Ordering::Less => Ordering::Less,
+            Ordering::Greater => Ordering::Greater,
+            Ordering::Equal => {
+                let (_, aseq) = parse_tag(atag);
+                let (_, bseq) = parse_tag(btag);
+
+                // reverse!
+                bseq.cmp(&aseq)
+            }
         }
-    }
-}
-
-/// Same as memtable_key_cmp, but for InternalKeys.
-pub fn internal_key_cmp(a: &[u8], b: &[u8]) -> Ordering {
-    let (_, seqa, keya) = parse_internal_key(a);
-    let (_, seqb, keyb) = parse_internal_key(b);
-
-    match cmp(keya, keyb) {
-        Ordering::Less => Ordering::Less,
-        Ordering::Greater => Ordering::Greater,
-        Ordering::Equal => seqb.cmp(&seqa),
     }
 }
 
