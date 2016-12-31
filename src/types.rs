@@ -37,6 +37,7 @@ impl Cmp for DefaultCmp {
     }
 }
 
+/// Denotes a key range
 pub struct Range<'a> {
     pub start: &'a [u8],
     pub limit: &'a [u8],
