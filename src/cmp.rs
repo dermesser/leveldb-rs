@@ -44,11 +44,7 @@ impl Cmp for DefaultCmp {
 
             diff_at += 1;
         }
-        // extend one slice by a 0 byte
-        // e.g. abc/abd => abc abc\0 abd
-        let mut r = Vec::from(a);
-        r.extend_from_slice(&[0x00]);
-        return r;
+        return a.to_vec();
     }
 
     fn find_short_succ(&self, a: &[u8]) -> Vec<u8> {

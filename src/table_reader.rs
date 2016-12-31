@@ -290,7 +290,7 @@ impl<'a, R: Read + Seek, FP: FilterPolicy> LdbIterator for TableIterator<'a, R, 
         self.index_block.seek(to);
 
         if let Some((past_block, handle)) = self.index_block.current() {
-            if self.opt.cmp.cmp(to, &past_block) == Ordering::Less {
+            if self.opt.cmp.cmp(to, &past_block) <= Ordering::Equal {
                 // ok, found right block: continue
                 if let Ok(()) = self.load_block(&handle) {
                     self.current_block.seek(to);

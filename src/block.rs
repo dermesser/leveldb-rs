@@ -212,12 +212,12 @@ impl LdbIterator for BlockIter {
             // At a restart, the shared part is supposed to be 0.
             assert_eq!(shared, 0);
 
-            let c = self.opt.cmp.cmp(to, &self.block[self.offset..self.offset + non_shared]);
+            let c = self.opt.cmp.cmp(&self.block[self.offset..self.offset + non_shared], to);
 
             if c == Ordering::Less {
-                right = middle - 1;
-            } else {
                 left = middle;
+            } else {
+                right = middle - 1;
             }
         }
 
