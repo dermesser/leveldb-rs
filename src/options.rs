@@ -31,9 +31,6 @@ pub fn int_to_compressiontype(i: u32) -> Option<CompressionType> {
 ///
 #[derive(Clone)]
 pub struct Options {
-    // NOTE: do NOT set this to something different than DefaultCmp, otherwise some things will
-    // break (at the moment). Comparators would need extra functionality to fix this (e.g., string
-    // separator finding)
     pub cmp: Arc<Box<Cmp>>,
     pub create_if_missing: bool,
     pub error_if_exists: bool,
