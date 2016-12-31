@@ -1,4 +1,5 @@
-use types::{Cmp, DefaultCmp, LdbIterator};
+use types::LdbIterator;
+use cmp::{Cmp, DefaultCmp};
 use std::cmp::Ordering;
 
 pub struct TestLdbIter<'a> {

@@ -1,5 +1,5 @@
 
-use key_types::MemtableKeyCmp;
+use cmp::MemtableKeyCmp;
 use options::Options;
 use types::LdbIterator;
 use rand::{Rng, SeedableRng, StdRng};

@@ -1,5 +1,6 @@
+use cmp::Cmp;
 use options::Options;
-use types::{Cmp, LdbIterator};
+use types::LdbIterator;
 
 use std::cmp::Ordering;
 use std::sync::Arc;

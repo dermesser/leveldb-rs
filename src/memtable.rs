@@ -1,5 +1,6 @@
-use key_types::{LookupKey, UserKey, InternalKey, MemtableKey, MemtableKeyCmp, parse_memtable_key,
-                build_memtable_key};
+use key_types::{LookupKey, UserKey, InternalKey, MemtableKey};
+use cmp::MemtableKeyCmp;
+use key_types::{parse_memtable_key, build_memtable_key};
 use types::{ValueType, SequenceNumber, Status, LdbIterator};
 use skipmap::{SkipMap, SkipMapIter};
 use options::Options;
@@ -49,8 +50,7 @@ impl MemTable {
             let (fkeylen, fkeyoff, tag, vallen, valoff) = parse_memtable_key(foundkey);
 
             // Compare user key -- if equal, proceed
-            println!("{:?}", (key, foundkey));
-            // equality doesn't need custom comparator
+            // We only care about user key equality here
             if key.user_key() == &foundkey[fkeyoff..fkeyoff + fkeylen] {
                 if tag & 0xff == ValueType::TypeValue as u64 {
                     return Result::Ok(foundkey[valoff..valoff + vallen].to_vec());
@@ -166,8 +166,8 @@ mod tests {
 
     #[test]
     fn test_memtable_parse_tag() {
-        let tag = (12345 << 8) | 67;
-        assert_eq!(parse_tag(tag), (67, 12345));
+        let tag = (12345 << 8) | 1;
+        assert_eq!(parse_tag(tag), (ValueType::TypeValue, 12345));
     }
 
     #[test]

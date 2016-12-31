@@ -1,6 +1,7 @@
 use block::Block;
 use cache::Cache;
-use types::{Cmp, DefaultCmp, SequenceNumber};
+use cmp::{Cmp, DefaultCmp};
+use types::SequenceNumber;
 
 use std::default::Default;
 use std::sync::{Arc, Mutex};
