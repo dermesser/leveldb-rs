@@ -173,13 +173,13 @@ mod tests {
         assert_eq!(DefaultCmp.find_shortest_sep("abcd".as_bytes(), "abcf".as_bytes()),
                    "abce".as_bytes());
         assert_eq!(DefaultCmp.find_shortest_sep("abc".as_bytes(), "acd".as_bytes()),
-                   "abc\0".as_bytes());
+                   "abc".as_bytes());
         assert_eq!(DefaultCmp.find_shortest_sep("abcdefghi".as_bytes(), "abcffghi".as_bytes()),
                    "abce".as_bytes());
         assert_eq!(DefaultCmp.find_shortest_sep("a".as_bytes(), "a".as_bytes()),
                    "a".as_bytes());
         assert_eq!(DefaultCmp.find_shortest_sep("a".as_bytes(), "b".as_bytes()),
-                   "a\0".as_bytes());
+                   "a".as_bytes());
         assert_eq!(DefaultCmp.find_shortest_sep("abc".as_bytes(), "zzz".as_bytes()),
                    "b".as_bytes());
         assert_eq!(DefaultCmp.find_shortest_sep("".as_bytes(), "".as_bytes()),
@@ -208,7 +208,7 @@ mod tests {
                    LookupKey::new("b".as_bytes(), types::MAX_SEQUENCE_NUMBER).internal_key());
         assert_eq!(cmp.find_shortest_sep(LookupKey::new("abc".as_bytes(), 1).internal_key(),
                                          LookupKey::new("acd".as_bytes(), 2).internal_key()),
-                   LookupKey::new("abc\0".as_bytes(), 1).internal_key());
+                   LookupKey::new("abc".as_bytes(), 1).internal_key());
         assert_eq!(cmp.find_shortest_sep(LookupKey::new("abc".as_bytes(), 1).internal_key(),
                                          LookupKey::new("abe".as_bytes(), 2).internal_key()),
                    LookupKey::new("abd".as_bytes(), 1).internal_key());
