@@ -187,26 +187,26 @@ mod tests {
         let mt = get_memtable();
 
         // Smaller sequence number doesn't find entry
-        if let Result::Ok(v) = mt.get(&LookupKey::new("abc".as_bytes(), 110)) {
+        if let Ok(v) = mt.get(&LookupKey::new("abc".as_bytes(), 110)) {
             println!("{:?}", v);
             panic!("found");
         }
 
         // Bigger sequence number falls back to next smaller
-        if let Result::Ok(v) = mt.get(&LookupKey::new("abc".as_bytes(), 116)) {
+        if let Ok(v) = mt.get(&LookupKey::new("abc".as_bytes(), 116)) {
             assert_eq!(v, "122".as_bytes());
         } else {
             panic!("not found");
         }
 
         // Exact match works
-        if let Result::Ok(v) = mt.get(&LookupKey::new("abc".as_bytes(), 120)) {
+        if let Ok(v) = mt.get(&LookupKey::new("abc".as_bytes(), 120)) {
             assert_eq!(v, "123".as_bytes());
         } else {
             panic!("not found");
         }
 
-        if let Result::Ok(v) = mt.get(&LookupKey::new("abe".as_bytes(), 122)) {
+        if let Ok(v) = mt.get(&LookupKey::new("abe".as_bytes(), 122)) {
             assert_eq!(v, "125".as_bytes());
         } else {
             panic!("not found");
