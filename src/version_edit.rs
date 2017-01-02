@@ -284,7 +284,6 @@ impl VersionEdit {
                     }
                 }
             } else {
-                println!("{}", tag);
                 return Err(Status::Corruption("Invalid tag number".to_string()));
             }
         }

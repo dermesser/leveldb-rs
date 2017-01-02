@@ -305,6 +305,7 @@ mod tests {
         assert_eq!(iter.current(), Some((b("aba"), val)));
     }
 
+    // oomph... TODO: fix behavior here
     // #[test]
     fn test_merging_fwd_bckwd_2() {
         let val = "def".as_bytes();

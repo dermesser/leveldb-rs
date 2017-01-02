@@ -170,7 +170,6 @@ impl Iterator for BlockIter {
     type Item = (Vec<u8>, Vec<u8>);
 
     fn next(&mut self) -> Option<Self::Item> {
-        println!("next {:?}", (self.offset, self.restarts_off));
         if self.offset >= self.restarts_off {
             self.offset = self.restarts_off;
             // current_entry_offset is left at the offset of the last entry
@@ -204,8 +203,6 @@ impl LdbIterator for BlockIter {
     }
 
     fn prev(&mut self) -> Option<Self::Item> {
-        println!("prev {:?}",
-                 (self.offset, self.restarts_off, self.block.len(), self.current_entry_offset));
         // as in the original implementation -- seek to last restart point, then look for key
         let orig_offset = self.current_entry_offset;
 
