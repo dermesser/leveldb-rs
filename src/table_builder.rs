@@ -29,6 +29,10 @@ pub struct Footer {
     pub index: BlockHandle,
 }
 
+/// A Table footer contains a pointer to the metaindex block, another pointer to the index block,
+/// and a magic number:
+/// [ { table data ... , METAINDEX blockhandle, INDEX blockhandle, PADDING bytes } = 40 bytes,
+/// MAGIC_FOOTER_ENCODED ]
 impl Footer {
     pub fn new(metaix: BlockHandle, index: BlockHandle) -> Footer {
         Footer {
