@@ -94,8 +94,15 @@ impl BlockIter {
 }
 
 impl BlockIter {
-    // Returns SHARED, NON_SHARED and VALSIZE from the current position. Advances self.offset.
-    fn parse_entry(&mut self) -> (usize, usize, usize) {
+    /// The layout of an entry is
+    /// [SHARED varint, NON_SHARED varint, VALSIZE varint, KEY (NON_SHARED bytes),
+    ///  VALUE (VALSIZE bytes)].
+    ///
+    /// Returns SHARED, NON_SHARED, VALSIZE and [length of length spec] from the current position,
+    /// where 'length spec' is the length of the three values in the entry header, as described
+    /// above.
+    /// Advances self.offset to point to the beginning of the next entry.
+    fn parse_entry_and_advance(&mut self) -> (usize, usize, usize, usize) {
         let mut i = 0;
         let (shared, sharedlen) = usize::decode_var(&self.block[self.offset..]);
         i += sharedlen;
@@ -106,16 +113,22 @@ impl BlockIter {
         let (valsize, valsizelen) = usize::decode_var(&self.block[self.offset + i..]);
         i += valsizelen;
 
-        self.offset += i;
+        self.val_offset = self.offset + i + non_shared;
+        self.offset = self.offset + i + non_shared + valsize;
 
-        (shared, non_shared, valsize)
+        (shared, non_shared, valsize, i)
     }
 
-    /// offset is assumed to be at the beginning of the non-shared key part.
-    /// offset is not advanced.
-    fn assemble_key(&mut self, shared: usize, non_shared: usize) {
+    /// Assemble the current key from shared and non-shared parts (an entry usually contains only
+    /// the part of the key that is different from the previous key).
+    ///
+    /// `off` is the offset of the key string within the whole block (self.current_entry_offset
+    /// + entry header length); `shared` and `non_shared` are the lengths of the shared
+    /// respectively non-shared parts of the key.
+    /// Only self.key is mutated.
+    fn assemble_key(&mut self, off: usize, shared: usize, non_shared: usize) {
         self.key.resize(shared, 0);
-        self.key.extend_from_slice(&self.block[self.offset..self.offset + non_shared]);
+        self.key.extend_from_slice(&self.block[off..off + non_shared]);
     }
 
     pub fn seek_to_last(&mut self) {
@@ -147,17 +160,18 @@ impl Iterator for BlockIter {
             self.current_entry_offset = self.offset;
         }
 
-        let (shared, non_shared, valsize) = self.parse_entry();
-        self.assemble_key(shared, non_shared);
+        let current_off = self.current_entry_offset;
 
-        self.val_offset = self.offset + non_shared;
-        self.offset = self.val_offset + valsize;
+        let (shared, non_shared, valsize, entry_head_len) = self.parse_entry_and_advance();
+        self.assemble_key(current_off + entry_head_len, shared, non_shared);
 
+        // Adjust current_restart_ix
         let num_restarts = self.number_restarts();
         while self.current_restart_ix + 1 < num_restarts &&
               self.get_restart_point(self.current_restart_ix + 1) < self.current_entry_offset {
             self.current_restart_ix += 1;
         }
+
         Some((self.key.clone(), Vec::from(&self.block[self.val_offset..self.val_offset + valsize])))
     }
 }
@@ -219,14 +233,19 @@ impl LdbIterator for BlockIter {
         // Do a binary search over the restart points.
         while left < right {
             let middle = (left + right + 1) / 2;
+            let current_entry_offset = self.offset;
             self.offset = self.get_restart_point(middle);
-            // advances self.offset
-            let (shared, non_shared, _) = self.parse_entry();
+            // advances self.offset to point to the next entry
+            let (shared, non_shared, _, head_len) = self.parse_entry_and_advance();
 
             // At a restart, the shared part is supposed to be 0.
             assert_eq!(shared, 0);
 
-            let c = self.opt.cmp.cmp(&self.block[self.offset..self.offset + non_shared], to);
+            let c = self.opt
+                .cmp
+                .cmp(&self.block[current_entry_offset + head_len..current_entry_offset + head_len +
+                                                                  non_shared],
+                     to);
 
             if c == Ordering::Less {
                 left = middle;
