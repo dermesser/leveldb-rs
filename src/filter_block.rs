@@ -1,4 +1,5 @@
-use filter::FilterPolicy;
+use block::BlockContents;
+use filter::BoxedFilterPolicy;
 
 use std::rc::Rc;
 
@@ -21,8 +22,8 @@ fn get_filter_index(offset: usize, base_lg2: u32) -> u32 {
 ///
 /// where offsets are 4 bytes, offset of offsets is 4 bytes, and log2 of FILTER_BASE is 1 byte.
 /// Two consecutive filter offsets may be the same.
-pub struct FilterBlockBuilder<'a, FP: FilterPolicy> {
-    policy: FP,
+pub struct FilterBlockBuilder<'a> {
+    policy: BoxedFilterPolicy,
     // filters, concatenated
     filters: Vec<u8>,
     filter_offsets: Vec<usize>,
@@ -31,8 +32,8 @@ pub struct FilterBlockBuilder<'a, FP: FilterPolicy> {
     keys: Vec<&'a [u8]>,
 }
 
-impl<'a, FP: FilterPolicy> FilterBlockBuilder<'a, FP> {
-    pub fn new(fp: FP) -> FilterBlockBuilder<'a, FP> {
+impl<'a> FilterBlockBuilder<'a> {
+    pub fn new(fp: BoxedFilterPolicy) -> FilterBlockBuilder<'a> {
         FilterBlockBuilder {
             policy: fp,
             // some pre-allocation
@@ -99,20 +100,20 @@ impl<'a, FP: FilterPolicy> FilterBlockBuilder<'a, FP> {
 }
 
 #[derive(Clone)]
-pub struct FilterBlockReader<FP: FilterPolicy> {
-    policy: FP,
-    block: Rc<Vec<u8>>,
+pub struct FilterBlockReader {
+    policy: BoxedFilterPolicy,
+    block: Rc<BlockContents>,
 
     offsets_offset: usize,
     filter_base_lg2: u32,
 }
 
-impl<FP: FilterPolicy> FilterBlockReader<FP> {
-    pub fn new_owned(pol: FP, data: Vec<u8>) -> FilterBlockReader<FP> {
+impl FilterBlockReader {
+    pub fn new_owned(pol: BoxedFilterPolicy, data: Vec<u8>) -> FilterBlockReader {
         FilterBlockReader::new(pol, Rc::new(data))
     }
 
-    pub fn new(pol: FP, data: Rc<Vec<u8>>) -> FilterBlockReader<FP> {
+    pub fn new(pol: BoxedFilterPolicy, data: Rc<Vec<u8>>) -> FilterBlockReader {
         assert!(data.len() >= 5);
 
         let fbase = data[data.len() - 1] as u32;

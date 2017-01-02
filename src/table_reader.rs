@@ -1,7 +1,7 @@
 use block::{Block, BlockIter};
 use blockhandle::BlockHandle;
 use cache::CacheID;
-use filter::{InternalFilterPolicy, FilterPolicy};
+use filter::{BoxedFilterPolicy, InternalFilterPolicy};
 use filter_block::FilterBlockReader;
 use key_types::InternalKey;
 use cmp::InternalKeyCmp;
@@ -75,7 +75,7 @@ impl TableBlock {
     }
 }
 
-pub struct Table<R: Read + Seek, FP: FilterPolicy> {
+pub struct Table<R: Read + Seek> {
     file: R,
     file_size: usize,
     cache_id: CacheID,
@@ -84,12 +84,12 @@ pub struct Table<R: Read + Seek, FP: FilterPolicy> {
 
     footer: Footer,
     indexblock: Block,
-    filters: Option<FilterBlockReader<FP>>,
+    filters: Option<FilterBlockReader>,
 }
 
-impl<R: Read + Seek, FP: FilterPolicy> Table<R, FP> {
+impl<R: Read + Seek> Table<R> {
     /// Creates a new table reader operating on unformatted keys (i.e., UserKey).
-    fn new_raw(opt: Options, mut file: R, size: usize, fp: FP) -> Result<Table<R, FP>> {
+    fn new_raw(opt: Options, mut file: R, size: usize, fp: BoxedFilterPolicy) -> Result<Table<R>> {
         let footer = try!(read_footer(&mut file, size));
 
         let indexblock = try!(TableBlock::read_block(opt.clone(), &mut file, &footer.index));
@@ -136,11 +136,7 @@ impl<R: Read + Seek, FP: FilterPolicy> Table<R, FP> {
     /// Creates a new table reader operating on internal keys (i.e., InternalKey). This means that
     /// a different comparator (internal_key_cmp) and a different filter policy
     /// (InternalFilterPolicy) are used.
-    pub fn new(mut opt: Options,
-               file: R,
-               size: usize,
-               fp: FP)
-               -> Result<Table<R, InternalFilterPolicy<FP>>> {
+    pub fn new(mut opt: Options, file: R, size: usize, fp: BoxedFilterPolicy) -> Result<Table<R>> {
         opt.cmp = Arc::new(Box::new(InternalKeyCmp(opt.cmp.clone())));
         let t = try!(Table::new_raw(opt, file, size, InternalFilterPolicy::new(fp)));
         Ok(t)
@@ -171,7 +167,7 @@ impl<R: Read + Seek, FP: FilterPolicy> Table<R, FP> {
     }
 
     // Iterators read from the file; thus only one iterator can be borrowed (mutably) per scope
-    fn iter<'a>(&'a mut self) -> TableIterator<'a, R, FP> {
+    fn iter<'a>(&'a mut self) -> TableIterator<'a, R> {
         let iter = TableIterator {
             current_block: self.indexblock.iter(),
             init: false,
@@ -224,8 +220,8 @@ impl<R: Read + Seek, FP: FilterPolicy> Table<R, FP> {
 
 /// This iterator is a "TwoLevelIterator"; it uses an index block in order to get an offset hint
 /// into the data blocks.
-pub struct TableIterator<'a, R: 'a + Read + Seek, FP: 'a + FilterPolicy> {
-    table: &'a mut Table<R, FP>,
+pub struct TableIterator<'a, R: 'a + Read + Seek> {
+    table: &'a mut Table<R>,
     opt: Options,
     // We're not using Option<BlockIter>, but instead a separate `init` field. That makes it easier
     // working with the current block in the iterator methods (no borrowing annoyance as with
@@ -236,7 +232,7 @@ pub struct TableIterator<'a, R: 'a + Read + Seek, FP: 'a + FilterPolicy> {
     index_block: BlockIter,
 }
 
-impl<'a, R: Read + Seek, FP: FilterPolicy> TableIterator<'a, R, FP> {
+impl<'a, R: Read + Seek> TableIterator<'a, R> {
     // Skips to the entry referenced by the next entry in the index block.
     // This is called once a block has run out of entries.
     // Err means corruption or I/O error; Ok(true) means a new block was loaded; Ok(false) means
@@ -262,7 +258,7 @@ impl<'a, R: Read + Seek, FP: FilterPolicy> TableIterator<'a, R, FP> {
     }
 }
 
-impl<'a, R: Read + Seek, FP: FilterPolicy> Iterator for TableIterator<'a, R, FP> {
+impl<'a, R: Read + Seek> Iterator for TableIterator<'a, R> {
     type Item = (Vec<u8>, Vec<u8>);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -294,7 +290,7 @@ impl<'a, R: Read + Seek, FP: FilterPolicy> Iterator for TableIterator<'a, R, FP>
     }
 }
 
-impl<'a, R: Read + Seek, FP: FilterPolicy> LdbIterator for TableIterator<'a, R, FP> {
+impl<'a, R: Read + Seek> LdbIterator for TableIterator<'a, R> {
     // A call to valid() after seeking is necessary to ensure that the seek worked (e.g., no error
     // while reading from disk)
     fn seek(&mut self, to: &[u8]) {
