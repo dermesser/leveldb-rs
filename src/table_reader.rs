@@ -507,8 +507,11 @@ mod tests {
         // backwards count
         let mut j = 0;
 
-        while let Some(_) = iter.prev() {
+        while let Some((k, v)) = iter.prev() {
             j += 1;
+            assert_eq!((data[data.len() - 1 - j].0.as_bytes(),
+                        data[data.len() - 1 - j].1.as_bytes()),
+                       (k.as_ref(), v.as_ref()));
         }
 
         // expecting 7 - 1, because the last entry that the iterator stopped on is the last entry
