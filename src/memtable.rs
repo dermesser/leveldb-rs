@@ -192,6 +192,11 @@ mod tests {
             panic!("found");
         }
 
+        if let Ok(v) = mt.get(&LookupKey::new("abf".as_bytes(), 110)) {
+            println!("{:?}", v);
+            panic!("found");
+        }
+
         // Bigger sequence number falls back to next smaller
         if let Ok(v) = mt.get(&LookupKey::new("abc".as_bytes(), 116)) {
             assert_eq!(v, "122".as_bytes());
@@ -208,6 +213,12 @@ mod tests {
 
         if let Ok(v) = mt.get(&LookupKey::new("abe".as_bytes(), 122)) {
             assert_eq!(v, "125".as_bytes());
+        } else {
+            panic!("not found");
+        }
+
+        if let Ok(v) = mt.get(&LookupKey::new("abf".as_bytes(), 129)) {
+            assert_eq!(v, "126".as_bytes());
         } else {
             panic!("not found");
         }
