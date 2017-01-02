@@ -32,6 +32,10 @@ pub struct Block {
 }
 
 impl Block {
+    /// Return an iterator over this block.
+    /// Note that the iterator isn't bound to the block's lifetime; the iterator uses the same
+    /// refcounted block contents as this block. (meaning also that if the iterator isn't released,
+    /// the memory occupied by the block isn't, either)
     pub fn iter(&self) -> BlockIter {
         let restarts = u32::decode_fixed(&self.block[self.block.len() - 4..]);
         let restart_offset = self.block.len() - 4 - 4 * restarts as usize;
@@ -64,36 +68,54 @@ impl Block {
 }
 
 pub struct BlockIter {
+    /// The underlying block contents.
+    /// TODO: Maybe (probably...) this needs an Arc.
     block: Rc<BlockContents>,
     opt: Options,
-    // offset of restarts area within the block.
+    /// offset of restarts area within the block.
     restarts_off: usize,
 
-    // start of next entry to be parsed.
+    /// start of next entry to be parsed.
     offset: usize,
-    // offset of the current entry.
+    /// offset of the current entry.
     current_entry_offset: usize,
-    // index of the most recent restart.
+    /// index of the most recent restart.
     current_restart_ix: usize,
 
-    // We assemble the key from two parts usually, so we keep the current full key here.
+    /// We assemble the key from two parts usually, so we keep the current full key here.
     key: Vec<u8>,
-    // Offset of the current value within the block.
+    /// Offset of the current value within the block.
     val_offset: usize,
 }
 
 impl BlockIter {
+    /// Return the number of restarts in this block.
     fn number_restarts(&self) -> usize {
         u32::decode_fixed(&self.block[self.block.len() - 4..]) as usize
     }
 
+    /// Seek to restart point `ix`. After the seek, current() will return the entry at that restart
+    /// point.
+    fn seek_to_restart_point(&mut self, ix: usize) {
+        let off = self.get_restart_point(ix);
+
+        self.offset = off;
+        self.current_entry_offset = off;
+        self.current_restart_ix = ix;
+        // advances self.offset to point to the next entry
+        let (shared, non_shared, _, head_len) = self.parse_entry_and_advance();
+
+        assert_eq!(shared, 0);
+
+        self.assemble_key(off + head_len, shared, non_shared);
+    }
+
+    /// Return the offset that restart `ix` points to.
     fn get_restart_point(&self, ix: usize) -> usize {
         let restart = self.restarts_off + 4 * ix;
         u32::decode_fixed(&self.block[restart..restart + 4]) as usize
     }
-}
 
-impl BlockIter {
     /// The layout of an entry is
     /// [SHARED varint, NON_SHARED varint, VALSIZE varint, KEY (NON_SHARED bytes),
     ///  VALUE (VALSIZE bytes)].
@@ -133,17 +155,14 @@ impl BlockIter {
 
     pub fn seek_to_last(&mut self) {
         if self.number_restarts() > 0 {
-            let restart = self.get_restart_point(self.number_restarts() - 1);
-            self.offset = restart;
-            self.current_entry_offset = restart;
-            self.current_restart_ix = self.number_restarts() - 1;
+            let num_restarts = self.number_restarts();
+            self.seek_to_restart_point(num_restarts - 1);
         } else {
             self.reset();
         }
 
         while let Some((_, _)) = self.next() {
         }
-
     }
 }
 
@@ -179,10 +198,11 @@ impl Iterator for BlockIter {
 impl LdbIterator for BlockIter {
     fn reset(&mut self) {
         self.offset = 0;
+        self.val_offset = 0;
         self.current_restart_ix = 0;
         self.key.clear();
-        self.val_offset = 0;
     }
+
     fn prev(&mut self) -> Option<Self::Item> {
         println!("prev {:?}",
                  (self.offset, self.restarts_off, self.block.len(), self.current_entry_offset));
@@ -210,6 +230,8 @@ impl LdbIterator for BlockIter {
 
         let mut result;
 
+        // Stop if the next entry would be the original one (self.offset always points to the start
+        // of the next entry)
         loop {
             result = self.next();
 
@@ -233,19 +255,9 @@ impl LdbIterator for BlockIter {
         // Do a binary search over the restart points.
         while left < right {
             let middle = (left + right + 1) / 2;
-            let current_entry_offset = self.offset;
-            self.offset = self.get_restart_point(middle);
-            // advances self.offset to point to the next entry
-            let (shared, non_shared, _, head_len) = self.parse_entry_and_advance();
+            self.seek_to_restart_point(middle);
 
-            // At a restart, the shared part is supposed to be 0.
-            assert_eq!(shared, 0);
-
-            let c = self.opt
-                .cmp
-                .cmp(&self.block[current_entry_offset + head_len..current_entry_offset + head_len +
-                                                                  non_shared],
-                     to);
+            let c = self.opt.cmp.cmp(&self.key, to);
 
             if c == Ordering::Less {
                 left = middle;
