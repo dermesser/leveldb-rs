@@ -1,7 +1,8 @@
 use key_types::{LookupKey, UserKey, InternalKey, MemtableKey};
 use cmp::MemtableKeyCmp;
+use error::{Status, StatusCode, Result};
 use key_types::{parse_memtable_key, build_memtable_key};
-use types::{ValueType, SequenceNumber, Status, LdbIterator};
+use types::{ValueType, SequenceNumber, LdbIterator};
 use skipmap::{SkipMap, SkipMapIter};
 use options::Options;
 
@@ -40,7 +41,7 @@ impl MemTable {
     }
 
     #[allow(unused_variables)]
-    pub fn get(&self, key: &LookupKey) -> Result<Vec<u8>, Status> {
+    pub fn get(&self, key: &LookupKey) -> Result<Vec<u8>> {
         let mut iter = self.map.iter();
         iter.seek(key.memtable_key());
 
@@ -53,13 +54,13 @@ impl MemTable {
             // We only care about user key equality here
             if key.user_key() == &foundkey[fkeyoff..fkeyoff + fkeylen] {
                 if tag & 0xff == ValueType::TypeValue as u64 {
-                    return Result::Ok(foundkey[valoff..valoff + vallen].to_vec());
+                    return Ok(foundkey[valoff..valoff + vallen].to_vec());
                 } else {
-                    return Result::Err(Status::NotFound(String::new()));
+                    return Err(Status::new(StatusCode::NotFound, ""));
                 }
             }
         }
-        Result::Err(Status::NotFound("not found".to_string()))
+        Err(Status::new(StatusCode::NotFound, ""))
     }
 
     pub fn iter<'a>(&'a self) -> MemtableIterator<'a> {

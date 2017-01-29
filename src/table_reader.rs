@@ -1,16 +1,17 @@
 use block::{Block, BlockIter};
 use blockhandle::BlockHandle;
 use cache::CacheID;
+use cmp::InternalKeyCmp;
+use error::{Status, StatusCode, Result};
 use filter::{BoxedFilterPolicy, InternalFilterPolicy};
 use filter_block::FilterBlockReader;
 use key_types::InternalKey;
-use cmp::InternalKeyCmp;
 use options::{self, CompressionType, Options};
 use table_builder::{self, Footer};
 use types::LdbIterator;
 
 use std::cmp::Ordering;
-use std::io::{self, Read, Seek, SeekFrom, Result};
+use std::io::{Read, Seek, SeekFrom};
 use std::sync::Arc;
 
 use integer_encoding::FixedInt;
@@ -97,8 +98,8 @@ impl<R: Read + Seek> Table<R> {
             try!(TableBlock::read_block(opt.clone(), &mut file, &footer.meta_index));
 
         if !indexblock.verify() || !metaindexblock.verify() {
-            return Err(io::Error::new(io::ErrorKind::InvalidData,
-                                      "Indexblock/Metaindexblock failed verification"));
+            return Err(Status::new(StatusCode::InvalidData,
+                                   "Indexblock/Metaindexblock failed verification"));
         }
 
         // Open filter block for reading
@@ -146,7 +147,7 @@ impl<R: Read + Seek> Table<R> {
         let b = try!(TableBlock::read_block(self.opt.clone(), &mut self.file, location));
 
         if !b.verify() {
-            Err(io::Error::new(io::ErrorKind::InvalidData, "Data block failed verification"))
+            Err(Status::new(StatusCode::InvalidData, "Data block failed verification"))
         } else {
             Ok(b)
         }

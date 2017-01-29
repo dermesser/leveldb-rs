@@ -1,9 +1,9 @@
 use env::Env;
 use env::Logger;
+use error::{from_io_result, Status, StatusCode, Result};
 
 use std::collections::HashSet;
 use std::fs;
-use std::io::{Result, Error, ErrorKind};
 use std::iter::FromIterator;
 use std::mem;
 use std::os::unix::io::{FromRawFd, IntoRawFd};
@@ -40,16 +40,16 @@ impl Env for PosixDiskEnv {
     type FileLock = DiskFileLock;
 
     fn open_sequential_file(&self, p: &Path) -> Result<Self::SequentialReader> {
-        fs::OpenOptions::new().read(true).open(p)
+        from_io_result(fs::OpenOptions::new().read(true).open(p))
     }
     fn open_random_access_file(&self, p: &Path) -> Result<Self::RandomReader> {
-        fs::OpenOptions::new().read(true).open(p)
+        from_io_result(fs::OpenOptions::new().read(true).open(p))
     }
     fn open_writable_file(&self, p: &Path) -> Result<Self::Writer> {
-        fs::OpenOptions::new().create(true).write(true).append(false).open(p)
+        from_io_result(fs::OpenOptions::new().create(true).write(true).append(false).open(p))
     }
     fn open_appendable_file(&self, p: &Path) -> Result<Self::Writer> {
-        fs::OpenOptions::new().create(true).write(true).append(true).open(p)
+        from_io_result(fs::OpenOptions::new().create(true).write(true).append(true).open(p))
     }
 
     fn exists(&self, p: &Path) -> Result<bool> {
@@ -59,10 +59,11 @@ impl Env for PosixDiskEnv {
         let dir_reader = try!(fs::read_dir(p));
         let filenames = dir_reader.map(|r| {
                 if !r.is_ok() {
-                    return "".to_string();
+                    "".to_string()
+                } else {
+                    let direntry = r.unwrap();
+                    direntry.file_name().into_string().unwrap_or("".to_string())
                 }
-                let direntry = r.unwrap();
-                direntry.file_name().into_string().unwrap_or("".to_string())
             })
             .filter(|s| !s.is_empty());
         Ok(Vec::from_iter(filenames))
@@ -73,23 +74,23 @@ impl Env for PosixDiskEnv {
     }
 
     fn delete(&self, p: &Path) -> Result<()> {
-        fs::remove_file(p)
+        from_io_result(fs::remove_file(p))
     }
     fn mkdir(&self, p: &Path) -> Result<()> {
-        fs::create_dir(p)
+        from_io_result(fs::create_dir(p))
     }
     fn rmdir(&self, p: &Path) -> Result<()> {
-        fs::remove_dir_all(p)
+        from_io_result(fs::remove_dir_all(p))
     }
     fn rename(&self, old: &Path, new: &Path) -> Result<()> {
-        fs::rename(old, new)
+        from_io_result(fs::rename(old, new))
     }
 
     fn lock(&self, p: &Path) -> Result<DiskFileLock> {
         let mut locks = self.locks.lock().unwrap();
 
         if locks.contains(&p.to_str().unwrap().to_string()) {
-            Err(Error::new(ErrorKind::AlreadyExists, "Lock is held"))
+            Err(Status::new(StatusCode::AlreadyExists, "Lock is held"))
         } else {
             let f = try!(fs::OpenOptions::new().write(true).open(p));
 
@@ -108,7 +109,7 @@ impl Env for PosixDiskEnv {
             };
 
             if result < 0 {
-                return Err(Error::new(ErrorKind::PermissionDenied, "Lock is held (fcntl)"));
+                return Err(Status::new(StatusCode::AlreadyExists, "Lock is held (fcntl)"));
             }
 
             locks.insert(p.to_str().unwrap().to_string());

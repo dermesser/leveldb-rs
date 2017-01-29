@@ -1,7 +1,9 @@
 //! An `env` is an abstraction layer that allows the database to run both on different platforms as
 //! well as persisting data on disk or in memory.
 
-use std::io::{Read, Write, Seek, Result};
+use error::Result;
+
+use std::io::{Read, Write, Seek};
 use std::path::Path;
 
 pub trait Env {
