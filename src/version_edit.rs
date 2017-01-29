@@ -99,8 +99,8 @@ impl VersionEdit {
         self.deleted.insert((level, file_num));
     }
 
-    pub fn set_comparator_name(&mut self, name: String) {
-        self.comparator = Some(name)
+    pub fn set_comparator_name(&mut self, name: &str) {
+        self.comparator = Some(name.to_string())
     }
 
     pub fn set_log_num(&mut self, num: u64) {
@@ -303,13 +303,14 @@ mod tests {
     use super::CompactionPointer;
     use super::VersionEdit;
 
+    use cmp::{Cmp, DefaultCmp};
     use types::FileMetaData;
 
     #[test]
     fn test_version_edit_encode_decode() {
         let mut ve = VersionEdit::new();
 
-        ve.set_comparator_name("abcdef".to_string());
+        ve.set_comparator_name(DefaultCmp.id());
         ve.set_log_num(123);
         ve.set_next_file(456);
         ve.set_prev_log_num(789);
@@ -330,7 +331,7 @@ mod tests {
 
         let decoded = VersionEdit::decode_from(encoded.as_ref()).unwrap();
 
-        assert_eq!(decoded.comparator, Some("abcdef".to_string()));
+        assert_eq!(decoded.comparator, Some(DefaultCmp.id().to_string()));
         assert_eq!(decoded.log_number, Some(123));
         assert_eq!(decoded.next_file_number, Some(456));
         assert_eq!(decoded.prev_log_number, Some(789));

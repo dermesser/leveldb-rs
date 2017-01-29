@@ -64,6 +64,17 @@ impl Default for Options {
     }
 }
 
+impl Options {
+    /// Set the comparator to use in all operations and structures that need to compare keys.
+    ///
+    /// DO NOT set the comparator after having written any record with a different comparator.
+    /// If the comparator used differs from the one used when writing a database that is being
+    /// opened, the library is free to panic.
+    pub fn set_comparator<C: Cmp>(&mut self, c: Box<Cmp>) {
+        self.cmp = Arc::new(c);
+    }
+}
+
 /// Supplied to DB read operations.
 pub struct ReadOptions {
     pub verify_checksums: bool,

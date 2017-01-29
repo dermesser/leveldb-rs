@@ -123,7 +123,7 @@ impl BlockIter {
     /// Returns SHARED, NON_SHARED, VALSIZE and [length of length spec] from the current position,
     /// where 'length spec' is the length of the three values in the entry header, as described
     /// above.
-    /// Advances self.offset to point to the beginning of the next entry.
+    /// Advances self.offset to the beginning of the next entry.
     fn parse_entry_and_advance(&mut self) -> (usize, usize, usize, usize) {
         let mut i = 0;
         let (shared, sharedlen) = usize::decode_var(&self.block[self.offset..]);
