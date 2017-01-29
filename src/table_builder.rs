@@ -23,7 +23,7 @@ pub const TABLE_BLOCK_COMPRESS_LEN: usize = 1;
 pub const TABLE_BLOCK_CKSUM_LEN: usize = 4;
 
 /// Footer is a helper for encoding/decoding a table footer.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Footer {
     pub meta_index: BlockHandle,
     pub index: BlockHandle,
