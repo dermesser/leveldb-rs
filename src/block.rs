@@ -26,6 +26,7 @@ pub type BlockContents = Vec<u8>;
 /// A RESTART is a fixed u32 pointing to the beginning of an ENTRY.
 ///
 /// N_RESTARTS contains the number of restarts.
+#[derive(Clone)]
 pub struct Block {
     block: Rc<BlockContents>,
     opt: Options,

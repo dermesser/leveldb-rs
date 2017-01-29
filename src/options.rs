@@ -1,4 +1,4 @@
-use block::Block;
+use table_reader::TableBlock;
 use cache::Cache;
 use cmp::{Cmp, DefaultCmp};
 use types::SequenceNumber;
@@ -38,7 +38,7 @@ pub struct Options {
     // pub logger: Logger,
     pub write_buffer_size: usize,
     pub max_open_files: usize,
-    pub block_cache: Arc<Mutex<Cache<Block>>>,
+    pub block_cache: Arc<Mutex<Cache<TableBlock>>>,
     pub block_size: usize,
     pub block_restart_interval: usize,
     pub compression_type: CompressionType,

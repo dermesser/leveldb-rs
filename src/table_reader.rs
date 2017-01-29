@@ -1,6 +1,6 @@
 use block::{Block, BlockIter};
 use blockhandle::BlockHandle;
-use cache::CacheID;
+use cache;
 use cmp::InternalKeyCmp;
 use error::{Status, StatusCode, Result};
 use filter::{BoxedFilterPolicy, InternalFilterPolicy};
@@ -14,7 +14,7 @@ use std::cmp::Ordering;
 use std::io::{Read, Seek, SeekFrom};
 use std::sync::Arc;
 
-use integer_encoding::FixedInt;
+use integer_encoding::{FixedInt, FixedIntWriter};
 use crc::crc32::{self, Hasher32};
 
 /// Reads the table footer.
@@ -36,7 +36,8 @@ fn read_bytes<R: Read + Seek>(f: &mut R, location: &BlockHandle) -> Result<Vec<u
     Ok(buf)
 }
 
-struct TableBlock {
+#[derive(Clone)]
+pub struct TableBlock {
     block: Block,
     checksum: u32,
     compression: CompressionType,
@@ -79,7 +80,7 @@ impl TableBlock {
 pub struct Table<R: Read + Seek> {
     file: R,
     file_size: usize,
-    cache_id: CacheID,
+    cache_id: cache::CacheID,
 
     opt: Options,
 
@@ -118,9 +119,7 @@ impl<R: Read + Seek> Table<R> {
                 filter_block_reader = Some(FilterBlockReader::new_owned(fp, buf));
             }
         }
-
         metaindexiter.reset();
-
         let cache_id = opt.block_cache.lock().unwrap().new_cache_id();
 
         Ok(Table {
@@ -143,14 +142,34 @@ impl<R: Read + Seek> Table<R> {
         Ok(t)
     }
 
+    fn block_cache_handle(&self, block_off: usize) -> cache::CacheKey {
+        let mut dst = Vec::with_capacity(2 * 8);
+        dst.write_fixedint(self.cache_id).expect("error writing to vec");
+        dst.write_fixedint(block_off as u64).expect("error writing to vec");
+        dst
+    }
+
+    /// Read a block from the current table at `location`, and cache it in the options' block
+    /// cache.
     fn read_block(&mut self, location: &BlockHandle) -> Result<TableBlock> {
+        let cachekey = self.block_cache_handle(location.offset());
+        if let Ok(ref mut block_cache) = self.opt.block_cache.lock() {
+            if let Some(block) = block_cache.get(&cachekey) {
+                return Ok(block.clone());
+            }
+        }
+
         let b = try!(TableBlock::read_block(self.opt.clone(), &mut self.file, location));
 
         if !b.verify() {
-            Err(Status::new(StatusCode::InvalidData, "Data block failed verification"))
-        } else {
-            Ok(b)
+            return Err(Status::new(StatusCode::InvalidData, "Data block failed verification"));
         }
+        if let Ok(ref mut block_cache) = self.opt.block_cache.lock() {
+            // inserting a cheap copy (Rc)
+            block_cache.insert(&cachekey, b.clone());
+        }
+
+        Ok(b)
     }
 
     /// Returns the offset of the block that contains `key`.
@@ -194,7 +213,7 @@ impl<R: Read + Seek> Table<R> {
             None
         }
 
-        // Future impl:
+        // Future impl: TODO
         //
         // let mut index_block = self.indexblock.iter();
         //
@@ -445,38 +464,28 @@ mod tests {
     }
 
     #[test]
-    fn test_table_reader_checksum() {
-        let (mut src, size) = build_table();
-        println!("{}", size);
+    fn test_table_cache_use() {
+        let (src, size) = build_table();
+        let mut opt = Options::default();
+        opt.block_size = 32;
 
-        src[10] += 1;
-
-        let mut table = Table::new_raw(Options::default(),
+        let mut table = Table::new_raw(opt.clone(),
                                        Cursor::new(&src as &[u8]),
                                        size,
                                        BloomPolicy::new(4))
             .unwrap();
+        let mut iter = table.iter();
 
-        assert!(table.filters.is_some());
-        assert_eq!(table.filters.as_ref().unwrap().num(), 1);
-
-        {
-            let iter = table.iter();
-            // first block is skipped
-            assert_eq!(iter.count(), 4);
-        }
-
-        {
-            let iter = table.iter();
-
-            for (k, _) in iter {
-                if k == build_data()[5].0.as_bytes() {
-                    return;
-                }
-            }
-
-            panic!("Should have hit 5th record in table!");
-        }
+        // index/metaindex blocks are not cached. That'd be a waste of memory.
+        assert_eq!(opt.block_cache.lock().unwrap().count(), 0);
+        iter.next();
+        assert_eq!(opt.block_cache.lock().unwrap().count(), 1);
+        // This may fail if block parameters or data change. In that case, adapt it.
+        iter.next();
+        iter.next();
+        iter.next();
+        iter.next();
+        assert_eq!(opt.block_cache.lock().unwrap().count(), 2);
     }
 
     #[test]
@@ -687,4 +696,40 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn test_table_reader_checksum() {
+        let (mut src, size) = build_table();
+        println!("{}", size);
+
+        src[10] += 1;
+
+        let mut table = Table::new_raw(Options::default(),
+                                       Cursor::new(&src as &[u8]),
+                                       size,
+                                       BloomPolicy::new(4))
+            .unwrap();
+
+        assert!(table.filters.is_some());
+        assert_eq!(table.filters.as_ref().unwrap().num(), 1);
+
+        {
+            let iter = table.iter();
+            // first block is skipped
+            assert_eq!(iter.count(), 4);
+        }
+
+        {
+            let iter = table.iter();
+
+            for (k, _) in iter {
+                if k == build_data()[5].0.as_bytes() {
+                    return;
+                }
+            }
+
+            panic!("Should have hit 5th record in table!");
+        }
+    }
+
 }
