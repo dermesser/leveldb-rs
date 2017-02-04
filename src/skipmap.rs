@@ -327,7 +327,6 @@ impl<'a> LdbIterator for SkipMapIter<'a> {
 pub mod tests {
     use super::*;
     use options::Options;
-    use types::*;
 
     pub fn make_skipmap() -> SkipMap {
         let mut skm = SkipMap::new(Options::default());

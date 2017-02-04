@@ -397,7 +397,6 @@ impl BlockBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use types::*;
     use options::*;
 
     fn get_data() -> Vec<(&'static [u8], &'static [u8])> {

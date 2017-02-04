@@ -172,7 +172,6 @@ impl Env for PosixDiskEnv {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use env::*;
 
     use std::convert::AsRef;
     use std::io::Write;
