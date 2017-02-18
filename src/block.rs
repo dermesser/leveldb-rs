@@ -479,19 +479,19 @@ mod tests {
         let block_contents = builder.finish();
         let mut block = Block::new(o.clone(), block_contents).iter();
 
-        // assert!(!block.valid());
-        // assert_eq!(block.next(),
-        // Some(("key1".as_bytes().to_vec(), "value1".as_bytes().to_vec())));
-        // assert!(block.valid());
-        // block.next();
-        // assert!(block.valid());
-        // block.prev();
-        // assert!(block.valid());
-        // assert_eq!(block.current(),
-        // Some(("key1".as_bytes().to_vec(), "value1".as_bytes().to_vec())));
-        // block.prev();
-        // assert!(!block.valid());
-        //
+        assert!(!block.valid());
+        assert_eq!(block.next(),
+                   Some(("key1".as_bytes().to_vec(), "value1".as_bytes().to_vec())));
+        assert!(block.valid());
+        block.next();
+        assert!(block.valid());
+        block.prev();
+        assert!(block.valid());
+        assert_eq!(block.current(),
+                   Some(("key1".as_bytes().to_vec(), "value1".as_bytes().to_vec())));
+        block.prev();
+        assert!(!block.valid());
+
         // Verify that prev() from the last entry goes to the prev-to-last entry
         // (essentially, that next() returning None doesn't advance anything)
         while let Some(_) = block.next() {
