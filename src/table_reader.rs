@@ -203,13 +203,13 @@ impl<R: Read + Seek> Table<R> {
     /// Retrieve value from table. This function uses the attached filters, so is better suited if
     /// you frequently look for non-existing values (as it will detect the non-existence of an
     /// entry in a block without having to load the block).
-    pub fn get<'a>(&mut self, to: InternalKey<'a>) -> Option<Vec<u8>> {
+    pub fn get<'a>(&mut self, key: InternalKey<'a>) -> Option<Vec<u8>> {
         let mut index_iter = self.indexblock.iter();
-        index_iter.seek(to);
+        index_iter.seek(key);
 
         let handle;
         if let Some((last_in_block, h)) = index_iter.current() {
-            if self.opt.cmp.cmp(to, &last_in_block) == Ordering::Less {
+            if self.opt.cmp.cmp(key, &last_in_block) == Ordering::Less {
                 handle = BlockHandle::decode(&h).0;
             } else {
                 return None;
@@ -222,7 +222,7 @@ impl<R: Read + Seek> Table<R> {
 
         // Check bloom (or whatever) filter
         if let Some(ref filters) = self.filters {
-            if !filters.key_may_match(handle.offset(), to) {
+            if !filters.key_may_match(handle.offset(), key) {
                 return None;
             }
         }
@@ -236,9 +236,9 @@ impl<R: Read + Seek> Table<R> {
         }
 
         // Go to entry and check if it's the wanted entry.
-        iter.seek(to);
+        iter.seek(key);
         if let Some((k, v)) = iter.current() {
-            if self.opt.cmp.cmp(to, &k) == Ordering::Equal {
+            if self.opt.cmp.cmp(key, &k) == Ordering::Equal {
                 Some(v)
             } else {
                 None
