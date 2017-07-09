@@ -1,6 +1,9 @@
-use table_reader::TableBlock;
 use cache::Cache;
 use cmp::{Cmp, DefaultCmp};
+use disk_env;
+use env::Env;
+use filter;
+use table_reader::TableBlock;
 use types::SequenceNumber;
 
 use std::default::Default;
@@ -12,6 +15,7 @@ const MB: usize = KB * KB;
 const BLOCK_MAX_SIZE: usize = 4 * KB;
 const BLOCK_CACHE_CAPACITY: usize = 8 * MB;
 const WRITE_BUFFER_SIZE: usize = 4 * MB;
+const DEFAULT_BITS_PER_KEY: u32 = 10; // NOTE: This may need to be optimized.
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum CompressionType {
@@ -32,6 +36,7 @@ pub fn int_to_compressiontype(i: u32) -> Option<CompressionType> {
 #[derive(Clone)]
 pub struct Options {
     pub cmp: Arc<Box<Cmp>>,
+    pub env: Arc<Box<Env>>,
     pub create_if_missing: bool,
     pub error_if_exists: bool,
     pub paranoid_checks: bool,
@@ -43,12 +48,14 @@ pub struct Options {
     pub block_restart_interval: usize,
     pub compression_type: CompressionType,
     pub reuse_logs: bool,
+    pub filter_policy: filter::BoxedFilterPolicy,
 }
 
 impl Default for Options {
     fn default() -> Options {
         Options {
             cmp: Arc::new(Box::new(DefaultCmp)),
+            env: Arc::new(Box::new(disk_env::PosixDiskEnv::new())),
             create_if_missing: true,
             error_if_exists: false,
             paranoid_checks: false,
@@ -60,6 +67,7 @@ impl Default for Options {
             block_restart_interval: 16,
             reuse_logs: false,
             compression_type: CompressionType::CompressionNone,
+            filter_policy: filter::BloomPolicy::new(DEFAULT_BITS_PER_KEY),
         }
     }
 }
