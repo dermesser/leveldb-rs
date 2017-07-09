@@ -3,18 +3,25 @@
 
 use error::{self, Result};
 
-use std::io::{self, Read, Write, Seek};
+use std::convert::AsRef;
+use std::fs::File;
+use std::io::{self, Cursor, Read, Write, Seek};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-/// RandomAccessFile wraps a type implementing read and seek to enable atomic random reads
+pub trait RandomAccess: Read + Seek {}
+impl RandomAccess for File {}
+impl<T: AsRef<[u8]>> RandomAccess for Cursor<T> {}
+
+/// RandomAccessFile dynamically wraps a type implementing read and seek to enable atomic random
+/// reads.
 #[derive(Clone)]
-pub struct RandomAccessFile<F: Read + Seek> {
-    f: Arc<Mutex<F>>,
+pub struct RandomAccessFile {
+    f: Arc<Mutex<Box<RandomAccess>>>,
 }
 
-impl<F: Read + Seek> RandomAccessFile<F> {
-    pub fn new(f: F) -> RandomAccessFile<F> {
+impl RandomAccessFile {
+    pub fn new(f: Box<RandomAccess>) -> RandomAccessFile {
         RandomAccessFile { f: Arc::new(Mutex::new(f)) }
     }
 
@@ -28,16 +35,15 @@ impl<F: Read + Seek> RandomAccessFile<F> {
     }
 }
 
-pub trait Env {
-    type SequentialReader: Read;
-    type RandomReader: Read + Seek;
-    type Writer: Write;
-    type FileLock;
+pub struct FileLock {
+    pub id: String,
+}
 
-    fn open_sequential_file(&self, &Path) -> Result<Self::SequentialReader>;
-    fn open_random_access_file(&self, &Path) -> Result<RandomAccessFile<Self::RandomReader>>;
-    fn open_writable_file(&self, &Path) -> Result<Self::Writer>;
-    fn open_appendable_file(&self, &Path) -> Result<Self::Writer>;
+pub trait Env {
+    fn open_sequential_file(&self, &Path) -> Result<Box<Read>>;
+    fn open_random_access_file(&self, &Path) -> Result<RandomAccessFile>;
+    fn open_writable_file(&self, &Path) -> Result<Box<Write>>;
+    fn open_appendable_file(&self, &Path) -> Result<Box<Write>>;
 
     fn exists(&self, &Path) -> Result<bool>;
     fn children(&self, &Path) -> Result<Vec<String>>;
@@ -48,8 +54,8 @@ pub trait Env {
     fn rmdir(&self, &Path) -> Result<()>;
     fn rename(&self, &Path, &Path) -> Result<()>;
 
-    fn lock(&self, &Path) -> Result<Self::FileLock>;
-    fn unlock(&self, l: Self::FileLock);
+    fn lock(&self, &Path) -> Result<FileLock>;
+    fn unlock(&self, l: FileLock);
 
     fn new_logger(&self, &Path) -> Result<Logger>;
 

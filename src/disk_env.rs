@@ -1,13 +1,14 @@
-use env::{Env, Logger, RandomAccessFile};
+use env::{Env, FileLock, Logger, RandomAccessFile};
 use error::{from_io_result, Status, StatusCode, Result};
 
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::fs;
+use std::io::{Read, Write};
 use std::iter::FromIterator;
 use std::mem;
-use std::os::unix::io::{FromRawFd, IntoRawFd};
+use std::os::unix::io::IntoRawFd;
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time;
 
@@ -17,38 +18,40 @@ const F_RDLCK: libc::c_short = 0;
 const F_WRLCK: libc::c_short = 1;
 const F_UNLCK: libc::c_short = 2;
 
-pub struct DiskFileLock {
-    p: String,
-    f: fs::File,
-}
+type FileDescriptor = i32;
 
+#[derive(Clone)]
 pub struct PosixDiskEnv {
-    locks: Mutex<HashSet<String>>,
+    locks: Arc<Mutex<HashMap<String, FileDescriptor>>>,
 }
 
 impl PosixDiskEnv {
     pub fn new() -> PosixDiskEnv {
-        PosixDiskEnv { locks: Mutex::new(HashSet::new()) }
+        PosixDiskEnv { locks: Arc::new(Mutex::new(HashMap::new())) }
     }
 }
 
 impl Env for PosixDiskEnv {
-    type SequentialReader = fs::File;
-    type RandomReader = fs::File;
-    type Writer = fs::File;
-    type FileLock = DiskFileLock;
-
-    fn open_sequential_file(&self, p: &Path) -> Result<Self::SequentialReader> {
+    fn open_sequential_file(&self, p: &Path) -> Result<Box<Read>> {
+        Ok(Box::new(try!(from_io_result(fs::OpenOptions::new().read(true).open(p)))))
+    }
+    fn open_random_access_file(&self, p: &Path) -> Result<RandomAccessFile> {
         from_io_result(fs::OpenOptions::new().read(true).open(p))
+            .map(|f| RandomAccessFile::new(Box::new(f)))
     }
-    fn open_random_access_file(&self, p: &Path) -> Result<RandomAccessFile<Self::RandomReader>> {
-        from_io_result(fs::OpenOptions::new().read(true).open(p)).map(|f| RandomAccessFile::new(f))
+    fn open_writable_file(&self, p: &Path) -> Result<Box<Write>> {
+        Ok(Box::new(try!(from_io_result(fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(false)
+            .open(p)))))
     }
-    fn open_writable_file(&self, p: &Path) -> Result<Self::Writer> {
-        from_io_result(fs::OpenOptions::new().create(true).write(true).append(false).open(p))
-    }
-    fn open_appendable_file(&self, p: &Path) -> Result<Self::Writer> {
-        from_io_result(fs::OpenOptions::new().create(true).write(true).append(true).open(p))
+    fn open_appendable_file(&self, p: &Path) -> Result<Box<Write>> {
+        Ok(Box::new(try!(from_io_result(fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open(p)))))
     }
 
     fn exists(&self, p: &Path) -> Result<bool> {
@@ -85,10 +88,10 @@ impl Env for PosixDiskEnv {
         from_io_result(fs::rename(old, new))
     }
 
-    fn lock(&self, p: &Path) -> Result<DiskFileLock> {
+    fn lock(&self, p: &Path) -> Result<FileLock> {
         let mut locks = self.locks.lock().unwrap();
 
-        if locks.contains(&p.to_str().unwrap().to_string()) {
+        if locks.contains_key(&p.to_str().unwrap().to_string()) {
             Err(Status::new(StatusCode::AlreadyExists, "Lock is held"))
         } else {
             let f = try!(fs::OpenOptions::new().write(true).open(p));
@@ -111,22 +114,18 @@ impl Env for PosixDiskEnv {
                 return Err(Status::new(StatusCode::AlreadyExists, "Lock is held (fcntl)"));
             }
 
-            locks.insert(p.to_str().unwrap().to_string());
-            let lock = DiskFileLock {
-                p: p.to_str().unwrap().to_string(),
-                f: unsafe { fs::File::from_raw_fd(fd) },
-            };
+            locks.insert(p.to_str().unwrap().to_string(), fd);
+            let lock = FileLock { id: p.to_str().unwrap().to_string() };
             Ok(lock)
         }
     }
-    fn unlock(&self, l: DiskFileLock) {
+    fn unlock(&self, l: FileLock) {
         let mut locks = self.locks.lock().unwrap();
 
-        if !locks.contains(&l.p) {
+        if !locks.contains_key(&l.id) {
             panic!("Unlocking a file that is not locked!");
         } else {
-            locks.remove(&l.p);
-
+            let fd = locks.remove(&l.id).unwrap();
             let flock_arg = libc::flock {
                 l_type: F_UNLCK,
                 l_whence: libc::SEEK_SET as libc::c_short,
@@ -135,11 +134,10 @@ impl Env for PosixDiskEnv {
                 l_pid: 0,
             };
             let result = unsafe {
-                libc::fcntl(l.f.into_raw_fd(),
+                libc::fcntl(fd,
                             libc::F_SETLK,
                             mem::transmute::<&libc::flock, *const libc::flock>(&&flock_arg))
             };
-
             if result < 0 {
                 // ignore for now
             }
