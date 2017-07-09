@@ -1,5 +1,4 @@
-use env::Env;
-use env::Logger;
+use env::{Env, Logger, RandomAccessFile};
 use error::{from_io_result, Status, StatusCode, Result};
 
 use std::collections::HashSet;
@@ -42,8 +41,8 @@ impl Env for PosixDiskEnv {
     fn open_sequential_file(&self, p: &Path) -> Result<Self::SequentialReader> {
         from_io_result(fs::OpenOptions::new().read(true).open(p))
     }
-    fn open_random_access_file(&self, p: &Path) -> Result<Self::RandomReader> {
-        from_io_result(fs::OpenOptions::new().read(true).open(p))
+    fn open_random_access_file(&self, p: &Path) -> Result<RandomAccessFile<Self::RandomReader>> {
+        from_io_result(fs::OpenOptions::new().read(true).open(p)).map(|f| RandomAccessFile::new(f))
     }
     fn open_writable_file(&self, p: &Path) -> Result<Self::Writer> {
         from_io_result(fs::OpenOptions::new().create(true).write(true).append(false).open(p))

@@ -2,6 +2,7 @@ use block::{Block, BlockIter};
 use blockhandle::BlockHandle;
 use cache;
 use cmp::InternalKeyCmp;
+use env::RandomAccessFile;
 use error::{Status, StatusCode, Result};
 use filter::{BoxedFilterPolicy, InternalFilterPolicy};
 use filter_block::FilterBlockReader;
@@ -11,29 +12,21 @@ use table_builder::{self, Footer};
 use types::LdbIterator;
 
 use std::cmp::Ordering;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{Read, Seek};
 use std::sync::Arc;
 
 use integer_encoding::{FixedInt, FixedIntWriter};
 use crc::crc32::{self, Hasher32};
 
 /// Reads the table footer.
-fn read_footer<R: Read + Seek>(f: &mut R, size: usize) -> Result<Footer> {
-    try!(f.seek(SeekFrom::Start((size - table_builder::FULL_FOOTER_LENGTH) as u64)));
-    let mut buf = [0; table_builder::FULL_FOOTER_LENGTH];
-    try!(f.read_exact(&mut buf));
+fn read_footer<F: Read + Seek>(f: &RandomAccessFile<F>, size: usize) -> Result<Footer> {
+    let buf = try!(f.read_at(size - table_builder::FULL_FOOTER_LENGTH,
+                             table_builder::FULL_FOOTER_LENGTH));
     Ok(Footer::decode(&buf))
 }
 
-fn read_bytes<R: Read + Seek>(f: &mut R, location: &BlockHandle) -> Result<Vec<u8>> {
-    try!(f.seek(SeekFrom::Start(location.offset() as u64)));
-
-    let mut buf = Vec::new();
-    buf.resize(location.size(), 0);
-
-    try!(f.read_exact(&mut buf[0..location.size()]));
-
-    Ok(buf)
+fn read_bytes<F: Read + Seek>(f: &RandomAccessFile<F>, location: &BlockHandle) -> Result<Vec<u8>> {
+    f.read_at(location.offset(), location.size())
 }
 
 #[derive(Clone)]
@@ -46,7 +39,7 @@ pub struct TableBlock {
 impl TableBlock {
     /// Reads a block at location.
     fn read_block<R: Read + Seek>(opt: Options,
-                                  f: &mut R,
+                                  f: &RandomAccessFile<R>,
                                   location: &BlockHandle)
                                   -> Result<TableBlock> {
         // The block is denoted by offset and length in BlockHandle. A block in an encoded
@@ -79,7 +72,7 @@ impl TableBlock {
 
 #[derive(Clone)]
 pub struct Table<R: Read + Seek> {
-    file: R,
+    file: RandomAccessFile<R>,
     file_size: usize,
     cache_id: cache::CacheID,
 
@@ -92,12 +85,15 @@ pub struct Table<R: Read + Seek> {
 
 impl<R: Read + Seek> Table<R> {
     /// Creates a new table reader operating on unformatted keys (i.e., UserKey).
-    fn new_raw(opt: Options, mut file: R, size: usize, fp: BoxedFilterPolicy) -> Result<Table<R>> {
-        let footer = try!(read_footer(&mut file, size));
+    fn new_raw(opt: Options,
+               file: RandomAccessFile<R>,
+               size: usize,
+               fp: BoxedFilterPolicy)
+               -> Result<Table<R>> {
+        let footer = try!(read_footer(&file, size));
 
-        let indexblock = try!(TableBlock::read_block(opt.clone(), &mut file, &footer.index));
-        let metaindexblock =
-            try!(TableBlock::read_block(opt.clone(), &mut file, &footer.meta_index));
+        let indexblock = try!(TableBlock::read_block(opt.clone(), &file, &footer.index));
+        let metaindexblock = try!(TableBlock::read_block(opt.clone(), &file, &footer.meta_index));
 
         if !indexblock.verify() || !metaindexblock.verify() {
             return Err(Status::new(StatusCode::InvalidData,
@@ -116,7 +112,7 @@ impl<R: Read + Seek> Table<R> {
             let filter_block_location = BlockHandle::decode(&val).0;
 
             if filter_block_location.size() > 0 {
-                let buf = try!(read_bytes(&mut file, &filter_block_location));
+                let buf = try!(read_bytes(&file, &filter_block_location));
                 filter_block_reader = Some(FilterBlockReader::new_owned(fp, buf));
             }
         }
@@ -139,7 +135,10 @@ impl<R: Read + Seek> Table<R> {
     /// (InternalFilterPolicy) are used.
     pub fn new(mut opt: Options, file: R, size: usize, fp: BoxedFilterPolicy) -> Result<Table<R>> {
         opt.cmp = Arc::new(Box::new(InternalKeyCmp(opt.cmp.clone())));
-        let t = try!(Table::new_raw(opt, file, size, InternalFilterPolicy::new(fp)));
+        let t = try!(Table::new_raw(opt,
+                                    RandomAccessFile::new(file),
+                                    size,
+                                    InternalFilterPolicy::new(fp)));
         Ok(t)
     }
 
@@ -474,16 +473,17 @@ mod tests {
         (d, size)
     }
 
+    fn wrap_buffer<'a>(src: &'a [u8]) -> RandomAccessFile<Cursor<&'a [u8]>> {
+        RandomAccessFile::new(Cursor::new(src))
+    }
+
     #[test]
     fn test_table_cache_use() {
         let (src, size) = build_table();
         let mut opt = Options::default();
         opt.block_size = 32;
 
-        let mut table = Table::new_raw(opt.clone(),
-                                       Cursor::new(&src as &[u8]),
-                                       size,
-                                       BloomPolicy::new(4))
+        let mut table = Table::new_raw(opt.clone(), wrap_buffer(&src), size, BloomPolicy::new(4))
             .unwrap();
         let mut iter = table.iter();
 
@@ -505,7 +505,7 @@ mod tests {
         let data = build_data();
 
         let mut table = Table::new_raw(Options::default(),
-                                       Cursor::new(&src as &[u8]),
+                                       wrap_buffer(&src),
                                        size,
                                        BloomPolicy::new(4))
             .unwrap();
@@ -541,7 +541,7 @@ mod tests {
         let (src, size) = build_table();
 
         let mut table = Table::new_raw(Options::default(),
-                                       Cursor::new(&src as &[u8]),
+                                       wrap_buffer(&src),
                                        size,
                                        BloomPolicy::new(4))
             .unwrap();
@@ -565,7 +565,7 @@ mod tests {
         let (src, size) = build_table();
 
         let mut table = Table::new_raw(Options::default(),
-                                       Cursor::new(&src as &[u8]),
+                                       wrap_buffer(&src),
                                        size,
                                        BloomPolicy::new(4))
             .unwrap();
@@ -599,7 +599,7 @@ mod tests {
         let data = build_data();
 
         let mut table = Table::new_raw(Options::default(),
-                                       Cursor::new(&src as &[u8]),
+                                       wrap_buffer(&src),
                                        size,
                                        BloomPolicy::new(4))
             .unwrap();
@@ -636,7 +636,7 @@ mod tests {
         let (src, size) = build_table();
 
         let mut table = Table::new_raw(Options::default(),
-                                       Cursor::new(&src as &[u8]),
+                                       wrap_buffer(&src),
                                        size,
                                        BloomPolicy::new(4))
             .unwrap();
@@ -657,7 +657,7 @@ mod tests {
         let (src, size) = build_table();
 
         let mut table = Table::new_raw(Options::default(),
-                                       Cursor::new(&src as &[u8]),
+                                       wrap_buffer(&src),
                                        size,
                                        BloomPolicy::new(4))
             .unwrap();
@@ -726,7 +726,7 @@ mod tests {
         src[10] += 1;
 
         let mut table = Table::new_raw(Options::default(),
-                                       Cursor::new(&src as &[u8]),
+                                       wrap_buffer(&src),
                                        size,
                                        BloomPolicy::new(4))
             .unwrap();

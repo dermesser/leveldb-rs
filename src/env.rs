@@ -1,10 +1,32 @@
 //! An `env` is an abstraction layer that allows the database to run both on different platforms as
 //! well as persisting data on disk or in memory.
 
-use error::Result;
+use error::{self, Result};
 
-use std::io::{Read, Write, Seek};
+use std::io::{self, Read, Write, Seek};
 use std::path::Path;
+use std::sync::{Arc, Mutex};
+
+/// RandomAccessFile wraps a type implementing read and seek to enable atomic random reads
+#[derive(Clone)]
+pub struct RandomAccessFile<F: Read + Seek> {
+    f: Arc<Mutex<F>>,
+}
+
+impl<F: Read + Seek> RandomAccessFile<F> {
+    pub fn new(f: F) -> RandomAccessFile<F> {
+        RandomAccessFile { f: Arc::new(Mutex::new(f)) }
+    }
+
+    pub fn read_at(&self, off: usize, len: usize) -> Result<Vec<u8>> {
+        let mut f = try!(error::from_lock_result(self.f.lock()));
+        try!(error::from_io_result(f.seek(io::SeekFrom::Start(off as u64))));
+
+        let mut buf = Vec::new();
+        buf.resize(len, 0);
+        error::from_io_result(f.read_exact(&mut buf)).map(|_| buf)
+    }
+}
 
 pub trait Env {
     type SequentialReader: Read;
@@ -13,7 +35,7 @@ pub trait Env {
     type FileLock;
 
     fn open_sequential_file(&self, &Path) -> Result<Self::SequentialReader>;
-    fn open_random_access_file(&self, &Path) -> Result<Self::RandomReader>;
+    fn open_random_access_file(&self, &Path) -> Result<RandomAccessFile<Self::RandomReader>>;
     fn open_writable_file(&self, &Path) -> Result<Self::Writer>;
     fn open_appendable_file(&self, &Path) -> Result<Self::Writer>;
 
