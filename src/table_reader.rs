@@ -2,7 +2,7 @@ use block::{Block, BlockIter};
 use blockhandle::BlockHandle;
 use cache;
 use cmp::InternalKeyCmp;
-use env::{self, RandomAccessFile};
+use env::RandomAccess;
 use error::{Status, StatusCode, Result};
 use filter;
 use filter_block::FilterBlockReader;
@@ -18,13 +18,13 @@ use integer_encoding::{FixedInt, FixedIntWriter};
 use crc::crc32::{self, Hasher32};
 
 /// Reads the table footer.
-fn read_footer(f: &RandomAccessFile, size: usize) -> Result<Footer> {
+fn read_footer(f: &RandomAccess, size: usize) -> Result<Footer> {
     let buf = try!(f.read_at(size - table_builder::FULL_FOOTER_LENGTH,
                              table_builder::FULL_FOOTER_LENGTH));
     Ok(Footer::decode(&buf))
 }
 
-fn read_bytes(f: &RandomAccessFile, location: &BlockHandle) -> Result<Vec<u8>> {
+fn read_bytes(f: &RandomAccess, location: &BlockHandle) -> Result<Vec<u8>> {
     f.read_at(location.offset(), location.size())
 }
 
@@ -37,10 +37,7 @@ pub struct TableBlock {
 
 impl TableBlock {
     /// Reads a block at location.
-    fn read_block(opt: Options,
-                  f: &RandomAccessFile,
-                  location: &BlockHandle)
-                  -> Result<TableBlock> {
+    fn read_block(opt: Options, f: &RandomAccess, location: &BlockHandle) -> Result<TableBlock> {
         // The block is denoted by offset and length in BlockHandle. A block in an encoded
         // table is followed by 1B compression type and 4B checksum.
         let buf = try!(read_bytes(f, location));
@@ -71,7 +68,7 @@ impl TableBlock {
 
 #[derive(Clone)]
 pub struct Table {
-    file: RandomAccessFile,
+    file: Arc<Box<RandomAccess>>,
     file_size: usize,
     cache_id: cache::CacheID,
 
@@ -84,11 +81,12 @@ pub struct Table {
 
 impl Table {
     /// Creates a new table reader operating on unformatted keys (i.e., UserKey).
-    fn new_raw(opt: Options, file: RandomAccessFile, size: usize) -> Result<Table> {
-        let footer = try!(read_footer(&file, size));
+    fn new_raw(opt: Options, file: Arc<Box<RandomAccess>>, size: usize) -> Result<Table> {
+        let rfile = file.as_ref().as_ref();
 
-        let indexblock = try!(TableBlock::read_block(opt.clone(), &file, &footer.index));
-        let metaindexblock = try!(TableBlock::read_block(opt.clone(), &file, &footer.meta_index));
+        let footer = try!(read_footer(rfile, size));
+        let indexblock = try!(TableBlock::read_block(opt.clone(), rfile, &footer.index));
+        let metaindexblock = try!(TableBlock::read_block(opt.clone(), rfile, &footer.meta_index));
 
         if !indexblock.verify() || !metaindexblock.verify() {
             return Err(Status::new(StatusCode::InvalidData,
@@ -107,7 +105,7 @@ impl Table {
             let filter_block_location = BlockHandle::decode(&val).0;
 
             if filter_block_location.size() > 0 {
-                let buf = try!(read_bytes(&file, &filter_block_location));
+                let buf = try!(read_bytes(rfile, &filter_block_location));
                 filter_block_reader = Some(FilterBlockReader::new_owned(opt.filter_policy.clone(),
                                                                         buf));
             }
@@ -116,7 +114,8 @@ impl Table {
         let cache_id = opt.block_cache.lock().unwrap().new_cache_id();
 
         Ok(Table {
-            file: file,
+            // clone file here so that we can use a immutable reference rfile above.
+            file: file.clone(),
             file_size: size,
             cache_id: cache_id,
             opt: opt,
@@ -129,10 +128,10 @@ impl Table {
     /// Creates a new table reader operating on internal keys (i.e., InternalKey). This means that
     /// a different comparator (internal_key_cmp) and a different filter policy
     /// (InternalFilterPolicy) are used.
-    pub fn new(mut opt: Options, file: Box<env::RandomAccess>, size: usize) -> Result<Table> {
+    pub fn new(mut opt: Options, file: Arc<Box<RandomAccess>>, size: usize) -> Result<Table> {
         opt.cmp = Arc::new(Box::new(InternalKeyCmp(opt.cmp.clone())));
         opt.filter_policy = filter::InternalFilterPolicy::new(opt.filter_policy);
-        let t = try!(Table::new_raw(opt, RandomAccessFile::new(file), size));
+        let t = try!(Table::new_raw(opt, file, size));
         Ok(t)
     }
 
@@ -153,7 +152,8 @@ impl Table {
             }
         }
 
-        let b = try!(TableBlock::read_block(self.opt.clone(), &mut self.file, location));
+        let rfile = self.file.as_ref().as_ref();
+        let b = try!(TableBlock::read_block(self.opt.clone(), rfile, location));
 
         if !b.verify() {
             return Err(Status::new(StatusCode::InvalidData, "Data block failed verification"));
@@ -466,8 +466,8 @@ mod tests {
         (d, size)
     }
 
-    fn wrap_buffer(src: Vec<u8>) -> RandomAccessFile {
-        RandomAccessFile::new(Box::new(Cursor::new(src)))
+    fn wrap_buffer(src: Vec<u8>) -> Box<RandomAccess> {
+        Box::new(Cursor::new(src))
     }
 
     #[test]

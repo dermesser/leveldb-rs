@@ -1,4 +1,4 @@
-use env::{Env, FileLock, Logger, RandomAccessFile};
+use env::{Env, FileLock, Logger, RandomAccess};
 use error::{from_io_result, Status, StatusCode, Result};
 
 use std::collections::HashMap;
@@ -35,9 +35,11 @@ impl Env for PosixDiskEnv {
     fn open_sequential_file(&self, p: &Path) -> Result<Box<Read>> {
         Ok(Box::new(try!(from_io_result(fs::OpenOptions::new().read(true).open(p)))))
     }
-    fn open_random_access_file(&self, p: &Path) -> Result<RandomAccessFile> {
-        from_io_result(fs::OpenOptions::new().read(true).open(p))
-            .map(|f| RandomAccessFile::new(Box::new(f)))
+    fn open_random_access_file(&self, p: &Path) -> Result<Box<RandomAccess>> {
+        from_io_result(fs::OpenOptions::new().read(true).open(p)).map(|f| {
+            let b: Box<RandomAccess> = Box::new(f);
+            b
+        })
     }
     fn open_writable_file(&self, p: &Path) -> Result<Box<Write>> {
         Ok(Box::new(try!(from_io_result(fs::OpenOptions::new()

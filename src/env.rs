@@ -3,37 +3,27 @@
 
 use error::{self, Result};
 
-use std::convert::AsRef;
-use std::fs::File;
-use std::io::{self, Cursor, Read, Write, Seek};
+use std::io::{Read, Write};
+use std::os::unix::fs::FileExt;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
 
-pub trait RandomAccess: Read + Seek {}
-impl RandomAccess for File {}
-impl<T: AsRef<[u8]>> RandomAccess for Cursor<T> {}
-
-/// RandomAccessFile dynamically wraps a type implementing read and seek to enable atomic random
-/// reads.
-#[derive(Clone)]
-pub struct RandomAccessFile {
-    f: Arc<Mutex<Box<RandomAccess>>>,
+pub trait RandomAccess {
+    fn read_at(&self, off: usize, len: usize) -> Result<Vec<u8>>;
 }
-
-impl RandomAccessFile {
-    pub fn new(f: Box<RandomAccess>) -> RandomAccessFile {
-        RandomAccessFile { f: Arc::new(Mutex::new(f)) }
-    }
-
-    pub fn read_at(&self, off: usize, len: usize) -> Result<Vec<u8>> {
-        let mut f = try!(error::from_lock_result(self.f.lock()));
-        try!(error::from_io_result(f.seek(io::SeekFrom::Start(off as u64))));
-
-        let mut buf = Vec::new();
-        buf.resize(len, 0);
-        error::from_io_result(f.read_exact(&mut buf)).map(|_| buf)
+impl<T: FileExt> RandomAccess for T {
+    fn read_at(&self, off: usize, len: usize) -> Result<Vec<u8>> {
+        let mut buf = vec![0 as u8; len];
+        error::from_io_result((self as &FileExt).read_at(buf.as_mut(), off as u64)).map(|_| buf)
     }
 }
+// impl<T: AsRef<[u8]>> RandomAccess for Cursor<T> {
+// fn read_at(&self, off: usize, len: usize) -> Result<Vec<u8>> {
+// self.seek(io::SeekFrom::Start(off));
+// let mut buf = vec![0 as u8; len];
+// error::from_io_result(self.read_exact(&mut buf)).map(|_| buf)
+// }
+// }
+//
 
 pub struct FileLock {
     pub id: String,
@@ -41,7 +31,7 @@ pub struct FileLock {
 
 pub trait Env {
     fn open_sequential_file(&self, &Path) -> Result<Box<Read>>;
-    fn open_random_access_file(&self, &Path) -> Result<RandomAccessFile>;
+    fn open_random_access_file(&self, &Path) -> Result<Box<RandomAccess>>;
     fn open_writable_file(&self, &Path) -> Result<Box<Write>>;
     fn open_appendable_file(&self, &Path) -> Result<Box<Write>>;
 
