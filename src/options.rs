@@ -84,6 +84,7 @@ impl Options {
 }
 
 /// Supplied to DB read operations.
+/// Deprecated: Will soon be removed to reduce complexity.
 pub struct ReadOptions {
     pub verify_checksums: bool,
     pub fill_cache: bool,
