@@ -3,27 +3,36 @@
 
 use error::{self, Result};
 
-use std::io::{Read, Write};
+use std::io::{Cursor, Read, Seek, SeekFrom, Write};
+use std::fs::File;
 use std::os::unix::fs::FileExt;
 use std::path::Path;
+use std::sync::Mutex;
 
 pub trait RandomAccess {
     fn read_at(&self, off: usize, len: usize) -> Result<Vec<u8>>;
 }
-impl<T: FileExt> RandomAccess for T {
+
+impl RandomAccess for File {
     fn read_at(&self, off: usize, len: usize) -> Result<Vec<u8>> {
         let mut buf = vec![0 as u8; len];
         error::from_io_result((self as &FileExt).read_at(buf.as_mut(), off as u64)).map(|_| buf)
     }
 }
-// impl<T: AsRef<[u8]>> RandomAccess for Cursor<T> {
-// fn read_at(&self, off: usize, len: usize) -> Result<Vec<u8>> {
-// self.seek(io::SeekFrom::Start(off));
-// let mut buf = vec![0 as u8; len];
-// error::from_io_result(self.read_exact(&mut buf)).map(|_| buf)
-// }
-// }
-//
+
+/// BufferBackedFile implements RandomAccess on a cursor. It wraps the cursor in a mutex
+/// to enable using an immutable receiver, like the File implementation.
+pub type BufferBackedFile = Mutex<Cursor<Vec<u8>>>;
+
+impl RandomAccess for BufferBackedFile {
+    fn read_at(&self, off: usize, len: usize) -> Result<Vec<u8>> {
+        let mut c = self.lock().unwrap();
+        error::from_io_result(c.seek(SeekFrom::Start(off as u64)))?;
+        let mut buf = vec![0 as u8; len];
+        error::from_io_result(c.read_exact(&mut buf)).map(|_| buf)
+    }
+}
+
 
 pub struct FileLock {
     pub id: String,

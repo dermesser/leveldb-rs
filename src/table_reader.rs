@@ -391,6 +391,7 @@ mod tests {
     use key_types::LookupKey;
 
     use std::io::Cursor;
+    use std::sync::Mutex;
 
     use super::*;
 
@@ -466,8 +467,10 @@ mod tests {
         (d, size)
     }
 
-    fn wrap_buffer(src: Vec<u8>) -> Box<RandomAccess> {
-        Box::new(Cursor::new(src))
+    fn wrap_buffer(src: Vec<u8>) -> Arc<Box<RandomAccess>> {
+        // sigh...
+        let file = Mutex::new(Cursor::new(src));
+        Arc::new(Box::new(file))
     }
 
     #[test]
@@ -658,7 +661,7 @@ mod tests {
 
         let (src, size) = build_internal_table();
 
-        let mut table = Table::new(Options::default(), Box::new(Cursor::new(src)), size).unwrap();
+        let mut table = Table::new(Options::default(), wrap_buffer(src), size).unwrap();
         let filter_reader = table.filters.clone().unwrap();
 
         // Check that we're actually using internal keys
