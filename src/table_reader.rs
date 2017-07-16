@@ -390,7 +390,6 @@ mod tests {
     use types::LdbIterator;
     use key_types::LookupKey;
 
-    use std::io::Cursor;
     use std::sync::Mutex;
 
     use super::*;
@@ -468,8 +467,7 @@ mod tests {
     }
 
     fn wrap_buffer(src: Vec<u8>) -> Arc<Box<RandomAccess>> {
-        // sigh...
-        let file = Mutex::new(Cursor::new(src));
+        let file = Mutex::new(src);
         Arc::new(Box::new(file))
     }
 

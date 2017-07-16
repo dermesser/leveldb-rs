@@ -3,7 +3,7 @@
 
 use error::{self, Result};
 
-use std::io::{Cursor, Read, Seek, SeekFrom, Write};
+use std::io::prelude::*;
 use std::fs::File;
 use std::os::unix::fs::FileExt;
 use std::path::Path;
@@ -22,17 +22,17 @@ impl RandomAccess for File {
 
 /// BufferBackedFile implements RandomAccess on a cursor. It wraps the cursor in a mutex
 /// to enable using an immutable receiver, like the File implementation.
-pub type BufferBackedFile = Mutex<Cursor<Vec<u8>>>;
+pub type BufferBackedFile = Mutex<Vec<u8>>;
 
 impl RandomAccess for BufferBackedFile {
     fn read_at(&self, off: usize, len: usize) -> Result<Vec<u8>> {
-        let mut c = self.lock().unwrap();
-        error::from_io_result(c.seek(SeekFrom::Start(off as u64)))?;
-        let mut buf = vec![0 as u8; len];
-        error::from_io_result(c.read_exact(&mut buf)).map(|_| buf)
+        let c = self.lock().unwrap();
+        if off + len > c.len() {
+            return Err(error::Status::new(error::StatusCode::InvalidArgument, "off-limits read"));
+        }
+        Ok(c[off..off + len].to_vec())
     }
 }
-
 
 pub struct FileLock {
     pub id: String,
