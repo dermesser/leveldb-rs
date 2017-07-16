@@ -391,8 +391,6 @@ mod tests {
     use types::LdbIterator;
     use key_types::LookupKey;
 
-    use std::sync::Mutex;
-
     use super::*;
 
     fn build_data() -> Vec<(&'static str, &'static str)> {
