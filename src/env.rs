@@ -10,27 +10,31 @@ use std::path::Path;
 use std::sync::Mutex;
 
 pub trait RandomAccess {
-    fn read_at(&self, off: usize, len: usize) -> Result<Vec<u8>>;
+    fn read_at(&self, off: usize, dst: &mut [u8]) -> Result<usize>;
 }
 
 impl RandomAccess for File {
-    fn read_at(&self, off: usize, len: usize) -> Result<Vec<u8>> {
-        let mut buf = vec![0 as u8; len];
-        error::from_io_result((self as &FileExt).read_at(buf.as_mut(), off as u64)).map(|_| buf)
+    fn read_at(&self, off: usize, dst: &mut [u8]) -> Result<usize> {
+        error::from_io_result((self as &FileExt).read_at(dst, off as u64))
     }
 }
 
-/// BufferBackedFile implements RandomAccess on a cursor. It wraps the cursor in a mutex
-/// to enable using an immutable receiver, like the File implementation.
-pub type BufferBackedFile = Mutex<Vec<u8>>;
+/// BufferBackedFile is a simple type implementing RandomAccess on a Vec<u8>.
+pub type BufferBackedFile = Vec<u8>;
 
 impl RandomAccess for BufferBackedFile {
-    fn read_at(&self, off: usize, len: usize) -> Result<Vec<u8>> {
-        let c = self.lock().unwrap();
-        if off + len > c.len() {
-            return Err(error::Status::new(error::StatusCode::InvalidArgument, "off-limits read"));
+    fn read_at(&self, off: usize, dst: &mut [u8]) -> Result<usize> {
+        if off > self.len() {
+            return Ok(0);
         }
-        Ok(c[off..off + len].to_vec())
+        let remaining = self.len() - off;
+        let to_read = if dst.len() > remaining {
+            remaining
+        } else {
+            dst.len()
+        };
+        (&mut dst[0..to_read]).copy_from_slice(&self[off..off + to_read]);
+        Ok(to_read)
     }
 }
 

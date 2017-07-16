@@ -19,13 +19,14 @@ use crc::crc32::{self, Hasher32};
 
 /// Reads the table footer.
 fn read_footer(f: &RandomAccess, size: usize) -> Result<Footer> {
-    let buf = try!(f.read_at(size - table_builder::FULL_FOOTER_LENGTH,
-                             table_builder::FULL_FOOTER_LENGTH));
+    let mut buf = vec![0; table_builder::FULL_FOOTER_LENGTH];
+    f.read_at(size - table_builder::FULL_FOOTER_LENGTH, &mut buf)?;
     Ok(Footer::decode(&buf))
 }
 
 fn read_bytes(f: &RandomAccess, location: &BlockHandle) -> Result<Vec<u8>> {
-    f.read_at(location.offset(), location.size())
+    let mut buf = vec![0; location.size()];
+    f.read_at(location.offset(), &mut buf).map(|_| buf)
 }
 
 #[derive(Clone)]
@@ -467,8 +468,7 @@ mod tests {
     }
 
     fn wrap_buffer(src: Vec<u8>) -> Arc<Box<RandomAccess>> {
-        let file = Mutex::new(src);
-        Arc::new(Box::new(file))
+        Arc::new(Box::new(src))
     }
 
     #[test]
