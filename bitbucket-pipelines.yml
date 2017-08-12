@@ -1,0 +1,11 @@
+image: atlassianlabs/buildpack-deps-rust
+
+pipelines:
+  branches:
+    master:
+      - step:
+          script:
+            - echo "Updates to rustup"                ; rustup self update
+            - echo "Update Rust toolchain"            ; rustup update
+            - echo "Build project"                    ; cargo build
+            - echo "Run unit tests"                   ; cargo test --lib -v --no-fail-fast -- --nocapture --test
