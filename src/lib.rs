@@ -16,6 +16,7 @@ mod filter;
 mod filter_block;
 mod key_types;
 mod log;
+mod mem_env;
 mod memtable;
 mod merging_iter;
 mod options;
