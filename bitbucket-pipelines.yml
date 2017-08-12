@@ -4,8 +4,14 @@ pipelines:
   branches:
     default:
       - step:
+          caches:
+              - cargo
           script:
-            - echo "Updates to rustup"                ; rustup self update
-            - echo "Update Rust toolchain"            ; rustup update
-            - echo "Build project"                    ; cargo build
-            - echo "Run unit tests"                   ; cargo test --lib -v --no-fail-fast -- --nocapture --test
+              - echo "Updates to rustup"                ; rustup self update
+              - echo "Update Rust toolchain"            ; rustup update
+              - echo "Build project"                    ; cargo build
+              - echo "Run unit tests"                   ; cargo test --lib -v --no-fail-fast -- --nocapture --test
+
+definitions:
+    caches:
+        cargo: target/
