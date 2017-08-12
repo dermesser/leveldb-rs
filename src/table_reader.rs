@@ -137,9 +137,9 @@ impl Table {
     }
 
     fn block_cache_handle(&self, block_off: usize) -> cache::CacheKey {
-        let mut dst = Vec::with_capacity(2 * 8);
-        dst.write_fixedint(self.cache_id).expect("error writing to vec");
-        dst.write_fixedint(block_off as u64).expect("error writing to vec");
+        let mut dst = [0; 2 * 8];
+        (&mut dst[..8]).write_fixedint(self.cache_id).expect("error writing to vec");
+        (&mut dst[8..]).write_fixedint(block_off as u64).expect("error writing to vec");
         dst
     }
 

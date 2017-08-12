@@ -150,7 +150,7 @@ impl<T> LRUList<T> {
     }
 }
 
-pub type CacheKey = Vec<u8>;
+pub type CacheKey = [u8; 16];
 pub type CacheID = u64;
 type CacheEntry<T> = (T, LRUHandle<CacheKey>);
 
@@ -240,15 +240,19 @@ mod tests {
     use super::*;
     use super::LRUList;
 
+    fn make_key(a: u8, b: u8, c: u8) -> CacheKey {
+        [a, b, c, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    }
+
     #[test]
     fn test_blockcache_cache_add_rm() {
         let mut cache = Cache::new(128);
 
-        let h_123 = "aaa".as_bytes().to_vec();
-        let h_521 = "aab".as_bytes().to_vec();
-        let h_372 = "aac".as_bytes().to_vec();
-        let h_332 = "aad".as_bytes().to_vec();
-        let h_899 = "aae".as_bytes().to_vec();
+        let h_123 = make_key(1, 2, 3);
+        let h_521 = make_key(1, 2, 4);
+        let h_372 = make_key(3, 4, 5);
+        let h_332 = make_key(6, 3, 1);
+        let h_899 = make_key(8, 2, 1);
 
         cache.insert(&h_123, 123);
         cache.insert(&h_332, 332);
@@ -272,11 +276,11 @@ mod tests {
     fn test_blockcache_cache_capacity() {
         let mut cache = Cache::new(3);
 
-        let h_123 = "aaa".as_bytes().to_vec();
-        let h_521 = "aab".as_bytes().to_vec();
-        let h_372 = "aac".as_bytes().to_vec();
-        let h_332 = "aad".as_bytes().to_vec();
-        let h_899 = "aae".as_bytes().to_vec();
+        let h_123 = make_key(1, 2, 3);
+        let h_521 = make_key(1, 2, 4);
+        let h_372 = make_key(3, 4, 5);
+        let h_332 = make_key(6, 3, 1);
+        let h_899 = make_key(8, 2, 1);
 
         cache.insert(&h_123, 123);
         cache.insert(&h_332, 332);
