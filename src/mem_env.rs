@@ -1,6 +1,6 @@
 //! An in-memory implementation of Env.
 
-use env::{BufferBackedFile, Env, FileLock, RandomAccess};
+use env::{Env, FileLock, RandomAccess};
 use error::{Result, Status, StatusCode};
 
 use std::collections::HashMap;
@@ -13,6 +13,26 @@ use std::sync::{Arc, Mutex};
 fn path_to_string(p: &Path) -> String {
     p.to_str().map(String::from).unwrap()
 }
+
+/// BufferBackedFile is a simple type implementing RandomAccess on a Vec<u8>.
+pub type BufferBackedFile = Vec<u8>;
+
+impl RandomAccess for BufferBackedFile {
+    fn read_at(&self, off: usize, dst: &mut [u8]) -> Result<usize> {
+        if off > self.len() {
+            return Ok(0);
+        }
+        let remaining = self.len() - off;
+        let to_read = if dst.len() > remaining {
+            remaining
+        } else {
+            dst.len()
+        };
+        (&mut dst[0..to_read]).copy_from_slice(&self[off..off + to_read]);
+        Ok(to_read)
+    }
+}
+
 
 /// A MemFile holds a shared, concurrency-safe buffer. It can be shared among several
 /// MemFileReaders and MemFileWriters, each with an independent offset.
@@ -95,8 +115,8 @@ impl Write for MemFileWriter {
 
 impl RandomAccess for MemFile {
     fn read_at(&self, off: usize, dst: &mut [u8]) -> Result<usize> {
-        let grd = self.0.lock().unwrap();
-        let buf: &BufferBackedFile = grd.deref();
+        let guard = self.0.lock().unwrap();
+        let buf: &BufferBackedFile = guard.deref();
         buf.read_at(off, dst)
     }
 }
@@ -221,6 +241,7 @@ pub struct MemEnv {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use env;
 
     fn new_memfile(v: Vec<u8>) -> MemFile {
         MemFile(Arc::new(Mutex::new(v)))
@@ -309,24 +330,27 @@ mod tests {
 
         {
             let mut w0 = fs.open_w(&path, false, true).unwrap();
-            write!(w0, "GarbageGarbageGarbageGarbageGarbage").unwrap();
+            write!(w0, "Garbage").unwrap();
 
             // Truncate.
             let mut w = fs.open_w(&path, false, true).unwrap();
             write!(w, "Xyz").unwrap();
             // Write to the beginning.
             let mut w2 = fs.open_w(&path, false, false).unwrap();
-            write!(w2, "1").unwrap();
+            write!(w2, "OverwritingEverythingWithGarbage").unwrap();
+            // Overwrite the overwritten stuff.
+            write!(w, "Xyz").unwrap();
+            assert!(w.flush().is_ok());
         }
         {
             let mut r = MemFileReader::new(fs.open_r(&path).unwrap(), 0);
             let mut s = String::new();
-            assert_eq!(r.read_to_string(&mut s).unwrap(), 3);
-            assert_eq!(s, "1yz");
+            assert_eq!(r.read_to_string(&mut s).unwrap(), 32);
+            assert_eq!(s, "OveXyzitingEverythingWithGarbage");
 
         }
-        assert_eq!(fs.size_of(&path).unwrap(), 3);
         assert!(fs.exists(&path).unwrap());
+        assert_eq!(fs.size_of(&path).unwrap(), 32);
         assert!(!fs.exists(&Path::new("/non/existing/path")).unwrap());
     }
 
@@ -334,6 +358,8 @@ mod tests {
     fn test_mem_env_fs_metadata_operations() {
         let fs = MemFS::new();
         let path = Path::new("/a/b/hello.file");
+        let newpath = Path::new("/a/b/hello2.file");
+        let nonexist = Path::new("/blah");
 
         // Make file/remove file.
         {
@@ -342,11 +368,11 @@ mod tests {
         }
         assert!(fs.exists(&path).unwrap());
         assert_eq!(fs.size_of(&path).unwrap(), 5);
-        fs.delete(&path).is_ok();
+        fs.delete(&path).unwrap();
         assert!(!fs.exists(&path).unwrap());
+        assert!(fs.delete(&nonexist).is_err());
 
         // Rename file.
-        let newpath = Path::new("/a/b/hello2.file");
         {
             let mut w = fs.open_w(&path, false, false).unwrap();
             write!(w, "Hello").unwrap();
@@ -362,6 +388,8 @@ mod tests {
         assert!(fs.exists(&newpath).unwrap());
         assert_eq!(fs.size_of(&newpath).unwrap(), 5);
         assert!(fs.size_of(&path).is_err());
+
+        assert!(fs.rename(&nonexist, &path).is_err());
     }
 
     #[test]
@@ -377,5 +405,36 @@ mod tests {
         // TODO: Find proper testing framework.
         assert!((children == vec!["/a/1.txt", "/a/2.txt"]) ||
                 (children == vec!["/a/2.txt", "/a/1.txt"]));
+    }
+
+    #[test]
+    fn test_mem_env_lock() {
+        let fs = MemFS::new();
+        let p = Path::new("/a/lock");
+
+        {
+            let mut f = fs.open_w(p, true, true).unwrap();
+            f.write("abcdef".as_bytes()).expect("write failed");
+        }
+
+        // Locking on new file.
+        let lock = fs.lock(p).unwrap();
+        assert!(fs.lock(p).is_err());
+
+        // Unlock of locked file is ok.
+        assert!(fs.unlock(lock).is_ok());
+
+        // Lock of unlocked file is ok.
+        let lock = fs.lock(p).unwrap();
+        assert!(fs.lock(p).is_err());
+        assert!(fs.unlock(lock).is_ok());
+
+        // Rogue operation.
+        assert!(fs.unlock(env::FileLock { id: "/a/lock".to_string() }).is_err());
+
+        // Non-existent files.
+        let p2 = Path::new("/a/lock2");
+        assert!(fs.lock(p2).is_err());
+        assert!(fs.unlock(env::FileLock { id: "/a/lock2".to_string() }).is_err());
     }
 }

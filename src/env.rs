@@ -18,25 +18,6 @@ impl RandomAccess for File {
     }
 }
 
-/// BufferBackedFile is a simple type implementing RandomAccess on a Vec<u8>.
-pub type BufferBackedFile = Vec<u8>;
-
-impl RandomAccess for BufferBackedFile {
-    fn read_at(&self, off: usize, dst: &mut [u8]) -> Result<usize> {
-        if off > self.len() {
-            return Ok(0);
-        }
-        let remaining = self.len() - off;
-        let to_read = if dst.len() > remaining {
-            remaining
-        } else {
-            dst.len()
-        };
-        (&mut dst[0..to_read]).copy_from_slice(&self[off..off + to_read]);
-        Ok(to_read)
-    }
-}
-
 pub struct FileLock {
     pub id: String,
 }
