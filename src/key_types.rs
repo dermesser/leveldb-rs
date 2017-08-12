@@ -1,7 +1,9 @@
 use options::{CompressionType, int_to_compressiontype};
 use types::{ValueType, SequenceNumber};
 
-use integer_encoding::{FixedInt, VarInt};
+use std::io::Write;
+
+use integer_encoding::{FixedInt, VarInt, VarIntWriter, FixedIntWriter};
 
 // The following typedefs are used to distinguish between the different key formats used internally
 // by different modules.
@@ -32,29 +34,26 @@ pub struct LookupKey {
     key_offset: usize,
 }
 
+const U64_SPACE: usize = 8;
+
 impl LookupKey {
     #[allow(unused_assignments)]
     pub fn new(k: &[u8], s: SequenceNumber) -> LookupKey {
-        let mut key = Vec::with_capacity(k.len() + k.len().required_space() +
-                                         <u64 as FixedInt>::required_space());
-        let internal_keylen = k.len() + 8;
-        let mut i = 0;
+        let mut key = Vec::new();
+        let internal_keylen = k.len() + U64_SPACE;
+        key.resize(k.len() + internal_keylen.required_space() + U64_SPACE, 0);
 
-        key.reserve(internal_keylen.required_space() + internal_keylen);
-
-        key.resize(internal_keylen.required_space(), 0);
-        i += internal_keylen.encode_var(&mut key[i..]);
-
-        key.extend_from_slice(k);
-        i += k.len();
-
-        key.resize(i + <u64 as FixedInt>::required_space(), 0);
-        (s << 8 | ValueType::TypeValue as u64).encode_fixed(&mut key[i..]);
-        i += <u64 as FixedInt>::required_space();
+        {
+            let mut writer = key.as_mut_slice();
+            writer.write_varint(internal_keylen).expect("write to slice failed");
+            writer.write(k).expect("write to slice failed");
+            writer.write_fixedint(s << 8 | ValueType::TypeValue as u64)
+                .expect("write to slice failed");
+        }
 
         LookupKey {
             key: key,
-            key_offset: k.len().required_space(),
+            key_offset: internal_keylen.required_space(),
         }
     }
 
@@ -97,31 +96,21 @@ pub fn build_memtable_key(key: &[u8], value: &[u8], t: ValueType, seq: SequenceN
     // The format is: [key_size: varint32, key_data: [u8], flags: u64, value_size: varint32,
     // value_data: [u8]]
 
-    let mut i = 0;
-    let keysize = key.len() + 8;
+    let keysize = key.len() + U64_SPACE;
     let valsize = value.len();
+    let mut buf = Vec::new();
+    buf.resize(keysize + valsize + keysize.required_space() + valsize.required_space(),
+               0);
 
-    let mut buf = Vec::with_capacity(keysize + valsize + keysize.required_space() +
-                                     valsize.required_space() +
-                                     <u64 as FixedInt>::required_space());
-    buf.resize(keysize.required_space(), 0);
-    i += keysize.encode_var(&mut buf[i..]);
-
-    buf.extend(key.iter());
-    i += key.len();
-
-    let flag = (t as u64) | (seq << 8);
-    buf.resize(i + <u64 as FixedInt>::required_space(), 0);
-    flag.encode_fixed(&mut buf[i..]);
-    i += <u64 as FixedInt>::required_space();
-
-    buf.resize(i + valsize.required_space(), 0);
-    i += valsize.encode_var(&mut buf[i..]);
-
-    buf.extend(value.iter());
-    i += value.len();
-
-    assert_eq!(i, buf.len());
+    {
+        let mut writer = buf.as_mut_slice();
+        writer.write_varint(keysize).expect("write to slice failed");
+        writer.write(key).expect("write to slice failed");
+        writer.write_fixedint((t as u64) | (seq << 8)).expect("write to slice failed");
+        writer.write_varint(valsize).expect("write to slice failed");
+        writer.write(value).expect("write to slice failed");
+        assert_eq!(writer.len(), 0);
+    }
     buf
 }
 
@@ -179,5 +168,26 @@ mod tests {
         assert_eq!(u32::decode_var(lk1.memtable_key()), (13, 1));
         assert_eq!(lk2.internal_key(),
                    vec![120, 121, 97, 98, 120, 121, 1, 97, 0, 0, 0, 0, 0, 0].as_slice());
+    }
+
+    #[test]
+    fn test_build_memtable_key() {
+        assert_eq!(build_memtable_key("abc".as_bytes(),
+                                      "123".as_bytes(),
+                                      ValueType::TypeValue,
+                                      231),
+                   vec![11, 97, 98, 99, 1, 231, 0, 0, 0, 0, 0, 0, 3, 49, 50, 51]);
+        assert_eq!(build_memtable_key("".as_bytes(), "123".as_bytes(), ValueType::TypeValue, 231),
+                   vec![8, 1, 231, 0, 0, 0, 0, 0, 0, 3, 49, 50, 51]);
+        assert_eq!(build_memtable_key("abc".as_bytes(),
+                                      "123".as_bytes(),
+                                      ValueType::TypeDeletion,
+                                      231),
+                   vec![11, 97, 98, 99, 0, 231, 0, 0, 0, 0, 0, 0, 3, 49, 50, 51]);
+        assert_eq!(build_memtable_key("abc".as_bytes(),
+                                      "".as_bytes(),
+                                      ValueType::TypeDeletion,
+                                      231),
+                   vec![11, 97, 98, 99, 0, 231, 0, 0, 0, 0, 0, 0, 0]);
     }
 }
