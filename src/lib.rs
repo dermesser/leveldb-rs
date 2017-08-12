@@ -11,6 +11,7 @@ mod cache;
 mod cmp;
 mod disk_env;
 mod env;
+mod env_common;
 mod error;
 mod filter;
 mod filter_block;

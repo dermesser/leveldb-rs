@@ -1,4 +1,5 @@
 use env::{Env, FileLock, Logger, RandomAccess};
+use env_common::{micros, sleep_for};
 use error::{from_io_result, Status, StatusCode, Result};
 
 use std::collections::HashMap;
@@ -9,8 +10,6 @@ use std::mem;
 use std::os::unix::io::IntoRawFd;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
-use std::thread;
-use std::time;
 
 use libc;
 
@@ -153,18 +152,11 @@ impl Env for PosixDiskEnv {
     }
 
     fn micros(&self) -> u64 {
-        loop {
-            let now = time::SystemTime::now().duration_since(time::UNIX_EPOCH);
-
-            match now {
-                Err(_) => continue,
-                Ok(dur) => return dur.as_secs() * 1000000 + (dur.subsec_nanos() / 1000) as u64,
-            }
-        }
+        micros()
     }
 
     fn sleep_for(&self, micros: u32) {
-        thread::sleep(time::Duration::new(0, micros * 1000));
+        sleep_for(micros);
     }
 }
 
