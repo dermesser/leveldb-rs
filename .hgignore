@@ -1,4 +1,6 @@
-.*.swp
-target
+.*.bk
 .*.orig
+.*.swp
 Cargo.lock
+kcov-out
+target

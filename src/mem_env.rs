@@ -10,9 +10,6 @@ use std::ops::Deref;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-// TODO: implement in-memory file using buffer wrapped inside arc<mutex<>> supporting read, write,
-// randomaccess.
-
 fn path_to_string(p: &Path) -> String {
     p.to_str().map(String::from).unwrap()
 }
