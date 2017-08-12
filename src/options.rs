@@ -78,8 +78,13 @@ impl Options {
     /// DO NOT set the comparator after having written any record with a different comparator.
     /// If the comparator used differs from the one used when writing a database that is being
     /// opened, the library is free to panic.
-    pub fn set_comparator<C: Cmp>(&mut self, c: Box<Cmp>) {
+    pub fn set_comparator(&mut self, c: Box<Cmp>) {
         self.cmp = Arc::new(c);
+    }
+
+    /// Set the environment to use. The default is PosixDiskEnv.
+    pub fn set_env(&mut self, e: Box<Env>) {
+        self.env = Arc::new(e);
     }
 }
 

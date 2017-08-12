@@ -238,7 +238,7 @@ impl MemFS {
 pub struct MemEnv(MemFS);
 
 impl MemEnv {
-    fn new() -> MemEnv {
+    pub fn new() -> MemEnv {
         MemEnv(MemFS::new())
     }
 }

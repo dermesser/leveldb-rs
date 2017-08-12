@@ -153,8 +153,9 @@ impl Table {
             }
         }
 
-        let rfile = self.file.as_ref().as_ref();
-        let b = try!(TableBlock::read_block(self.opt.clone(), rfile, location));
+        let rfile = self.file.clone();
+        // Two times as_ref(): First time to get a ref from Arc<>, then one from Box<>.
+        let b = try!(TableBlock::read_block(self.opt.clone(), rfile.as_ref().as_ref(), location));
 
         if !b.verify() {
             return Err(Status::new(StatusCode::InvalidData, "Data block failed verification"));
@@ -181,8 +182,8 @@ impl Table {
         return self.footer.meta_index.offset();
     }
 
-    // Iterators read from the file; thus only one iterator can be borrowed (mutably) per scope
-    fn iter<'a>(&'a mut self) -> TableIterator<'a> {
+    /// Iterators read from the file; thus only one iterator can be borrowed (mutably) per scope
+    pub fn iter<'a>(&'a mut self) -> TableIterator<'a> {
         let iter = TableIterator {
             current_block: self.indexblock.iter(),
             init: false,
