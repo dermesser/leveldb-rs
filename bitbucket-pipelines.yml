@@ -2,7 +2,7 @@ image: atlassianlabs/buildpack-deps-rust
 
 pipelines:
   branches:
-    master:
+    default:
       - step:
           script:
             - echo "Updates to rustup"                ; rustup self update
