@@ -1,6 +1,8 @@
+//! table_cache implements a cache providing access to the immutable SSTables on disk. It's a
+//! read-through cache, meaning that non-present tables are read from disk and cached before being
+//! returned.
 
 use cache::{self, Cache};
-use env::RandomAccess;
 use error::Result;
 use options::Options;
 use table_reader::Table;
