@@ -84,8 +84,10 @@ impl Table {
     /// Creates a new table reader operating on unformatted keys (i.e., UserKey).
     fn new_raw(opt: Options, file: Arc<Box<RandomAccess>>, size: usize) -> Result<Table> {
         let footer = try!(read_footer(file.as_ref().as_ref(), size));
-        let indexblock = try!(TableBlock::read_block(opt.clone(), file.as_ref().as_ref(), &footer.index));
-        let metaindexblock = try!(TableBlock::read_block(opt.clone(), file.as_ref().as_ref(), &footer.meta_index));
+        let indexblock =
+            try!(TableBlock::read_block(opt.clone(), file.as_ref().as_ref(), &footer.index));
+        let metaindexblock =
+            try!(TableBlock::read_block(opt.clone(), file.as_ref().as_ref(), &footer.meta_index));
 
         if !indexblock.verify() || !metaindexblock.verify() {
             return Err(Status::new(StatusCode::InvalidData,
@@ -151,7 +153,8 @@ impl Table {
         }
 
         // Two times as_ref(): First time to get a ref from Arc<>, then one from Box<>.
-        let b = try!(TableBlock::read_block(self.opt.clone(), self.file.as_ref().as_ref(), location));
+        let b =
+            try!(TableBlock::read_block(self.opt.clone(), self.file.as_ref().as_ref(), location));
 
         if !b.verify() {
             return Err(Status::new(StatusCode::InvalidData, "Data block failed verification"));
@@ -179,14 +182,13 @@ impl Table {
     }
 
     /// Iterators read from the file; thus only one iterator can be borrowed (mutably) per scope
-    pub fn iter<'a>(&'a self) -> TableIterator<'a> {
+    pub fn iter(&self) -> TableIterator {
         let iter = TableIterator {
             current_block: self.indexblock.iter(),
             init: false,
             current_block_off: 0,
             index_block: self.indexblock.iter(),
-            opt: self.opt.clone(),
-            table: self,
+            table: self.clone(),
         };
         iter
     }
@@ -242,9 +244,14 @@ impl Table {
 
 /// This iterator is a "TwoLevelIterator"; it uses an index block in order to get an offset hint
 /// into the data blocks.
-pub struct TableIterator<'a> {
-    table: &'a Table,
-    opt: Options,
+pub struct TableIterator {
+    // A TableIterator is independent of its table (on the syntax level -- it doesn't know its
+    // Table's lifetime). This is mainly required by the dynamic iterators used everywhere, where a
+    // lifetime makes things like returning an iterator from a function neigh-impossible.
+    //
+    // Instead, reference-counted pointers and locks inside the Table ensure that all
+    // TableIterators still share a table.
+    table: Table,
     // We're not using Option<BlockIter>, but instead a separate `init` field. That makes it easier
     // working with the current block in the iterator methods (no borrowing annoyance as with
     // Option<>)
@@ -254,7 +261,7 @@ pub struct TableIterator<'a> {
     index_block: BlockIter,
 }
 
-impl<'a> TableIterator<'a> {
+impl TableIterator {
     // Skips to the entry referenced by the next entry in the index block.
     // This is called once a block has run out of entries.
     // Err means corruption or I/O error; Ok(true) means a new block was loaded; Ok(false) means
@@ -280,7 +287,7 @@ impl<'a> TableIterator<'a> {
     }
 }
 
-impl<'a> Iterator for TableIterator<'a> {
+impl Iterator for TableIterator {
     type Item = (Vec<u8>, Vec<u8>);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -312,7 +319,7 @@ impl<'a> Iterator for TableIterator<'a> {
     }
 }
 
-impl<'a> LdbIterator for TableIterator<'a> {
+impl LdbIterator for TableIterator {
     // A call to valid() after seeking is necessary to ensure that the seek worked (e.g., no error
     // while reading from disk)
     fn seek(&mut self, to: &[u8]) {
@@ -322,7 +329,7 @@ impl<'a> LdbIterator for TableIterator<'a> {
         self.index_block.seek(to);
 
         if let Some((past_block, handle)) = self.index_block.current() {
-            if self.opt.cmp.cmp(to, &past_block) <= Ordering::Equal {
+            if self.table.opt.cmp.cmp(to, &past_block) <= Ordering::Equal {
                 // ok, found right block: continue
                 if let Ok(()) = self.load_block(&handle) {
                     self.current_block.seek(to);
