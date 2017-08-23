@@ -145,7 +145,7 @@ impl Table {
 
     /// Read a block from the current table at `location`, and cache it in the options' block
     /// cache.
-    fn read_block(&mut self, location: &BlockHandle) -> Result<TableBlock> {
+    fn read_block(&self, location: &BlockHandle) -> Result<TableBlock> {
         let cachekey = self.block_cache_handle(location.offset());
         if let Ok(ref mut block_cache) = self.opt.block_cache.lock() {
             if let Some(block) = block_cache.get(&cachekey) {
@@ -183,7 +183,7 @@ impl Table {
     }
 
     /// Iterators read from the file; thus only one iterator can be borrowed (mutably) per scope
-    pub fn iter<'a>(&'a mut self) -> TableIterator<'a> {
+    pub fn iter<'a>(&'a self) -> TableIterator<'a> {
         let iter = TableIterator {
             current_block: self.indexblock.iter(),
             init: false,
@@ -198,7 +198,7 @@ impl Table {
     /// Retrieve value from table. This function uses the attached filters, so is better suited if
     /// you frequently look for non-existing values (as it will detect the non-existence of an
     /// entry in a block without having to load the block).
-    pub fn get<'a>(&mut self, key: InternalKey<'a>) -> Option<Vec<u8>> {
+    pub fn get<'a>(&self, key: InternalKey<'a>) -> Option<Vec<u8>> {
         let mut index_iter = self.indexblock.iter();
         index_iter.seek(key);
 
@@ -247,7 +247,7 @@ impl Table {
 /// This iterator is a "TwoLevelIterator"; it uses an index block in order to get an offset hint
 /// into the data blocks.
 pub struct TableIterator<'a> {
-    table: &'a mut Table,
+    table: &'a Table,
     opt: Options,
     // We're not using Option<BlockIter>, but instead a separate `init` field. That makes it easier
     // working with the current block in the iterator methods (no borrowing annoyance as with
@@ -476,7 +476,7 @@ mod tests {
         let mut opt = Options::default();
         opt.block_size = 32;
 
-        let mut table = Table::new_raw(opt.clone(), wrap_buffer(src), size).unwrap();
+        let table = Table::new_raw(opt.clone(), wrap_buffer(src), size).unwrap();
         let mut iter = table.iter();
 
         // index/metaindex blocks are not cached. That'd be a waste of memory.
@@ -496,7 +496,7 @@ mod tests {
         let (src, size) = build_table();
         let data = build_data();
 
-        let mut table = Table::new_raw(Options::default(), wrap_buffer(src), size).unwrap();
+        let table = Table::new_raw(Options::default(), wrap_buffer(src), size).unwrap();
         let mut iter = table.iter();
         let mut i = 0;
 
@@ -528,7 +528,7 @@ mod tests {
     fn test_table_iterator_filter() {
         let (src, size) = build_table();
 
-        let mut table = Table::new_raw(Options::default(), wrap_buffer(src), size).unwrap();
+        let table = Table::new_raw(Options::default(), wrap_buffer(src), size).unwrap();
         assert!(table.filters.is_some());
         let filter_reader = table.filters.clone().unwrap();
         let mut iter = table.iter();
@@ -548,7 +548,7 @@ mod tests {
     fn test_table_iterator_state_behavior() {
         let (src, size) = build_table();
 
-        let mut table = Table::new_raw(Options::default(), wrap_buffer(src), size).unwrap();
+        let table = Table::new_raw(Options::default(), wrap_buffer(src), size).unwrap();
         let mut iter = table.iter();
 
         // behavior test
@@ -578,7 +578,7 @@ mod tests {
         let (src, size) = build_table();
         let data = build_data();
 
-        let mut table = Table::new_raw(Options::default(), wrap_buffer(src), size).unwrap();
+        let table = Table::new_raw(Options::default(), wrap_buffer(src), size).unwrap();
         let mut iter = table.iter();
         let mut i = 0;
 
@@ -611,7 +611,7 @@ mod tests {
     fn test_table_iterator_seek() {
         let (src, size) = build_table();
 
-        let mut table = Table::new_raw(Options::default(), wrap_buffer(src), size).unwrap();
+        let table = Table::new_raw(Options::default(), wrap_buffer(src), size).unwrap();
         let mut iter = table.iter();
 
         iter.seek("bcd".as_bytes());
@@ -628,8 +628,8 @@ mod tests {
     fn test_table_get() {
         let (src, size) = build_table();
 
-        let mut table = Table::new_raw(Options::default(), wrap_buffer(src), size).unwrap();
-        let mut table2 = table.clone();
+        let table = Table::new_raw(Options::default(), wrap_buffer(src), size).unwrap();
+        let table2 = table.clone();
 
         // Test that all of the table's entries are reachable via get()
         for (k, v) in table.iter() {
@@ -658,7 +658,7 @@ mod tests {
 
         let (src, size) = build_internal_table();
 
-        let mut table = Table::new(Options::default(), wrap_buffer(src), size).unwrap();
+        let table = Table::new(Options::default(), wrap_buffer(src), size).unwrap();
         let filter_reader = table.filters.clone().unwrap();
 
         // Check that we're actually using internal keys
@@ -689,7 +689,7 @@ mod tests {
 
         src[10] += 1;
 
-        let mut table = Table::new_raw(Options::default(), wrap_buffer(src), size).unwrap();
+        let table = Table::new_raw(Options::default(), wrap_buffer(src), size).unwrap();
 
         assert!(table.filters.is_some());
         assert_eq!(table.filters.as_ref().unwrap().num(), 1);
