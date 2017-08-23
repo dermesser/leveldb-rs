@@ -83,11 +83,9 @@ pub struct Table {
 impl Table {
     /// Creates a new table reader operating on unformatted keys (i.e., UserKey).
     fn new_raw(opt: Options, file: Arc<Box<RandomAccess>>, size: usize) -> Result<Table> {
-        let rfile = file.as_ref().as_ref();
-
-        let footer = try!(read_footer(rfile, size));
-        let indexblock = try!(TableBlock::read_block(opt.clone(), rfile, &footer.index));
-        let metaindexblock = try!(TableBlock::read_block(opt.clone(), rfile, &footer.meta_index));
+        let footer = try!(read_footer(file.as_ref().as_ref(), size));
+        let indexblock = try!(TableBlock::read_block(opt.clone(), file.as_ref().as_ref(), &footer.index));
+        let metaindexblock = try!(TableBlock::read_block(opt.clone(), file.as_ref().as_ref(), &footer.meta_index));
 
         if !indexblock.verify() || !metaindexblock.verify() {
             return Err(Status::new(StatusCode::InvalidData,
@@ -106,7 +104,7 @@ impl Table {
             let filter_block_location = BlockHandle::decode(&val).0;
 
             if filter_block_location.size() > 0 {
-                let buf = try!(read_bytes(rfile, &filter_block_location));
+                let buf = try!(read_bytes(file.as_ref().as_ref(), &filter_block_location));
                 filter_block_reader = Some(FilterBlockReader::new_owned(opt.filter_policy.clone(),
                                                                         buf));
             }
@@ -115,8 +113,7 @@ impl Table {
         let cache_id = opt.block_cache.lock().unwrap().new_cache_id();
 
         Ok(Table {
-            // clone file here so that we can use a immutable reference rfile above.
-            file: file.clone(),
+            file: file,
             file_size: size,
             cache_id: cache_id,
             opt: opt,
@@ -153,15 +150,14 @@ impl Table {
             }
         }
 
-        let rfile = self.file.clone();
         // Two times as_ref(): First time to get a ref from Arc<>, then one from Box<>.
-        let b = try!(TableBlock::read_block(self.opt.clone(), rfile.as_ref().as_ref(), location));
+        let b = try!(TableBlock::read_block(self.opt.clone(), self.file.as_ref().as_ref(), location));
 
         if !b.verify() {
             return Err(Status::new(StatusCode::InvalidData, "Data block failed verification"));
         }
         if let Ok(ref mut block_cache) = self.opt.block_cache.lock() {
-            // inserting a cheap copy (Rc)
+            // insert a cheap copy (Rc).
             block_cache.insert(&cachekey, b.clone());
         }
 
