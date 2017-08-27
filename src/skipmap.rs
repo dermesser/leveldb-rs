@@ -6,6 +6,7 @@ use rand::{Rng, SeedableRng, StdRng};
 
 use std::cmp::Ordering;
 use std::mem::{replace, size_of};
+use std::rc::Rc;
 use std::sync::Arc;
 
 const MAX_HEIGHT: usize = 12;
@@ -24,7 +25,7 @@ struct Node {
 /// `contains()`; in order to get full key and value for an entry, use a `SkipMapIter` instance,
 /// `seek()` to the key to look up (this is as fast as any lookup in a skip map), and then call
 /// `current()`.
-pub struct SkipMap {
+struct InnerSkipMap {
     head: Box<Node>,
     rand: StdRng,
     len: usize,
@@ -33,12 +34,15 @@ pub struct SkipMap {
     opt: Options,
 }
 
+pub struct SkipMap {
+    map: Rc<InnerSkipMap>,
+}
+
 impl SkipMap {
     /// Returns a SkipMap that wraps the comparator from opt inside a MemtableKeyCmp
     pub fn new_memtable_map(mut opt: Options) -> SkipMap {
         opt.cmp = Arc::new(Box::new(MemtableKeyCmp(opt.cmp.clone())));
-        let skm = SkipMap::new(opt);
-        skm
+        SkipMap::new(opt)
     }
 
     /// Returns a SkipMap that uses the comparator from opt
@@ -47,26 +51,43 @@ impl SkipMap {
         s.resize(MAX_HEIGHT, None);
 
         SkipMap {
-            head: Box::new(Node {
-                skips: s,
-                next: None,
-                key: Vec::new(),
-                value: Vec::new(),
+            map: Rc::new(InnerSkipMap {
+                head: Box::new(Node {
+                    skips: s,
+                    next: None,
+                    key: Vec::new(),
+                    value: Vec::new(),
+                }),
+                rand: StdRng::from_seed(&[0xde, 0xad, 0xbe, 0xef]),
+                len: 0,
+                approx_mem: size_of::<Self>() + MAX_HEIGHT * size_of::<Option<*mut Node>>(),
+                opt: opt,
             }),
-            rand: StdRng::from_seed(&[0xde, 0xad, 0xbe, 0xef]),
-            len: 0,
-            approx_mem: size_of::<Self>() + MAX_HEIGHT * size_of::<Option<*mut Node>>(),
-            opt: opt,
         }
     }
 
     pub fn len(&self) -> usize {
-        self.len
+        self.map.len
     }
     pub fn approx_memory(&self) -> usize {
-        self.approx_mem
+        self.map.approx_mem
+    }
+    pub fn contains(&self, key: &[u8]) -> bool {
+        self.map.contains(key)
+    }
+    pub fn insert(&mut self, key: Vec<u8>, val: Vec<u8>) {
+        Rc::get_mut(&mut self.map).unwrap().insert(key, val);
     }
 
+    pub fn iter(&self) -> SkipMapIter {
+        SkipMapIter {
+            map: self.map.clone(),
+            current: self.map.head.as_ref() as *const Node,
+        }
+    }
+}
+
+impl InnerSkipMap {
     fn random_height(&mut self) -> usize {
         let mut height = 1;
 
@@ -77,7 +98,7 @@ impl SkipMap {
         height
     }
 
-    pub fn contains(&self, key: &[u8]) -> bool {
+    fn contains(&self, key: &[u8]) -> bool {
         if let Some(n) = self.get_greater_or_equal(key) {
             n.key.starts_with(&key)
         } else {
@@ -167,7 +188,7 @@ impl SkipMap {
         }
     }
 
-    pub fn insert(&mut self, key: Vec<u8>, val: Vec<u8>) {
+    fn insert(&mut self, key: Vec<u8>, val: Vec<u8>) {
         assert!(!key.is_empty());
 
         // Keeping track of skip entries that will need to be updated
@@ -238,14 +259,6 @@ impl SkipMap {
         // ...and then setting the previous element's next field to the new node
         unsafe { replace(&mut (*current).next, Some(new)) };
     }
-
-    pub fn iter<'a>(&'a self) -> SkipMapIter<'a> {
-        SkipMapIter {
-            map: self,
-            current: self.head.as_ref() as *const Node,
-        }
-    }
-
     /// Runs through the skipmap and prints everything including addresses
     fn dbg_print(&self) {
         let mut current = self.head.as_ref() as *const Node;
@@ -266,66 +279,71 @@ impl SkipMap {
     }
 }
 
-pub struct SkipMapIter<'a> {
-    map: &'a SkipMap,
+pub struct SkipMapIter {
+    map: Rc<InnerSkipMap>,
     current: *const Node,
 }
 
-impl<'a> Iterator for SkipMapIter<'a> {
-    type Item = (&'a [u8], &'a [u8]);
-
-    fn next(&mut self) -> Option<Self::Item> {
+impl LdbIterator for SkipMapIter {
+    fn advance(&mut self) -> bool {
         // we first go to the next element, then return that -- in order to skip the head node
         unsafe {
-            (*self.current).next.as_ref().map(|next| {
-                self.current = next.as_ref() as *const Node;
-                ((*self.current).key.as_slice(), (*self.current).value.as_slice())
-            })
+            (*self.current)
+                .next
+                .as_ref()
+                .map(|next| {
+                    self.current = next.as_ref() as *const Node;
+                    true
+                })
+                .unwrap_or(false)
         }
     }
-}
-
-impl<'a> LdbIterator for SkipMapIter<'a> {
     fn reset(&mut self) {
-        let new = self.map.iter();
-        self.current = new.current;
+        self.current = self.map.head.as_ref();
     }
     fn seek(&mut self, key: &[u8]) {
         if let Some(node) = self.map.get_greater_or_equal(key) {
-            self.current = node as *const Node
-        } else {
-            self.reset();
+            self.current = node as *const Node;
+            return;
         }
+        self.reset();
     }
     fn valid(&self) -> bool {
         unsafe { !(*self.current).key.is_empty() }
     }
-    fn current(&self) -> Option<Self::Item> {
+    fn current(&self, key: &mut Vec<u8>, val: &mut Vec<u8>) -> bool {
         if self.valid() {
-            Some(unsafe { (&(*self.current).key, &(*self.current).value) })
+            key.clear();
+            val.clear();
+            unsafe {
+                key.extend_from_slice(&(*self.current).key);
+                val.extend_from_slice(&(*self.current).value);
+            }
+            true
         } else {
-            None
+            false
         }
     }
-    fn prev(&mut self) -> Option<Self::Item> {
+    fn prev(&mut self) -> bool {
         // Going after the original implementation here; we just seek to the node before current().
-        if let Some(current) = self.current() {
-            if let Some(prev) = self.map.get_next_smaller(current.0) {
+        if self.valid() {
+            if let Some(prev) = self.map.get_next_smaller(unsafe { &(*self.current).key }) {
                 self.current = prev as *const Node;
-
                 if !prev.key.is_empty() {
-                    return Some(unsafe { (&(*self.current).key, &(*self.current).value) });
+                    return true;
                 }
             }
         }
         self.reset();
-        None
+        false
     }
 }
 
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use test_util::LdbIteratorIter;
+    use types::current_key_val;
     use options::Options;
 
     pub fn make_skipmap() -> SkipMap {
@@ -344,7 +362,7 @@ pub mod tests {
     fn test_insert() {
         let skm = make_skipmap();
         assert_eq!(skm.len(), 26);
-        skm.dbg_print();
+        skm.map.dbg_print();
     }
 
     #[test]
@@ -371,19 +389,19 @@ pub mod tests {
     #[test]
     fn test_find() {
         let skm = make_skipmap();
-        assert_eq!(skm.get_greater_or_equal(&"abf".as_bytes().to_vec()).unwrap().key,
+        assert_eq!(skm.map.get_greater_or_equal(&"abf".as_bytes().to_vec()).unwrap().key,
                    "abf".as_bytes().to_vec());
-        assert!(skm.get_greater_or_equal(&"ab{".as_bytes().to_vec()).is_none());
-        assert_eq!(skm.get_greater_or_equal(&"aaa".as_bytes().to_vec()).unwrap().key,
+        assert!(skm.map.get_greater_or_equal(&"ab{".as_bytes().to_vec()).is_none());
+        assert_eq!(skm.map.get_greater_or_equal(&"aaa".as_bytes().to_vec()).unwrap().key,
                    "aba".as_bytes().to_vec());
-        assert_eq!(skm.get_greater_or_equal(&"ab".as_bytes()).unwrap().key.as_slice(),
+        assert_eq!(skm.map.get_greater_or_equal(&"ab".as_bytes()).unwrap().key.as_slice(),
                    "aba".as_bytes());
-        assert_eq!(skm.get_greater_or_equal(&"abc".as_bytes()).unwrap().key.as_slice(),
+        assert_eq!(skm.map.get_greater_or_equal(&"abc".as_bytes()).unwrap().key.as_slice(),
                    "abc".as_bytes());
-        assert!(skm.get_next_smaller(&"ab0".as_bytes()).is_none());
-        assert_eq!(skm.get_next_smaller(&"abd".as_bytes()).unwrap().key.as_slice(),
+        assert!(skm.map.get_next_smaller(&"ab0".as_bytes()).is_none());
+        assert_eq!(skm.map.get_next_smaller(&"abd".as_bytes()).unwrap().key.as_slice(),
                    "abc".as_bytes());
-        assert_eq!(skm.get_next_smaller(&"ab{".as_bytes()).unwrap().key.as_slice(),
+        assert_eq!(skm.map.get_next_smaller(&"ab{".as_bytes()).unwrap().key.as_slice(),
                    "abz".as_bytes());
     }
 
@@ -392,7 +410,7 @@ pub mod tests {
         let skm = SkipMap::new(Options::default());
         let mut i = 0;
 
-        for (_, _) in skm.iter() {
+        for (_, _) in LdbIteratorIter::wrap(&mut skm.iter()) {
             i += 1;
         }
 
@@ -422,7 +440,7 @@ pub mod tests {
         let skm = make_skipmap();
         let mut i = 0;
 
-        for (k, v) in skm.iter() {
+        for (k, v) in LdbIteratorIter::wrap(&mut skm.iter()) {
             assert!(!k.is_empty());
             assert!(!v.is_empty());
             i += 1;
@@ -437,14 +455,14 @@ pub mod tests {
 
         iter.next();
         assert!(iter.valid());
-        assert_eq!(iter.current().unwrap().0, "aba".as_bytes());
+        assert_eq!(current_key_val(&iter).unwrap().0, "aba".as_bytes().to_vec());
         iter.seek(&"abz".as_bytes().to_vec());
-        assert_eq!(iter.current().unwrap(),
-                   ("abz".as_bytes(), "def".as_bytes()));
+        assert_eq!(current_key_val(&iter).unwrap(),
+                   ("abz".as_bytes().to_vec(), "def".as_bytes().to_vec()));
         // go back to beginning
         iter.seek(&"aba".as_bytes().to_vec());
-        assert_eq!(iter.current().unwrap(),
-                   ("aba".as_bytes(), "def".as_bytes()));
+        assert_eq!(current_key_val(&iter).unwrap(),
+                   ("aba".as_bytes().to_vec(), "def".as_bytes().to_vec()));
 
         iter.seek(&"".as_bytes().to_vec());
         assert!(iter.valid());
@@ -459,7 +477,9 @@ pub mod tests {
             }
         }
         assert_eq!(iter.next(), None);
-        assert_eq!(iter.prev(), Some(("aby".as_bytes(), "def".as_bytes())));
+        assert!(iter.prev());
+        assert_eq!(current_key_val(&iter),
+                   Some(("aby".as_bytes().to_vec(), "def".as_bytes().to_vec())));
     }
 
     #[test]
@@ -473,7 +493,7 @@ pub mod tests {
         assert!(!iter.valid());
         iter.seek(&"abc".as_bytes());
         iter.prev();
-        assert_eq!(iter.current().unwrap(),
-                   ("abb".as_bytes(), "def".as_bytes()));
+        assert_eq!(current_key_val(&iter).unwrap(),
+                   ("abb".as_bytes().to_vec(), "def".as_bytes().to_vec()));
     }
 }

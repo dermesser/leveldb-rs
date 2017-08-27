@@ -9,7 +9,7 @@ use filter_block::FilterBlockReader;
 use key_types::InternalKey;
 use options::{self, CompressionType, Options};
 use table_builder::{self, Footer};
-use types::LdbIterator;
+use types::{current_key_val, LdbIterator};
 
 use std::cmp::Ordering;
 use std::sync::Arc;
@@ -102,7 +102,7 @@ impl Table {
 
         metaindexiter.seek(&filter_name);
 
-        if let Some((_key, val)) = metaindexiter.current() {
+        if let Some((_key, val)) = current_key_val(&metaindexiter) {
             let filter_block_location = BlockHandle::decode(&val).0;
 
             if filter_block_location.size() > 0 {
@@ -173,7 +173,7 @@ impl Table {
 
         iter.seek(key);
 
-        if let Some((_, val)) = iter.current() {
+        if let Some((_, val)) = current_key_val(&iter) {
             let location = BlockHandle::decode(&val).0;
             return location.offset();
         }
@@ -201,7 +201,7 @@ impl Table {
         index_iter.seek(key);
 
         let handle;
-        if let Some((last_in_block, h)) = index_iter.current() {
+        if let Some((last_in_block, h)) = current_key_val(&index_iter) {
             if self.opt.cmp.cmp(key, &last_in_block) == Ordering::Less {
                 handle = BlockHandle::decode(&h).0;
             } else {
@@ -230,7 +230,7 @@ impl Table {
 
         // Go to entry and check if it's the wanted entry.
         iter.seek(key);
-        if let Some((k, v)) = iter.current() {
+        if let Some((k, v)) = current_key_val(&iter) {
             if self.opt.cmp.cmp(key, &k) == Ordering::Equal {
                 Some(v)
             } else {
@@ -287,21 +287,19 @@ impl TableIterator {
     }
 }
 
-impl Iterator for TableIterator {
-    type Item = (Vec<u8>, Vec<u8>);
-
-    fn next(&mut self) -> Option<Self::Item> {
+impl LdbIterator for TableIterator {
+    fn advance(&mut self) -> bool {
         // init essentially means that `current_block` is a data block (it's initially filled with
         // an index block as filler).
         if self.init {
-            if let Some((key, val)) = self.current_block.next() {
-                Some((key, val))
+            if self.current_block.advance() {
+                true
             } else {
                 match self.skip_to_next_entry() {
-                    Ok(true) => self.next(),
-                    Ok(false) => None,
+                    Ok(true) => self.advance(),
+                    Ok(false) => false,
                     // try next block, this might be corruption
-                    Err(_) => self.next(),
+                    Err(_) => self.advance(),
                 }
             }
         } else {
@@ -309,17 +307,14 @@ impl Iterator for TableIterator {
                 Ok(true) => {
                     // Only initialize if we got an entry
                     self.init = true;
-                    self.next()
+                    self.advance()
                 }
-                Ok(false) => None,
+                Ok(false) => false,
                 // try next block from index, this might be corruption
-                Err(_) => self.next(),
+                Err(_) => self.advance(),
             }
         }
     }
-}
-
-impl LdbIterator for TableIterator {
     // A call to valid() after seeking is necessary to ensure that the seek worked (e.g., no error
     // while reading from disk)
     fn seek(&mut self, to: &[u8]) {
@@ -328,7 +323,7 @@ impl LdbIterator for TableIterator {
 
         self.index_block.seek(to);
 
-        if let Some((past_block, handle)) = self.index_block.current() {
+        if let Some((past_block, handle)) = current_key_val(&self.index_block) {
             if self.table.opt.cmp.cmp(to, &past_block) <= Ordering::Equal {
                 // ok, found right block: continue
                 if let Ok(()) = self.load_block(&handle) {
@@ -347,22 +342,26 @@ impl LdbIterator for TableIterator {
         }
     }
 
-    fn prev(&mut self) -> Option<Self::Item> {
+    fn prev(&mut self) -> bool {
         // happy path: current block contains previous entry
-        if let Some(result) = self.current_block.prev() {
-            Some(result)
+        if self.current_block.prev() {
+            true
         } else {
             // Go back one block and look for the last entry in the previous block
-            if let Some((_, handle)) = self.index_block.prev() {
-                if self.load_block(&handle).is_ok() {
-                    self.current_block.seek_to_last();
-                    self.current_block.current()
+            if self.index_block.prev() {
+                if let Some((_, handle)) = current_key_val(&self.index_block) {
+                    if self.load_block(&handle).is_ok() {
+                        self.current_block.seek_to_last();
+                        self.current_block.valid()
+                    } else {
+                        self.reset();
+                        false
+                    }
                 } else {
-                    self.reset();
-                    None
+                    false
                 }
             } else {
-                None
+                false
             }
         }
     }
@@ -372,17 +371,17 @@ impl LdbIterator for TableIterator {
         self.init = false;
     }
 
-    // This iterator is special in that it's valid even before the first call to next(). It behaves
-    // correctly, though.
+    // This iterator is special in that it's valid even before the first call to advance(). It
+    // behaves correctly, though.
     fn valid(&self) -> bool {
         self.init && (self.current_block.valid() || self.index_block.valid())
     }
 
-    fn current(&self) -> Option<Self::Item> {
+    fn current(&self, key: &mut Vec<u8>, val: &mut Vec<u8>) -> bool {
         if self.init {
-            self.current_block.current()
+            self.current_block.current(key, val)
         } else {
-            None
+            false
         }
     }
 }
@@ -392,7 +391,8 @@ mod tests {
     use filter::BloomPolicy;
     use options::Options;
     use table_builder::TableBuilder;
-    use types::LdbIterator;
+    use test_util::LdbIteratorIter;
+    use types::{current_key_val, LdbIterator};
     use key_types::LookupKey;
 
     use super::*;
@@ -515,11 +515,16 @@ mod tests {
         // backwards count
         let mut j = 0;
 
-        while let Some((k, v)) = iter.prev() {
-            j += 1;
-            assert_eq!((data[data.len() - 1 - j].0.as_bytes(),
-                        data[data.len() - 1 - j].1.as_bytes()),
-                       (k.as_ref(), v.as_ref()));
+        loop {
+            iter.prev();
+            if let Some((k, v)) = current_key_val(&iter) {
+                j += 1;
+                assert_eq!((data[data.len() - 1 - j].0.as_bytes(),
+                            data[data.len() - 1 - j].1.as_bytes()),
+                           (k.as_ref(), v.as_ref()));
+            } else {
+                break;
+            }
         }
 
         // expecting 7 - 1, because the last entry that the iterator stopped on is the last entry
@@ -558,21 +563,21 @@ mod tests {
 
         // See comment on valid()
         assert!(!iter.valid());
-        assert!(iter.current().is_none());
-        assert!(iter.prev().is_none());
+        assert!(current_key_val(&iter).is_none());
+        assert!(!iter.prev());
 
-        assert!(iter.next().is_some());
-        let first = iter.current();
+        assert!(iter.advance());
+        let first = current_key_val(&iter);
         assert!(iter.valid());
-        assert!(iter.current().is_some());
+        assert!(current_key_val(&iter).is_some());
 
-        assert!(iter.next().is_some());
-        assert!(iter.prev().is_some());
-        assert!(iter.current().is_some());
+        assert!(iter.advance());
+        assert!(iter.prev());
+        assert!(iter.valid());
 
         iter.reset();
         assert!(!iter.valid());
-        assert!(iter.current().is_none());
+        assert!(current_key_val(&iter).is_none());
         assert_eq!(first, iter.next());
     }
 
@@ -593,7 +598,7 @@ mod tests {
         loop {
             iter.prev();
 
-            if let Some((k, v)) = iter.current() {
+            if let Some((k, v)) = current_key_val(&iter) {
                 assert_eq!((data[i].0.as_bytes(), data[i].1.as_bytes()),
                            (k.as_ref(), v.as_ref()));
             } else {
@@ -619,11 +624,11 @@ mod tests {
 
         iter.seek("bcd".as_bytes());
         assert!(iter.valid());
-        assert_eq!(iter.current(),
+        assert_eq!(current_key_val(&iter),
                    Some(("bcd".as_bytes().to_vec(), "asa".as_bytes().to_vec())));
         iter.seek("abc".as_bytes());
         assert!(iter.valid());
-        assert_eq!(iter.current(),
+        assert_eq!(current_key_val(&iter),
                    Some(("abc".as_bytes().to_vec(), "def".as_bytes().to_vec())));
     }
 
@@ -634,8 +639,9 @@ mod tests {
         let table = Table::new_raw(Options::default(), wrap_buffer(src), size).unwrap();
         let table2 = table.clone();
 
+        let mut _iter = table.iter();
         // Test that all of the table's entries are reachable via get()
-        for (k, v) in table.iter() {
+        for (k, v) in LdbIteratorIter::wrap(&mut _iter) {
             assert_eq!(table2.get(&k), Some(v));
         }
 
@@ -665,7 +671,8 @@ mod tests {
         let filter_reader = table.filters.clone().unwrap();
 
         // Check that we're actually using internal keys
-        for (ref k, _) in table.iter() {
+        let mut _iter = table.iter();
+        for (ref k, _) in LdbIteratorIter::wrap(&mut _iter) {
             assert_eq!(k.len(), 3 + 8);
         }
 
@@ -698,13 +705,15 @@ mod tests {
         assert_eq!(table.filters.as_ref().unwrap().num(), 1);
 
         {
-            let iter = table.iter();
+            let mut _iter = table.iter();
+            let iter = LdbIteratorIter::wrap(&mut _iter);
             // first block is skipped
             assert_eq!(iter.count(), 4);
         }
 
         {
-            let iter = table.iter();
+            let mut _iter = table.iter();
+            let iter = LdbIteratorIter::wrap(&mut _iter);
 
             for (k, _) in iter {
                 if k == build_data()[5].0.as_bytes() {

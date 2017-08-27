@@ -1,12 +1,14 @@
-use key_types::{LookupKey, UserKey, InternalKey, MemtableKey};
+use key_types::{LookupKey, UserKey};
 use cmp::MemtableKeyCmp;
 use error::{Status, StatusCode, Result};
 use key_types::{parse_memtable_key, build_memtable_key};
-use types::{ValueType, SequenceNumber, LdbIterator};
+use types::{current_key_val, LdbIterator, SequenceNumber, ValueType};
 use skipmap::{SkipMap, SkipMapIter};
 use options::Options;
 
 use std::sync::Arc;
+
+use integer_encoding::FixedInt;
 
 /// Provides Insert/Get/Iterate, based on the SkipMap implementation.
 /// MemTable uses MemtableKeys internally, that is, it stores key and value in the [Skipmap] key.
@@ -45,10 +47,9 @@ impl MemTable {
         let mut iter = self.map.iter();
         iter.seek(key.memtable_key());
 
-        if let Some(e) = iter.current() {
-            let foundkey: MemtableKey = e.0;
+        if let Some((foundkey, _)) = current_key_val(&iter) {
             // let (lkeylen, lkeyoff, _, _, _) = parse_memtable_key(key.memtable_key());
-            let (fkeylen, fkeyoff, tag, vallen, valoff) = parse_memtable_key(foundkey);
+            let (fkeylen, fkeyoff, tag, vallen, valoff) = parse_memtable_key(&foundkey);
 
             // Compare user key -- if equal, proceed
             // We only care about user key equality here
@@ -73,64 +74,72 @@ impl MemTable {
 
 pub struct MemtableIterator<'a> {
     _tbl: &'a MemTable,
-    skipmapiter: SkipMapIter<'a>,
-}
-
-impl<'a> Iterator for MemtableIterator<'a> {
-    type Item = (InternalKey<'a>, &'a [u8]);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            if let Some((foundkey, _)) = self.skipmapiter.next() {
-                let (keylen, keyoff, tag, vallen, valoff) = parse_memtable_key(foundkey);
-
-                if tag & 0xff == ValueType::TypeValue as u64 {
-                    return Some((&foundkey[keyoff..keyoff + keylen],
-                                 &foundkey[valoff..valoff + vallen]));
-                } else {
-                    continue;
-                }
-            } else {
-                return None;
-            }
-        }
-    }
+    skipmapiter: SkipMapIter,
 }
 
 impl<'a> LdbIterator for MemtableIterator<'a> {
-    fn reset(&mut self) {
-        self.skipmapiter.reset();
-    }
-    fn prev(&mut self) -> Option<Self::Item> {
+    fn advance(&mut self) -> bool {
+        // Make sure this is actually needed.
+        let (mut key, mut val) = (vec![], vec![]);
         loop {
-            if let Some((foundkey, _)) = self.skipmapiter.prev() {
-                let (keylen, keyoff, tag, vallen, valoff) = parse_memtable_key(foundkey);
+            if !self.skipmapiter.advance() {
+                return false;
+            }
+            if self.skipmapiter.current(&mut key, &mut val) {
+                let (_, _, tag, _, _) = parse_memtable_key(&key);
 
                 if tag & 0xff == ValueType::TypeValue as u64 {
-                    return Some((&foundkey[keyoff..keyoff + keylen],
-                                 &foundkey[valoff..valoff + vallen]));
+                    return true;
                 } else {
                     continue;
                 }
             } else {
-                return None;
+                return false;
+            }
+        }
+    }
+    fn reset(&mut self) {
+        self.skipmapiter.reset();
+    }
+    fn prev(&mut self) -> bool {
+        // Make sure this is actually needed (skipping deleted values?).
+        let (mut key, mut val) = (vec![], vec![]);
+        loop {
+            if !self.skipmapiter.prev() {
+                return false;
+            }
+            if self.skipmapiter.current(&mut key, &mut val) {
+                let (_, _, tag, _, _) = parse_memtable_key(&key);
+
+                if tag & 0xff == ValueType::TypeValue as u64 {
+                    return true;
+                } else {
+                    continue;
+                }
+            } else {
+                return false;
             }
         }
     }
     fn valid(&self) -> bool {
         self.skipmapiter.valid()
     }
-    fn current(&self) -> Option<Self::Item> {
+    fn current(&self, key: &mut Vec<u8>, val: &mut Vec<u8>) -> bool {
         if !self.valid() {
-            return None;
+            return false;
         }
 
-        if let Some((foundkey, _)) = self.skipmapiter.current() {
-            let (keylen, keyoff, tag, vallen, valoff) = parse_memtable_key(foundkey);
+        if self.skipmapiter.current(key, val) {
+            let (keylen, keyoff, tag, vallen, valoff) = parse_memtable_key(&key);
 
             if tag & 0xff == ValueType::TypeValue as u64 {
-                return Some((&foundkey[keyoff..keyoff + keylen + 8],
-                             &foundkey[valoff..valoff + vallen]));
+                val.clear();
+                val.extend_from_slice(&key[valoff..valoff + vallen]);
+                // zero-allocation truncation.
+                shift_left(key, keyoff);
+                // Truncate key to key+tag.
+                key.truncate(keylen + u64::required_space());
+                return true;
             } else {
                 panic!("should not happen");
             }
@@ -143,13 +152,34 @@ impl<'a> LdbIterator for MemtableIterator<'a> {
     }
 }
 
+/// shift_left moves s[mid..] to s[0..s.len()-mid]. The new size is s.len()-mid.
+fn shift_left(s: &mut Vec<u8>, mid: usize) {
+    for i in mid..s.len() {
+        s.swap(i, i - mid);
+    }
+    let newlen = s.len() - mid;
+    s.truncate(newlen);
+}
+
 #[cfg(test)]
 #[allow(unused_variables)]
 mod tests {
     use super::*;
     use key_types::*;
+    use test_util::LdbIteratorIter;
     use types::*;
     use options::Options;
+
+    #[test]
+    fn test_shift_left() {
+        let mut v = vec![1, 2, 3, 4, 5];
+        shift_left(&mut v, 1);
+        assert_eq!(v, vec![2, 3, 4, 5]);
+
+        let mut v = vec![1, 2, 3, 4, 5];
+        shift_left(&mut v, 4);
+        assert_eq!(v, vec![5]);
+    }
 
     fn get_memtable() -> MemTable {
         let mut mt = MemTable::new(Options::default());
@@ -233,7 +263,7 @@ mod tests {
         assert!(!iter.valid());
         iter.next();
         assert!(iter.valid());
-        assert_eq!(iter.current().unwrap().0,
+        assert_eq!(current_key_val(&iter).unwrap().0,
                    vec![97, 98, 99, 1, 120, 0, 0, 0, 0, 0, 0].as_slice());
         iter.reset();
         assert!(!iter.valid());
@@ -242,7 +272,7 @@ mod tests {
     #[test]
     fn test_memtable_iterator_fwd_seek() {
         let mt = get_memtable();
-        let iter = mt.iter();
+        let mut iter = mt.iter();
 
         let expected = vec!["123".as_bytes(), /* i.e., the abc entry with
                                                * higher sequence number comes first */
@@ -252,7 +282,7 @@ mod tests {
                             "126".as_bytes()];
         let mut i = 0;
 
-        for (k, v) in iter {
+        for (k, v) in LdbIteratorIter::wrap(&mut iter) {
             assert_eq!(v, expected[i]);
             i += 1;
         }
@@ -266,27 +296,27 @@ mod tests {
         // Bigger sequence number comes first
         iter.next();
         assert!(iter.valid());
-        assert_eq!(iter.current().unwrap().0,
+        assert_eq!(current_key_val(&iter).unwrap().0,
                    vec![97, 98, 99, 1, 120, 0, 0, 0, 0, 0, 0].as_slice());
 
         iter.next();
         assert!(iter.valid());
-        assert_eq!(iter.current().unwrap().0,
+        assert_eq!(current_key_val(&iter).unwrap().0,
                    vec![97, 98, 99, 1, 115, 0, 0, 0, 0, 0, 0].as_slice());
 
         iter.next();
         assert!(iter.valid());
-        assert_eq!(iter.current().unwrap().0,
+        assert_eq!(current_key_val(&iter).unwrap().0,
                    vec![97, 98, 100, 1, 121, 0, 0, 0, 0, 0, 0].as_slice());
 
         iter.prev();
         assert!(iter.valid());
-        assert_eq!(iter.current().unwrap().0,
+        assert_eq!(current_key_val(&iter).unwrap().0,
                    vec![97, 98, 99, 1, 115, 0, 0, 0, 0, 0, 0].as_slice());
 
         iter.prev();
         assert!(iter.valid());
-        assert_eq!(iter.current().unwrap().0,
+        assert_eq!(current_key_val(&iter).unwrap().0,
                    vec![97, 98, 99, 1, 120, 0, 0, 0, 0, 0, 0].as_slice());
 
         iter.prev();

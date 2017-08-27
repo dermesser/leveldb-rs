@@ -63,7 +63,7 @@ pub trait LdbIterator {
 
 /// current_key_val is a helper allocating two vectors and filling them with the current key/value
 /// of the specified iterator.
-pub fn current_key_val<It: LdbIterator>(it: &It) -> Option<(Vec<u8>, Vec<u8>)> {
+pub fn current_key_val<It: LdbIterator + ?Sized>(it: &It) -> Option<(Vec<u8>, Vec<u8>)> {
     let (mut k, mut v) = (vec![], vec![]);
     if it.current(&mut k, &mut v) {
         Some((k, v))

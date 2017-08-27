@@ -69,6 +69,7 @@ mod tests {
     use cache;
     use mem_env::MemEnv;
     use table_builder::TableBuilder;
+    use test_util::LdbIteratorIter;
 
     #[test]
     fn test_table_name() {
@@ -114,8 +115,10 @@ mod tests {
         assert!(opt.env.size_of(tblpath).unwrap() > 20);
 
         let mut cache = TableCache::new(dbname, opt.clone(), 10);
-        assert_eq!(cache.get_table(123).unwrap().iter().count(), 4);
+        assert_eq!(LdbIteratorIter::wrap(&mut cache.get_table(123).unwrap().iter()).count(),
+                   4);
         // Test cached table.
-        assert_eq!(cache.get_table(123).unwrap().iter().count(), 4);
+        assert_eq!(LdbIteratorIter::wrap(&mut cache.get_table(123).unwrap().iter()).count(),
+                   4);
     }
 }
