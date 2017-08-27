@@ -63,8 +63,10 @@ impl MergingIter {
                         for i in 0..self.iters.len() {
                             if i != current {
                                 self.iters[i].seek(&key);
-                                if let Some((current_key, _)) = current_key_val(self.iters[i]
-                                    .as_ref()) {
+                                // This doesn't work if two iterators are returning the exact same
+                                // keys. However, in reality, two entries will always have differing
+                                // sequence numbers.
+                                if let Some((current_key, _)) = current_key_val(self.iters[i].as_ref()) {
                                     if self.cmp.cmp(&current_key, &key) == Ordering::Equal {
                                         self.iters[i].advance();
                                     }
@@ -77,7 +79,12 @@ impl MergingIter {
                         for i in 0..self.iters.len() {
                             if i != current {
                                 self.iters[i].seek(&key);
-                                self.iters[i].prev();
+                                if self.iters[i].valid() {
+                                    self.iters[i].prev();
+                                } else {
+                                    // seek to last.
+                                    while self.iters[i].advance() {}
+                                }
                             }
                         }
                     }
@@ -114,11 +121,8 @@ impl MergingIter {
                         next_ix = i;
                     }
                 } else {
-                    // iter at `smallest` is exhausted
                     next_ix = i;
                 }
-            } else {
-                // smallest stays the same
             }
         }
 
@@ -200,7 +204,6 @@ mod tests {
         let iter = skm.iter();
         let mut iter2 = skm.iter();
 
-        // TODO - use a non-lifetimed iterator. Or rewrite f'ing MergingIter.
         let mut miter = MergingIter::new(Options::default(), vec![Box::new(iter)]);
 
         loop {
@@ -241,20 +244,38 @@ mod tests {
 
     #[test]
     fn test_merging_fwd_bckwd() {
-        let skm = tests::make_skipmap();
-        let iter = skm.iter();
-        let iter2 = skm.iter();
+        let val = "def".as_bytes();
+        let iter = TestLdbIter::new(vec![(b("aba"), val), (b("abc"), val), (b("abe"), val)]);
+        let iter2 = TestLdbIter::new(vec![(b("abb"), val), (b("abd"), val)]);
 
         let mut miter = MergingIter::new(Options::default(), vec![Box::new(iter), Box::new(iter2)]);
 
+        // miter should return the following sequence: [aba, abb, abc, abd, abe]
+
+        // -> aba
         let first = miter.next();
-        miter.next();
+        // -> abb
+        let second = miter.next();
+        // -> abc
         let third = miter.next();
+        println!("{:?} {:?} {:?}", first, second, third);
 
         assert!(first != third);
+        // abb <-
         assert!(miter.prev());
-        let second = current_key_val(&miter);
-        assert_eq!(first, second);
+        assert_eq!(second, current_key_val(&miter));
+        // aba <-
+        assert!(miter.prev());
+        assert_eq!(first, current_key_val(&miter));
+        // -> abb
+        assert!(miter.advance());
+        assert_eq!(second, current_key_val(&miter));
+        // -> abc
+        assert!(miter.advance());
+        assert_eq!(third, current_key_val(&miter));
+        // -> abd
+        assert!(miter.advance());
+        assert_eq!(Some((b("abd").to_vec(), val.to_vec())), current_key_val(&miter));
     }
 
     fn b(s: &'static str) -> &'static [u8] {
@@ -309,8 +330,7 @@ mod tests {
                    Some((b("aba").to_vec(), val.to_vec())));
     }
 
-    // oomph... TODO: fix behavior here
-    // #[test]
+    //#[test]
     fn test_merging_fwd_bckwd_2() {
         let val = "def".as_bytes();
 

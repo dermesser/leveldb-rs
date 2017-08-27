@@ -21,6 +21,7 @@ impl<'a> TestLdbIter<'a> {
 impl<'a> LdbIterator for TestLdbIter<'a> {
     fn advance(&mut self) -> bool {
         if self.ix == self.v.len() {
+            self.init = false;
             false
         } else if !self.init {
             self.init = true;
@@ -50,12 +51,14 @@ impl<'a> LdbIterator for TestLdbIter<'a> {
     }
     fn seek(&mut self, k: &[u8]) {
         self.ix = 0;
+        self.init = true;
         while self.ix < self.v.len() && DefaultCmp.cmp(self.v[self.ix].0, k) == Ordering::Less {
             self.ix += 1;
         }
     }
     fn prev(&mut self) -> bool {
         if !self.init || self.ix == 0 {
+            self.init = false;
             false
         } else {
             self.ix -= 1;
