@@ -107,7 +107,6 @@ impl BlockIter {
         let off = self.get_restart_point(ix);
 
         self.offset = off;
-        println!("new offset is {:?}", off);
         self.current_entry_offset = off;
         self.current_restart_ix = ix;
         // advances self.offset to point to the next entry
@@ -170,8 +169,10 @@ impl BlockIter {
         }
 
         // Stop at last entry, before the iterator becomes invalid.
+        //
+        // We're checking the position before calling advance; if a restart point points to the
+        // last entry, calling advance() will directly reset the iterator.
         while self.offset < self.restarts_off {
-            println!("seek {:?}", current_key_val(self));
             self.advance();
         }
         assert!(self.valid());
@@ -202,7 +203,6 @@ impl LdbIterator for BlockIter {
     }
 
     fn reset(&mut self) {
-        println!("reset block");
         self.offset = 0;
         self.val_offset = 0;
         self.current_restart_ix = 0;
@@ -282,11 +282,6 @@ impl LdbIterator for BlockIter {
     }
 
     fn valid(&self) -> bool {
-        println!("valid: {:?} {:?} {:?} {:?}",
-                 self.key.is_empty(),
-                 self.offset,
-                 self.val_offset,
-                 self.restarts_off);
         !self.key.is_empty() && self.val_offset > 0 && self.val_offset < self.restarts_off
     }
 
@@ -413,7 +408,7 @@ mod tests {
     use super::*;
     use options::*;
     use test_util::{test_iterator_properties, LdbIteratorIter};
-    use types::{current_key_val, LdbIterator};
+    use types::LdbIterator;
 
     fn get_data() -> Vec<(&'static [u8], &'static [u8])> {
         vec![("key1".as_bytes(), "value1".as_bytes()),

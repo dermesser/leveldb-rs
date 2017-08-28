@@ -267,7 +267,6 @@ impl TableIterator {
     // Err means corruption or I/O error; Ok(true) means a new block was loaded; Ok(false) means
     // tht there's no more entries.
     fn skip_to_next_entry(&mut self) -> Result<bool> {
-        println!("skipping block");
         if let Some((_key, val)) = self.index_block.next() {
             self.load_block(&val).map(|_| true)
         } else {
@@ -356,7 +355,6 @@ impl LdbIterator for TableIterator {
         } else {
             // Go back one block and look for the last entry in the previous block
             if self.index_block.prev() {
-                println!("index block prev");
                 if let Some((_, handle)) = current_key_val(&self.index_block) {
                     if self.load_block(&handle).is_ok() {
                         self.current_block.seek_to_last();
