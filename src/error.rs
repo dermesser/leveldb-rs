@@ -3,6 +3,7 @@ use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 use std::io;
 use std::result;
+use std::sync;
 
 #[derive(Clone, Debug)]
 #[allow(dead_code)]
@@ -63,6 +64,9 @@ impl Status {
     }
 }
 
+/// LevelDB's result type
+pub type Result<T> = result::Result<T, Status>;
+
 impl From<io::Error> for Status {
     fn from(e: io::Error) -> Status {
         let c = match e.kind() {
@@ -77,21 +81,8 @@ impl From<io::Error> for Status {
     }
 }
 
-/// LevelDB's result type
-pub type Result<T> = result::Result<T, Status>;
-
-pub fn from_io_result<T>(e: io::Result<T>) -> Result<T> {
-    match e {
-        Ok(r) => result::Result::Ok(r),
-        Err(e) => Err(Status::from(e)),
-    }
-}
-
-use std::sync;
-
-pub fn from_lock_result<T>(e: sync::LockResult<T>) -> Result<T> {
-    match e {
-        Ok(r) => result::Result::Ok(r),
-        Err(_) => result::Result::Err(Status::new(StatusCode::LockError, "lock is poisoned")),
+impl<T> From<sync::PoisonError<T>> for Status {
+    fn from(_: sync::PoisonError<T>) -> Status {
+        Status::new(StatusCode::LockError, "lock poisoned")
     }
 }

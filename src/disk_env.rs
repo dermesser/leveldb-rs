@@ -1,6 +1,6 @@
 use env::{Env, FileLock, Logger, RandomAccess};
 use env_common::{micros, sleep_for};
-use error::{from_io_result, Status, StatusCode, Result};
+use error::{Status, StatusCode, Result};
 
 use std::collections::HashMap;
 use std::fs;
@@ -30,29 +30,33 @@ impl PosixDiskEnv {
     }
 }
 
+// Note: We're using Ok(f()?) in several locations below in order to benefit from the automatic
+// error conversion using std::convert::From.
 impl Env for PosixDiskEnv {
     fn open_sequential_file(&self, p: &Path) -> Result<Box<Read>> {
-        Ok(Box::new(try!(from_io_result(fs::OpenOptions::new().read(true).open(p)))))
+        Ok(Box::new(try!(fs::OpenOptions::new().read(true).open(p))))
     }
     fn open_random_access_file(&self, p: &Path) -> Result<Box<RandomAccess>> {
-        from_io_result(fs::OpenOptions::new().read(true).open(p)).map(|f| {
-            let b: Box<RandomAccess> = Box::new(f);
-            b
-        })
+        Ok(fs::OpenOptions::new().read(true)
+            .open(p)
+            .map(|f| {
+                let b: Box<RandomAccess> = Box::new(f);
+                b
+            })?)
     }
     fn open_writable_file(&self, p: &Path) -> Result<Box<Write>> {
-        Ok(Box::new(try!(from_io_result(fs::OpenOptions::new()
+        Ok(Box::new(try!(fs::OpenOptions::new()
             .create(true)
             .write(true)
             .append(false)
-            .open(p)))))
+            .open(p))))
     }
     fn open_appendable_file(&self, p: &Path) -> Result<Box<Write>> {
-        Ok(Box::new(try!(from_io_result(fs::OpenOptions::new()
+        Ok(Box::new(try!(fs::OpenOptions::new()
             .create(true)
             .write(true)
             .append(true)
-            .open(p)))))
+            .open(p))))
     }
 
     fn exists(&self, p: &Path) -> Result<bool> {
@@ -77,16 +81,16 @@ impl Env for PosixDiskEnv {
     }
 
     fn delete(&self, p: &Path) -> Result<()> {
-        from_io_result(fs::remove_file(p))
+        Ok(fs::remove_file(p)?)
     }
     fn mkdir(&self, p: &Path) -> Result<()> {
-        from_io_result(fs::create_dir(p))
+        Ok(fs::create_dir(p)?)
     }
     fn rmdir(&self, p: &Path) -> Result<()> {
-        from_io_result(fs::remove_dir_all(p))
+        Ok(fs::remove_dir_all(p)?)
     }
     fn rename(&self, old: &Path, new: &Path) -> Result<()> {
-        from_io_result(fs::rename(old, new))
+        Ok(fs::rename(old, new)?)
     }
 
     fn lock(&self, p: &Path) -> Result<FileLock> {

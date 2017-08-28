@@ -1,7 +1,7 @@
 //! An `env` is an abstraction layer that allows the database to run both on different platforms as
 //! well as persisting data on disk or in memory.
 
-use error::{self, Result};
+use error::Result;
 
 use std::io::prelude::*;
 use std::fs::File;
@@ -14,7 +14,7 @@ pub trait RandomAccess {
 
 impl RandomAccess for File {
     fn read_at(&self, off: usize, dst: &mut [u8]) -> Result<usize> {
-        error::from_io_result((self as &FileExt).read_at(dst, off as u64))
+        Ok((self as &FileExt).read_at(dst, off as u64)?)
     }
 }
 
