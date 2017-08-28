@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use std::rc::Rc;
 
 use options::Options;
-use types::{current_key_val, LdbIterator};
+use types::LdbIterator;
 
 use integer_encoding::FixedInt;
 use integer_encoding::VarInt;
@@ -408,7 +408,7 @@ mod tests {
     use super::*;
     use options::*;
     use test_util::{test_iterator_properties, LdbIteratorIter};
-    use types::LdbIterator;
+    use types::{current_key_val, LdbIterator};
 
     fn get_data() -> Vec<(&'static [u8], &'static [u8])> {
         vec![("key1".as_bytes(), "value1".as_bytes()),

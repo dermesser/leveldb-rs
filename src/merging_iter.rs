@@ -309,7 +309,6 @@ mod tests {
             assert_eq!(k, expected[i]);
             i += 1;
         }
-
     }
 
     #[test]
@@ -340,30 +339,5 @@ mod tests {
         iter.next();
         assert_eq!(current_key_val(&iter),
                    Some((b("aba").to_vec(), val.to_vec())));
-    }
-
-    // #[test]
-    fn test_merging_fwd_bckwd_2() {
-        let val = "def".as_bytes();
-
-        let it1 = TestLdbIter::new(vec![(b("aba"), val), (b("abc"), val), (b("abe"), val)]);
-        let it2 = TestLdbIter::new(vec![(b("abb"), val), (b("abd"), val)]);
-
-        let mut iter = MergingIter::new(Options::default(), vec![Box::new(it1), Box::new(it2)]);
-
-        iter.next();
-        iter.next();
-        loop {
-            let a = iter.next();
-
-            if let None = a {
-                break;
-            }
-            let b = iter.prev();
-            let c = iter.next();
-            iter.next();
-
-            println!("{:?}", (a, b, c));
-        }
     }
 }
