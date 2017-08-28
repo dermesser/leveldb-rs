@@ -22,10 +22,12 @@ pub struct Range<'a> {
 /// This works because the iterators used are stateful and keep the last returned element.
 ///
 /// Note: Implementing types are expected to hold `!valid()` before the first call to `advance()`.
+///
+/// test_util::test_iterator_properties() verifies that all properties hold.
 pub trait LdbIterator {
     /// advance advances the position of the iterator by one element (which can be retrieved using
     /// current(). If no more elements are available, advance() returns false, and the iterator
-    /// becomes invalid.
+    /// becomes invalid (i.e. like reset() has been called).
     fn advance(&mut self) -> bool;
     /// Return the current item (i.e. the item most recently returned by get_next())
     fn current(&self, key: &mut Vec<u8>, val: &mut Vec<u8>) -> bool;

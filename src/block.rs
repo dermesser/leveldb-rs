@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use std::rc::Rc;
 
 use options::Options;
-use types::LdbIterator;
+use types::{current_key_val, LdbIterator};
 
 use integer_encoding::FixedInt;
 use integer_encoding::VarInt;
@@ -107,14 +107,15 @@ impl BlockIter {
         let off = self.get_restart_point(ix);
 
         self.offset = off;
+        println!("new offset is {:?}", off);
         self.current_entry_offset = off;
         self.current_restart_ix = ix;
         // advances self.offset to point to the next entry
         let (shared, non_shared, _, head_len) = self.parse_entry_and_advance();
 
         assert_eq!(shared, 0);
-
         self.assemble_key(off + head_len, shared, non_shared);
+        assert!(self.valid());
     }
 
     /// Return the offset that restart `ix` points to.
@@ -156,7 +157,7 @@ impl BlockIter {
     /// respectively non-shared parts of the key.
     /// Only self.key is mutated.
     fn assemble_key(&mut self, off: usize, shared: usize, non_shared: usize) {
-        self.key.resize(shared, 0);
+        self.key.truncate(shared);
         self.key.extend_from_slice(&self.block[off..off + non_shared]);
     }
 
@@ -168,16 +169,19 @@ impl BlockIter {
             self.reset();
         }
 
-        while self.advance() {
+        // Stop at last entry, before the iterator becomes invalid.
+        while self.offset < self.restarts_off {
+            println!("seek {:?}", current_key_val(self));
+            self.advance();
         }
+        assert!(self.valid());
     }
 }
 
 impl LdbIterator for BlockIter {
     fn advance(&mut self) -> bool {
         if self.offset >= self.restarts_off {
-            self.offset = self.restarts_off;
-            // current_entry_offset is left at the offset of the last entry
+            self.reset();
             return false;
         } else {
             self.current_entry_offset = self.offset;
@@ -196,7 +200,9 @@ impl LdbIterator for BlockIter {
         }
         true
     }
+
     fn reset(&mut self) {
+        println!("reset block");
         self.offset = 0;
         self.val_offset = 0;
         self.current_restart_ix = 0;
@@ -276,6 +282,11 @@ impl LdbIterator for BlockIter {
     }
 
     fn valid(&self) -> bool {
+        println!("valid: {:?} {:?} {:?} {:?}",
+                 self.key.is_empty(),
+                 self.offset,
+                 self.val_offset,
+                 self.restarts_off);
         !self.key.is_empty() && self.val_offset > 0 && self.val_offset < self.restarts_off
     }
 
@@ -401,7 +412,7 @@ impl BlockBuilder {
 mod tests {
     use super::*;
     use options::*;
-    use test_util::LdbIteratorIter;
+    use test_util::{test_iterator_properties, LdbIteratorIter};
     use types::{current_key_val, LdbIterator};
 
     fn get_data() -> Vec<(&'static [u8], &'static [u8])> {
@@ -411,6 +422,21 @@ mod tests {
              ("prefix_key1".as_bytes(), "value".as_bytes()),
              ("prefix_key2".as_bytes(), "value".as_bytes()),
              ("prefix_key3".as_bytes(), "value".as_bytes())]
+    }
+
+    #[test]
+    fn test_block_iterator_properties() {
+        let o = Options::default();
+        let mut builder = BlockBuilder::new(o.clone());
+        let mut data = get_data();
+        data.truncate(4);
+        for &(k, v) in data.iter() {
+            builder.add(k, v);
+        }
+        let block_contents = builder.finish();
+
+        let block = Block::new(o.clone(), block_contents).iter();
+        test_iterator_properties(block);
     }
 
     #[test]
@@ -545,9 +571,8 @@ mod tests {
                    Some(("prefix_key3".as_bytes().to_vec(), "value".as_bytes().to_vec())));
 
         block.seek(&"prefix_key8".as_bytes());
-        assert!(block.valid());
-        assert_eq!(current_key_val(&block),
-                   Some(("prefix_key3".as_bytes().to_vec(), "value".as_bytes().to_vec())));
+        assert!(!block.valid());
+        assert_eq!(current_key_val(&block), None);
     }
 
     #[test]

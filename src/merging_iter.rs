@@ -66,7 +66,8 @@ impl MergingIter {
                                 // This doesn't work if two iterators are returning the exact same
                                 // keys. However, in reality, two entries will always have differing
                                 // sequence numbers.
-                                if let Some((current_key, _)) = current_key_val(self.iters[i].as_ref()) {
+                                if let Some((current_key, _)) = current_key_val(self.iters[i]
+                                    .as_ref()) {
                                     if self.cmp.cmp(&current_key, &key) == Ordering::Equal {
                                         self.iters[i].advance();
                                     }
@@ -165,6 +166,7 @@ impl LdbIterator for MergingIter {
         for i in 0..self.iters.len() {
             self.iters[i].reset();
         }
+        self.current = None;
     }
     fn current(&self, key: &mut Vec<u8>, val: &mut Vec<u8>) -> bool {
         if let Some(ix) = self.current {
@@ -179,7 +181,7 @@ impl LdbIterator for MergingIter {
                 self.update_direction(Direction::Rvrs);
                 self.iters[current].prev();
                 self.find_largest();
-                true
+                self.valid()
             } else {
                 false
             }
@@ -194,7 +196,7 @@ mod tests {
     use super::*;
 
     use options::Options;
-    use test_util::{LdbIteratorIter, TestLdbIter};
+    use test_util::{test_iterator_properties, LdbIteratorIter, TestLdbIter};
     use types::{current_key_val, LdbIterator};
     use skipmap::tests;
 
@@ -243,6 +245,15 @@ mod tests {
     }
 
     #[test]
+    fn test_merging_behavior() {
+        let val = "def".as_bytes();
+        let iter = TestLdbIter::new(vec![(b("aba"), val), (b("abc"), val)]);
+        let iter2 = TestLdbIter::new(vec![(b("abb"), val), (b("abd"), val)]);
+        let miter = MergingIter::new(Options::default(), vec![Box::new(iter), Box::new(iter2)]);
+        test_iterator_properties(miter);
+    }
+
+    #[test]
     fn test_merging_fwd_bckwd() {
         let val = "def".as_bytes();
         let iter = TestLdbIter::new(vec![(b("aba"), val), (b("abc"), val), (b("abe"), val)]);
@@ -275,7 +286,8 @@ mod tests {
         assert_eq!(third, current_key_val(&miter));
         // -> abd
         assert!(miter.advance());
-        assert_eq!(Some((b("abd").to_vec(), val.to_vec())), current_key_val(&miter));
+        assert_eq!(Some((b("abd").to_vec(), val.to_vec())),
+                   current_key_val(&miter));
     }
 
     fn b(s: &'static str) -> &'static [u8] {
@@ -330,7 +342,7 @@ mod tests {
                    Some((b("aba").to_vec(), val.to_vec())));
     }
 
-    //#[test]
+    // #[test]
     fn test_merging_fwd_bckwd_2() {
         let val = "def".as_bytes();
 

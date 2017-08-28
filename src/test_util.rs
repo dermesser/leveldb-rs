@@ -1,4 +1,4 @@
-use types::LdbIterator;
+use types::{current_key_val, LdbIterator};
 use cmp::{Cmp, DefaultCmp};
 use std::cmp::Ordering;
 
@@ -20,8 +20,8 @@ impl<'a> TestLdbIter<'a> {
 
 impl<'a> LdbIterator for TestLdbIter<'a> {
     fn advance(&mut self) -> bool {
-        if self.ix == self.v.len() {
-            self.init = false;
+        if self.ix == self.v.len() - 1 {
+            self.ix += 1;
             false
         } else if !self.init {
             self.init = true;
@@ -47,7 +47,7 @@ impl<'a> LdbIterator for TestLdbIter<'a> {
         }
     }
     fn valid(&self) -> bool {
-        self.init
+        self.init && self.ix < self.v.len()
     }
     fn seek(&mut self, k: &[u8]) {
         self.ix = 0;
@@ -85,15 +85,58 @@ impl<'a, It: LdbIterator> Iterator for LdbIteratorIter<'a, It> {
     }
 }
 
+/// This shared test takes an iterator with exactly four elements and tests that it fulfills the
+/// generic iterator properties. Every iterator defined in this code base should pass this test.
+pub fn test_iterator_properties<It: LdbIterator>(mut it: It) {
+    assert!(!it.valid());
+    assert!(it.advance());
+    assert!(it.valid());
+    let first = current_key_val(&it);
+    assert!(it.advance());
+    let second = current_key_val(&it);
+    assert!(it.advance());
+    let third = current_key_val(&it);
+    // fourth (last) element
+    assert!(it.advance());
+    assert!(it.valid());
+    // past end is invalid
+    assert!(!it.advance());
+    assert!(!it.valid());
+
+    it.reset();
+    assert!(!it.valid());
+    assert!(it.advance());
+    assert_eq!(first, current_key_val(&it));
+    assert!(it.advance());
+    assert_eq!(second, current_key_val(&it));
+    assert!(it.advance());
+    assert_eq!(third, current_key_val(&it));
+    assert!(it.prev());
+    assert_eq!(second, current_key_val(&it));
+    assert!(it.prev());
+    assert_eq!(first, current_key_val(&it));
+    assert!(!it.prev());
+    assert!(!it.valid());
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_test_util() {
+    fn test_test_util_basic() {
         let v = vec![("abc".as_bytes(), "def".as_bytes()), ("abd".as_bytes(), "deg".as_bytes())];
         let mut iter = TestLdbIter::new(v);
         assert_eq!(iter.next(),
                    Some((Vec::from("abc".as_bytes()), Vec::from("def".as_bytes()))));
+    }
+
+    #[test]
+    fn test_test_util_properties() {
+        let v = vec![("abc".as_bytes(), "def".as_bytes()),
+                     ("abd".as_bytes(), "deg".as_bytes()),
+                     ("abe".as_bytes(), "deg".as_bytes()),
+                     ("abf".as_bytes(), "deg".as_bytes())];
+        test_iterator_properties(TestLdbIter::new(v));
     }
 }
