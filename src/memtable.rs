@@ -64,20 +64,16 @@ impl MemTable {
         Err(Status::new(StatusCode::NotFound, ""))
     }
 
-    pub fn iter<'a>(&'a self) -> MemtableIterator<'a> {
-        MemtableIterator {
-            _tbl: self,
-            skipmapiter: self.map.iter(),
-        }
+    pub fn iter(&self) -> MemtableIterator {
+        MemtableIterator { skipmapiter: self.map.iter() }
     }
 }
 
-pub struct MemtableIterator<'a> {
-    _tbl: &'a MemTable,
+pub struct MemtableIterator {
     skipmapiter: SkipMapIter,
 }
 
-impl<'a> LdbIterator for MemtableIterator<'a> {
+impl LdbIterator for MemtableIterator {
     fn advance(&mut self) -> bool {
         // Make sure this is actually needed.
         let (mut key, mut val) = (vec![], vec![]);
@@ -166,7 +162,7 @@ fn shift_left(s: &mut Vec<u8>, mid: usize) {
 mod tests {
     use super::*;
     use key_types::*;
-    use test_util::LdbIteratorIter;
+    use test_util::{test_iterator_properties, LdbIteratorIter};
     use types::*;
     use options::Options;
 
@@ -332,5 +328,20 @@ mod tests {
         assert_eq!(tag, 123 << 8 | 1);
         assert_eq!(vallen, 3);
         assert_eq!(&key[valoff..valoff + vallen], vec![4, 5, 6].as_slice());
+    }
+
+    #[test]
+    fn test_memtable_iterator_behavior() {
+        let mut mt = MemTable::new(Options::default());
+        let entries = vec![(115, "abc", "122"),
+                           (120, "abc", "123"),
+                           (121, "abd", "124"),
+                           (123, "abf", "126")];
+
+        for e in entries.iter() {
+            mt.add(e.0, ValueType::TypeValue, e.1.as_bytes(), e.2.as_bytes());
+        }
+
+        test_iterator_properties(mt.iter());
     }
 }
