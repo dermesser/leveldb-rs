@@ -1,7 +1,9 @@
 use types::{current_key_val, LdbIterator};
 use cmp::{Cmp, DefaultCmp};
+
 use std::cmp::Ordering;
 
+/// TestLdbIter is an LdbIterator over a vector, to be used for testing purposes.
 pub struct TestLdbIter<'a> {
     v: Vec<(&'a [u8], &'a [u8])>,
     ix: usize,
@@ -88,6 +90,8 @@ impl<'a, It: LdbIterator> Iterator for LdbIteratorIter<'a, It> {
 /// This shared test takes an iterator with exactly four elements and tests that it fulfills the
 /// generic iterator properties. Every iterator defined in this code base should pass this test.
 pub fn test_iterator_properties<It: LdbIterator>(mut it: It) {
+    time_test!("iterator-properties");
+
     assert!(!it.valid());
     assert!(it.advance());
     assert!(it.valid());
@@ -119,6 +123,7 @@ pub fn test_iterator_properties<It: LdbIterator>(mut it: It) {
     assert!(!it.valid());
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -132,11 +137,16 @@ mod tests {
     }
 
     #[test]
-    fn test_test_util_properties() {
-        let v = vec![("abc".as_bytes(), "def".as_bytes()),
+    fn test_test_util_ldbiter_properties() {
+        time_test!();
+        let v;
+        {
+            time_test!("init");
+            v = vec![("abc".as_bytes(), "def".as_bytes()),
                      ("abd".as_bytes(), "deg".as_bytes()),
                      ("abe".as_bytes(), "deg".as_bytes()),
                      ("abf".as_bytes(), "deg".as_bytes())];
+        }
         test_iterator_properties(TestLdbIter::new(v));
     }
 }

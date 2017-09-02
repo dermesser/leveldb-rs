@@ -4,6 +4,8 @@ extern crate crc;
 extern crate integer_encoding;
 extern crate libc;
 extern crate rand;
+#[macro_use]
+extern crate time_test;
 
 mod block;
 mod blockhandle;
@@ -26,11 +28,7 @@ mod snapshot;
 mod table_builder;
 mod table_cache;
 mod table_reader;
+mod test_util;
 mod types;
 mod version_edit;
 mod write_batch;
-
-mod test_util;
-
-#[cfg(test)]
-mod tests {}
