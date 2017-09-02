@@ -4,6 +4,7 @@ use options::Options;
 use types::LdbIterator;
 use rand::{Rng, SeedableRng, StdRng};
 
+use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::mem::{replace, size_of};
 use std::rc::Rc;
@@ -35,7 +36,7 @@ struct InnerSkipMap {
 }
 
 pub struct SkipMap {
-    map: Rc<InnerSkipMap>,
+    map: Rc<RefCell<InnerSkipMap>>,
 }
 
 impl SkipMap {
@@ -51,7 +52,7 @@ impl SkipMap {
         s.resize(MAX_HEIGHT, None);
 
         SkipMap {
-            map: Rc::new(InnerSkipMap {
+            map: Rc::new(RefCell::new(InnerSkipMap {
                 head: Box::new(Node {
                     skips: s,
                     next: None,
@@ -62,27 +63,29 @@ impl SkipMap {
                 len: 0,
                 approx_mem: size_of::<Self>() + MAX_HEIGHT * size_of::<Option<*mut Node>>(),
                 opt: opt,
-            }),
+            })),
         }
     }
 
     pub fn len(&self) -> usize {
-        self.map.len
+        self.map.borrow().len
     }
     pub fn approx_memory(&self) -> usize {
-        self.map.approx_mem
+        self.map.borrow().approx_mem
     }
     pub fn contains(&self, key: &[u8]) -> bool {
-        self.map.contains(key)
+        self.map.borrow().contains(key)
     }
     pub fn insert(&mut self, key: Vec<u8>, val: Vec<u8>) {
-        Rc::get_mut(&mut self.map).unwrap().insert(key, val);
+        // TODO: Possibly wrap into Mutex.
+        self.map.borrow_mut().insert(key, val);
+        // Rc::get_mut(&mut self.map).unwrap().insert(key, val);
     }
 
     pub fn iter(&self) -> SkipMapIter {
         SkipMapIter {
             map: self.map.clone(),
-            current: self.map.head.as_ref() as *const Node,
+            current: self.map.borrow().head.as_ref() as *const Node,
         }
     }
 }
@@ -280,7 +283,7 @@ impl InnerSkipMap {
 }
 
 pub struct SkipMapIter {
-    map: Rc<InnerSkipMap>,
+    map: Rc<RefCell<InnerSkipMap>>,
     current: *const Node,
 }
 
@@ -303,10 +306,10 @@ impl LdbIterator for SkipMapIter {
         r
     }
     fn reset(&mut self) {
-        self.current = self.map.head.as_ref();
+        self.current = self.map.borrow().head.as_ref();
     }
     fn seek(&mut self, key: &[u8]) {
-        if let Some(node) = self.map.get_greater_or_equal(key) {
+        if let Some(node) = self.map.borrow().get_greater_or_equal(key) {
             self.current = node as *const Node;
             return;
         }
@@ -331,7 +334,9 @@ impl LdbIterator for SkipMapIter {
     fn prev(&mut self) -> bool {
         // Going after the original implementation here; we just seek to the node before current().
         if self.valid() {
-            if let Some(prev) = self.map.get_next_smaller(unsafe { &(*self.current).key }) {
+            if let Some(prev) = self.map
+                .borrow()
+                .get_next_smaller(unsafe { &(*self.current).key }) {
                 self.current = prev as *const Node;
                 if !prev.key.is_empty() {
                     return true;
@@ -366,7 +371,7 @@ pub mod tests {
     fn test_insert() {
         let skm = make_skipmap();
         assert_eq!(skm.len(), 26);
-        skm.map.dbg_print();
+        skm.map.borrow().dbg_print();
     }
 
     #[test]
@@ -393,19 +398,24 @@ pub mod tests {
     #[test]
     fn test_find() {
         let skm = make_skipmap();
-        assert_eq!(skm.map.get_greater_or_equal(&"abf".as_bytes().to_vec()).unwrap().key,
+        assert_eq!(skm.map.borrow().get_greater_or_equal(&"abf".as_bytes().to_vec()).unwrap().key,
                    "abf".as_bytes().to_vec());
-        assert!(skm.map.get_greater_or_equal(&"ab{".as_bytes().to_vec()).is_none());
-        assert_eq!(skm.map.get_greater_or_equal(&"aaa".as_bytes().to_vec()).unwrap().key,
+        assert!(skm.map.borrow().get_greater_or_equal(&"ab{".as_bytes().to_vec()).is_none());
+        assert_eq!(skm.map.borrow().get_greater_or_equal(&"aaa".as_bytes().to_vec()).unwrap().key,
                    "aba".as_bytes().to_vec());
-        assert_eq!(skm.map.get_greater_or_equal(&"ab".as_bytes()).unwrap().key.as_slice(),
+        assert_eq!(skm.map.borrow().get_greater_or_equal(&"ab".as_bytes()).unwrap().key.as_slice(),
                    "aba".as_bytes());
-        assert_eq!(skm.map.get_greater_or_equal(&"abc".as_bytes()).unwrap().key.as_slice(),
+        assert_eq!(skm.map
+                       .borrow()
+                       .get_greater_or_equal(&"abc".as_bytes())
+                       .unwrap()
+                       .key
+                       .as_slice(),
                    "abc".as_bytes());
-        assert!(skm.map.get_next_smaller(&"ab0".as_bytes()).is_none());
-        assert_eq!(skm.map.get_next_smaller(&"abd".as_bytes()).unwrap().key.as_slice(),
+        assert!(skm.map.borrow().get_next_smaller(&"ab0".as_bytes()).is_none());
+        assert_eq!(skm.map.borrow().get_next_smaller(&"abd".as_bytes()).unwrap().key.as_slice(),
                    "abc".as_bytes());
-        assert_eq!(skm.map.get_next_smaller(&"ab{".as_bytes()).unwrap().key.as_slice(),
+        assert_eq!(skm.map.borrow().get_next_smaller(&"ab{".as_bytes()).unwrap().key.as_slice(),
                    "abz".as_bytes());
     }
 
@@ -502,5 +512,22 @@ pub mod tests {
         iter.prev();
         assert_eq!(current_key_val(&iter).unwrap(),
                    ("abb".as_bytes().to_vec(), "def".as_bytes().to_vec()));
+    }
+
+    #[test]
+    fn test_skipmap_iterator_concurrent_insert() {
+        // Asserts that the map can be mutated while an iterator exists; this is intentional.
+        let mut skm = make_skipmap();
+        let mut iter = skm.iter();
+
+        assert!(iter.advance());
+        skm.insert("abccc".as_bytes().to_vec(), "defff".as_bytes().to_vec());
+        // Assert that value inserted after obtaining iterator is present.
+        for (k, _) in LdbIteratorIter::wrap(&mut iter) {
+            if k == "abccc".as_bytes() {
+                return;
+            }
+        }
+        panic!("abccc not found in map.");
     }
 }
