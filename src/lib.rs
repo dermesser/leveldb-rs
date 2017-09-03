@@ -31,4 +31,5 @@ mod table_reader;
 mod test_util;
 mod types;
 mod version_edit;
+mod version_set;
 mod write_batch;
