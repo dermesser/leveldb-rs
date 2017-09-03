@@ -3,7 +3,7 @@ use options::Options;
 use types::{current_key_val, LdbIterator};
 
 use std::cmp::Ordering;
-use std::sync::Arc;
+use std::rc::Rc;
 
 // Warning: This module is kinda messy. The original implementation is
 // not that much better though :-)
@@ -27,7 +27,7 @@ pub struct MergingIter {
     iters: Vec<Box<LdbIterator>>,
     current: Option<usize>,
     direction: Direction,
-    cmp: Arc<Box<Cmp>>,
+    cmp: Rc<Box<Cmp>>,
 }
 
 impl MergingIter {

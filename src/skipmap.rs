@@ -8,7 +8,6 @@ use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::mem::{replace, size_of};
 use std::rc::Rc;
-use std::sync::Arc;
 
 const MAX_HEIGHT: usize = 12;
 const BRANCHING_FACTOR: u32 = 4;
@@ -42,7 +41,7 @@ pub struct SkipMap {
 impl SkipMap {
     /// Returns a SkipMap that wraps the comparator from opt inside a MemtableKeyCmp
     pub fn new_memtable_map(mut opt: Options) -> SkipMap {
-        opt.cmp = Arc::new(Box::new(MemtableKeyCmp(opt.cmp.clone())));
+        opt.cmp = Rc::new(Box::new(MemtableKeyCmp(opt.cmp.clone())));
         SkipMap::new(opt)
     }
 

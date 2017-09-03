@@ -12,6 +12,7 @@ use table_builder::{self, Footer};
 use types::{current_key_val, LdbIterator};
 
 use std::cmp::Ordering;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use integer_encoding::{FixedInt, FixedIntWriter};
@@ -129,7 +130,7 @@ impl Table {
     /// a different comparator (internal_key_cmp) and a different filter policy
     /// (InternalFilterPolicy) are used.
     pub fn new(mut opt: Options, file: Arc<Box<RandomAccess>>, size: usize) -> Result<Table> {
-        opt.cmp = Arc::new(Box::new(InternalKeyCmp(opt.cmp.clone())));
+        opt.cmp = Rc::new(Box::new(InternalKeyCmp(opt.cmp.clone())));
         opt.filter_policy = filter::InternalFilterPolicy::new(opt.filter_policy);
         let t = try!(Table::new_raw(opt, file, size));
         Ok(t)

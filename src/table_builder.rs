@@ -6,9 +6,9 @@ use filter_block::FilterBlockBuilder;
 use key_types::InternalKey;
 use options::{CompressionType, Options};
 
-use std::io::Write;
 use std::cmp::Ordering;
-use std::sync::Arc;
+use std::io::Write;
+use std::rc::Rc;
 
 use crc::crc32;
 use crc::Hasher32;
@@ -104,7 +104,7 @@ impl<'a, Dst: Write> TableBuilder<'a, Dst> {
     /// The comparator in opt will be wrapped in a InternalKeyCmp, and the filter policy
     /// in an InternalFilterPolicy.
     pub fn new(mut opt: Options, dst: Dst) -> TableBuilder<'a, Dst> {
-        opt.cmp = Arc::new(Box::new(InternalKeyCmp(opt.cmp.clone())));
+        opt.cmp = Rc::new(Box::new(InternalKeyCmp(opt.cmp.clone())));
         opt.filter_policy = InternalFilterPolicy::new(opt.filter_policy);
         TableBuilder::new_raw(opt, dst)
     }

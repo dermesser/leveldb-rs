@@ -6,7 +6,7 @@ use types::{current_key_val, LdbIterator, SequenceNumber, ValueType};
 use skipmap::{SkipMap, SkipMapIter};
 use options::Options;
 
-use std::sync::Arc;
+use std::rc::Rc;
 
 use integer_encoding::FixedInt;
 
@@ -21,7 +21,7 @@ impl MemTable {
     /// Returns a new MemTable.
     /// This wraps opt.cmp inside a MemtableKey-specific comparator.
     pub fn new(mut opt: Options) -> MemTable {
-        opt.cmp = Arc::new(Box::new(MemtableKeyCmp(opt.cmp.clone())));
+        opt.cmp = Rc::new(Box::new(MemtableKeyCmp(opt.cmp.clone())));
         MemTable::new_raw(opt)
     }
 

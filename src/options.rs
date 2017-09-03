@@ -7,7 +7,8 @@ use table_reader::TableBlock;
 use types::SequenceNumber;
 
 use std::default::Default;
-use std::sync::{Arc, Mutex};
+use std::rc::Rc;
+use std::sync::Mutex;
 
 const KB: usize = 1 << 10;
 const MB: usize = KB * KB;
@@ -35,15 +36,15 @@ pub fn int_to_compressiontype(i: u32) -> Option<CompressionType> {
 ///
 #[derive(Clone)]
 pub struct Options {
-    pub cmp: Arc<Box<Cmp>>,
-    pub env: Arc<Box<Env>>,
+    pub cmp: Rc<Box<Cmp>>,
+    pub env: Rc<Box<Env>>,
     pub create_if_missing: bool,
     pub error_if_exists: bool,
     pub paranoid_checks: bool,
     // pub logger: Logger,
     pub write_buffer_size: usize,
     pub max_open_files: usize,
-    pub block_cache: Arc<Mutex<Cache<TableBlock>>>,
+    pub block_cache: Rc<Mutex<Cache<TableBlock>>>,
     pub block_size: usize,
     pub block_restart_interval: usize,
     pub compression_type: CompressionType,
@@ -54,15 +55,15 @@ pub struct Options {
 impl Default for Options {
     fn default() -> Options {
         Options {
-            cmp: Arc::new(Box::new(DefaultCmp)),
-            env: Arc::new(Box::new(disk_env::PosixDiskEnv::new())),
+            cmp: Rc::new(Box::new(DefaultCmp)),
+            env: Rc::new(Box::new(disk_env::PosixDiskEnv::new())),
             create_if_missing: true,
             error_if_exists: false,
             paranoid_checks: false,
             write_buffer_size: WRITE_BUFFER_SIZE,
             max_open_files: 1 << 10,
             // 2000 elements by default
-            block_cache: Arc::new(Mutex::new(Cache::new(BLOCK_CACHE_CAPACITY / BLOCK_MAX_SIZE))),
+            block_cache: Rc::new(Mutex::new(Cache::new(BLOCK_CACHE_CAPACITY / BLOCK_MAX_SIZE))),
             block_size: BLOCK_MAX_SIZE,
             block_restart_interval: 16,
             reuse_logs: false,
@@ -79,12 +80,12 @@ impl Options {
     /// If the comparator used differs from the one used when writing a database that is being
     /// opened, the library is free to panic.
     pub fn set_comparator(&mut self, c: Box<Cmp>) {
-        self.cmp = Arc::new(c);
+        self.cmp = Rc::new(c);
     }
 
     /// Set the environment to use. The default is PosixDiskEnv.
     pub fn set_env(&mut self, e: Box<Env>) {
-        self.env = Arc::new(e);
+        self.env = Rc::new(e);
     }
 }
 
