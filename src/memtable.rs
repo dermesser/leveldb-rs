@@ -69,6 +69,8 @@ impl MemTable {
     }
 }
 
+/// MemtableIterator is an iterator over a MemTable. It is mostly concerned with converting to and
+/// from the MemtableKey format used in the inner map (from/to InternalKey format).
 pub struct MemtableIterator {
     skipmapiter: SkipMapIter,
 }
@@ -144,7 +146,10 @@ impl LdbIterator for MemtableIterator {
         }
     }
     fn seek(&mut self, to: &[u8]) {
-        self.skipmapiter.seek(LookupKey::new(to, 0).memtable_key());
+        // We need to assemble the correct memtable key from the supplied InternalKey.
+        let seq = u64::decode_fixed(&to[to.len() - 8..]);
+        let key = LookupKey::new(&to[0..to.len() - 8], seq);
+        self.skipmapiter.seek(key.memtable_key());
     }
 }
 

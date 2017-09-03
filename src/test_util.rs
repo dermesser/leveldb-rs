@@ -103,9 +103,14 @@ pub fn test_iterator_properties<It: LdbIterator>(mut it: It) {
     // fourth (last) element
     assert!(it.advance());
     assert!(it.valid());
+    let fourth = current_key_val(&it);
     // past end is invalid
     assert!(!it.advance());
     assert!(!it.valid());
+
+    it.reset();
+    it.seek(&fourth.as_ref().unwrap().0);
+    assert!(it.valid());
 
     it.reset();
     assert!(!it.valid());
