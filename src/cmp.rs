@@ -123,7 +123,7 @@ impl Cmp for InternalKeyCmp {
 
 impl InternalKeyCmp {
     /// cmp_inner compares a and b using the underlying comparator (the "user comparator").
-    fn cmp_inner(&self, a: &[u8], b: &[u8]) -> Ordering {
+    pub fn cmp_inner(&self, a: &[u8], b: &[u8]) -> Ordering {
         self.0.cmp(a, b)
     }
 }
