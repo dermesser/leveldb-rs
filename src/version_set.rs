@@ -362,14 +362,14 @@ impl LdbIterator for VersionIter {
 }
 
 /// key_is_after_file returns true if the given user key is larger than the largest key in f.
-fn key_is_after_file(cmp: &InternalKeyCmp, key: &[u8], f: &FileMetaHandle) -> bool {
-    let (_, _, ulargest) = parse_internal_key(&(*f).largest);
+fn key_is_after_file<'a>(cmp: &InternalKeyCmp, key: UserKey<'a>, f: &FileMetaHandle) -> bool {
+    let ulargest = parse_internal_key(&(*f).largest).2;
     !key.is_empty() && cmp.cmp_inner(key, ulargest) == Ordering::Greater
 }
 
 /// key_is_before_file returns true if the given user key is larger than the largest key in f.
-fn key_is_before_file(cmp: &InternalKeyCmp, key: &[u8], f: &FileMetaHandle) -> bool {
-    let (_, _, usmallest) = parse_internal_key(&(*f).smallest);
+fn key_is_before_file<'a>(cmp: &InternalKeyCmp, key: UserKey<'a>, f: &FileMetaHandle) -> bool {
+    let usmallest = parse_internal_key(&(*f).smallest).2;
     !key.is_empty() && cmp.cmp_inner(key, usmallest) == Ordering::Less
 }
 
@@ -417,4 +417,71 @@ fn some_file_overlaps_range<'a, 'b>(cmp: &InternalKeyCmp,
         }
     }
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cmp::DefaultCmp;
+
+    fn new_file(num: u64, smallest: &[u8], largest: &[u8]) -> FileMetaHandle {
+        Rc::new(FileMetaData {
+            allowed_seeks: 10,
+            size: 163840,
+            num: num,
+            smallest: LookupKey::new(smallest, MAX_SEQUENCE_NUMBER).internal_key().to_vec(),
+            largest: LookupKey::new(largest, 0).internal_key().to_vec(),
+        })
+    }
+
+    #[test]
+    fn test_version_key_ordering() {
+        time_test!();
+        let fmh = new_file(1, &[1, 0, 0], &[2, 0, 0]);
+        let cmp = InternalKeyCmp(Rc::new(Box::new(DefaultCmp)));
+
+        // Keys before file.
+        for k in &[&[0][..], &[1], &[1, 0], &[0, 9, 9, 9]] {
+            assert!(key_is_before_file(&cmp, k, &fmh));
+            assert!(!key_is_after_file(&cmp, k, &fmh));
+        }
+        // Keys in file.
+        for k in &[&[1, 0, 0][..], &[1, 0, 1], &[1, 2, 3, 4], &[1, 9, 9], &[2, 0, 0]] {
+            assert!(!key_is_before_file(&cmp, k, &fmh));
+            assert!(!key_is_after_file(&cmp, k, &fmh));
+        }
+        // Keys after file.
+        for k in &[&[2, 0, 1][..], &[9, 9, 9], &[9, 9, 9, 9]] {
+            assert!(!key_is_before_file(&cmp, k, &fmh));
+            assert!(key_is_after_file(&cmp, k, &fmh));
+        }
+    }
+
+    #[test]
+    fn test_version_file_overlaps() {
+        time_test!();
+
+        let files_disjoint = [new_file(1, &[2, 0, 0], &[3, 0, 0]),
+                              new_file(2, &[3, 0, 1], &[4, 0, 0]),
+                              new_file(3, &[4, 0, 1], &[5, 0, 0])];
+        let files_joint = [new_file(1, &[2, 0, 0], &[3, 0, 0]),
+                           new_file(2, &[2, 5, 0], &[4, 0, 0]),
+                           new_file(3, &[3, 5, 1], &[5, 0, 0])];
+        let cmp = InternalKeyCmp(Rc::new(Box::new(DefaultCmp)));
+
+        assert!(some_file_overlaps_range(&cmp, &files_joint, &[2, 5, 0], &[3, 1, 0]));
+        assert!(some_file_overlaps_range(&cmp, &files_joint, &[2, 5, 0], &[7, 0, 0]));
+        assert!(some_file_overlaps_range(&cmp, &files_joint, &[0, 0], &[2, 0, 0]));
+        assert!(some_file_overlaps_range(&cmp, &files_joint, &[0, 0], &[7, 0, 0]));
+        assert!(!some_file_overlaps_range(&cmp, &files_joint, &[0, 0], &[0, 5]));
+        assert!(!some_file_overlaps_range(&cmp, &files_joint, &[6, 0], &[7, 5]));
+
+        assert!(some_file_overlaps_range_disjoint(&cmp, &files_disjoint, &[2, 0, 1], &[2, 5, 0]));
+        assert!(some_file_overlaps_range_disjoint(&cmp, &files_disjoint, &[3, 0, 1], &[4, 9, 0]));
+        assert!(some_file_overlaps_range_disjoint(&cmp, &files_disjoint, &[2, 0, 1], &[6, 5, 0]));
+        assert!(some_file_overlaps_range_disjoint(&cmp, &files_disjoint, &[0, 0, 1], &[2, 5, 0]));
+        assert!(some_file_overlaps_range_disjoint(&cmp, &files_disjoint, &[0, 0, 1], &[6, 5, 0]));
+        assert!(!some_file_overlaps_range_disjoint(&cmp, &files_disjoint, &[0, 0, 1], &[0, 1]));
+        assert!(!some_file_overlaps_range_disjoint(&cmp, &files_disjoint, &[6, 0, 1], &[7, 0, 1]));
+    }
 }
