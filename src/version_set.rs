@@ -1,5 +1,6 @@
 
 use cmp::{Cmp, InternalKeyCmp};
+use error::Result;
 use key_types::{parse_internal_key, InternalKey, LookupKey, UserKey};
 use table_cache::TableCache;
 use table_reader::TableIterator;
@@ -17,7 +18,7 @@ type FileMetaHandle = Rc<FileMetaData>;
 /// Contains statistics about seeks occurred in a file.
 struct GetStats {
     file: Option<FileMetaHandle>,
-    level: i32,
+    level: usize,
 }
 
 struct Version {
@@ -26,7 +27,7 @@ struct Version {
     files: [Vec<FileMetaHandle>; NUM_LEVELS],
 
     file_to_compact: Option<FileMetaHandle>,
-    file_to_compact_lvl: i32,
+    file_to_compact_lvl: usize,
 }
 
 impl Version {
@@ -37,6 +38,158 @@ impl Version {
             files: Default::default(),
             file_to_compact: None,
             file_to_compact_lvl: 0,
+        }
+    }
+
+    /// get_full_impl does the same as get(), but implements the entire logic itself instead of
+    /// delegating some of it to get_overlapping().
+    #[allow(unused_assignments)]
+    fn get_full_impl(&mut self, key: &LookupKey) -> Result<Option<(Vec<u8>, GetStats)>> {
+        let ikey = key.internal_key();
+        let ukey = key.user_key();
+        let icmp = InternalKeyCmp(self.user_cmp.clone());
+        let mut stats = GetStats {
+            file: None,
+            level: 0,
+        };
+
+        // Search for key, starting at the lowest level and working upwards.
+        for level in 0..NUM_LEVELS {
+            let files = &self.files[level];
+            let mut to_search = vec![];
+
+            if level == 0 {
+                to_search.reserve(files.len());
+                for f in files {
+                    let (fsmallest, flargest) = (parse_internal_key(&(*f).smallest).2,
+                                                 parse_internal_key(&(*f).largest).2);
+                    if self.user_cmp.cmp(ukey, fsmallest) >= Ordering::Equal &&
+                       self.user_cmp.cmp(ukey, flargest) <= Ordering::Equal {
+                        to_search.push(f.clone());
+                    }
+                }
+                to_search.sort_by(|a, b| a.num.cmp(&b.num));
+            } else {
+                let ix = find_file(&icmp, files, ikey);
+                if ix < files.len() {
+                    let fsmallest = parse_internal_key(&(*files[ix]).smallest).2;
+                    if self.user_cmp.cmp(ukey, fsmallest) >= Ordering::Equal {
+                        to_search.push(files[ix].clone());
+                    }
+                }
+            }
+
+            if files.is_empty() {
+                continue;
+            }
+
+            let mut last_read = None;
+            let mut last_read_level: usize = 0;
+            for f in to_search {
+                if last_read.is_some() && stats.file.is_none() {
+                    stats.file = last_read.clone();
+                    stats.level = last_read_level;
+                }
+                last_read_level = level;
+                last_read = Some(f.clone());
+
+                let val = Rc::get_mut(&mut self.table_cache).unwrap().get((*f).num, ikey)?;
+                return Ok(val.map(|v| (v, stats)));
+            }
+        }
+        Ok(None)
+    }
+
+    /// get returns the value for the specified key using the persistent tables contained in this
+    /// Version.
+    #[allow(unused_assignments)]
+    fn get(&mut self, key: &LookupKey) -> Result<Option<(Vec<u8>, GetStats)>> {
+        let levels = self.get_overlapping(key);
+        let ikey = key.internal_key();
+        let mut stats = GetStats {
+            file: None,
+            level: 0,
+        };
+
+        for level in 0..levels.len() {
+            let files = &levels[level];
+            let mut last_read = None;
+            let mut last_read_level: usize = 0;
+            for f in files {
+                if last_read.is_some() && stats.file.is_none() {
+                    stats.file = last_read.clone();
+                    stats.level = last_read_level;
+                }
+                last_read_level = level;
+                last_read = Some(f.clone());
+
+                let val = Rc::get_mut(&mut self.table_cache).unwrap().get((*f).num, ikey)?;
+                return Ok(val.map(|v| (v, stats)));
+            }
+        }
+        Ok(None)
+    }
+
+    /// get_overlapping returns the files overlapping key in each level.
+    fn get_overlapping(&self, key: &LookupKey) -> [Vec<FileMetaHandle>; NUM_LEVELS] {
+        let mut levels: [Vec<FileMetaHandle>; NUM_LEVELS] = Default::default();
+        let ikey = key.internal_key();
+        let ukey = key.user_key();
+
+        let files = &self.files[0];
+        levels[0].reserve(files.len());
+        for f in files {
+            let (fsmallest, flargest) = (parse_internal_key(&(*f).smallest).2,
+                                         parse_internal_key(&(*f).largest).2);
+            if self.user_cmp.cmp(ukey, fsmallest) >= Ordering::Equal &&
+               self.user_cmp.cmp(ukey, flargest) <= Ordering::Equal {
+                levels[0].push(f.clone());
+            }
+        }
+        levels[0].sort_by(|a, b| a.num.cmp(&b.num));
+
+        let icmp = InternalKeyCmp(self.user_cmp.clone());
+        for level in 1..NUM_LEVELS {
+            let files = &self.files[level];
+            let ix = find_file(&icmp, files, ikey);
+            if ix < files.len() {
+                let fsmallest = parse_internal_key(&(*files[ix]).smallest).2;
+                if self.user_cmp.cmp(ukey, fsmallest) >= Ordering::Equal {
+                    levels[level].push(files[ix].clone());
+                }
+            }
+        }
+
+        levels
+    }
+
+    /// record_read_sample returns true if there is a new file to be compacted. It counts the
+    /// number of files overlapping a key, and which level contains the first overlap.
+    #[allow(unused_assignments)]
+    fn record_read_sample(&mut self, key: &LookupKey) -> bool {
+        let levels = self.get_overlapping(key);
+        let mut contained_in = 0;
+        let mut i = 0;
+        let mut first_file = None;
+        let mut first_file_level = None;
+        for level in &levels {
+            if !level.is_empty() {
+                if first_file.is_none() && first_file_level.is_none() {
+                    first_file = Some(level[0].clone());
+                    first_file_level = Some(i);
+                }
+            }
+            contained_in += level.len();
+            i += 1;
+        }
+
+        if contained_in > 1 {
+            self.update_stats(GetStats {
+                file: first_file,
+                level: first_file_level.unwrap_or(0),
+            })
+        } else {
+            false
         }
     }
 
@@ -83,16 +236,16 @@ impl Version {
         let (mut ubegin, mut uend) = (parse_internal_key(begin).2.to_vec(),
                                       parse_internal_key(end).2.to_vec());
 
-        'outer: loop {
+        loop {
             'inner: for f in self.files[level].iter() {
                 let ((_, _, fsmallest), (_, _, flargest)) = (parse_internal_key(&(*f).smallest),
                                                              parse_internal_key(&(*f).largest));
                 // Skip files that are not overlapping.
                 if !ubegin.is_empty() && self.user_cmp.cmp(flargest, &ubegin) == Ordering::Less {
-                    continue;
+                    continue 'inner;
                 } else if !uend.is_empty() &&
                           self.user_cmp.cmp(fsmallest, &uend) == Ordering::Greater {
-                    continue;
+                    continue 'inner;
                 } else {
                     inputs.push(f.clone());
                     // In level 0, files may overlap each other. Check if the new file begins

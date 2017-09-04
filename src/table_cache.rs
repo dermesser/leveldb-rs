@@ -4,6 +4,7 @@
 
 use cache::{self, Cache};
 use error::Result;
+use key_types::InternalKey;
 use options::Options;
 use table_reader::Table;
 
@@ -38,6 +39,15 @@ impl TableCache {
             dbname: String::from(db),
             cache: Cache::new(entries),
             opts: opt,
+        }
+    }
+
+    pub fn get<'a>(&mut self, file_num: u64, key: InternalKey<'a>) -> Result<Option<Vec<u8>>> {
+        let tbl = self.get_table(file_num)?;
+        if let Some(r) = tbl.get(key) {
+            Ok(Some(r))
+        } else {
+            Ok(None)
         }
     }
 
