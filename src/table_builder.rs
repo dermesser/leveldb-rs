@@ -200,7 +200,7 @@ impl<'a, Dst: Write> TableBuilder<'a, Dst> {
         handle
     }
 
-    pub fn finish(mut self) {
+    pub fn finish(mut self) -> usize {
         assert!(self.data_block.is_some());
         let ctype = self.opt.compression_type;
 
@@ -242,6 +242,7 @@ impl<'a, Dst: Write> TableBuilder<'a, Dst> {
         footer.encode(&mut buf);
 
         self.offset += self.dst.write(&buf[..]).unwrap();
+        self.offset
     }
 }
 
