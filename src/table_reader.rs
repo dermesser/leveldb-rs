@@ -13,7 +13,6 @@ use types::{current_key_val, LdbIterator};
 
 use std::cmp::Ordering;
 use std::rc::Rc;
-use std::sync::Arc;
 
 use integer_encoding::{FixedInt, FixedIntWriter};
 use crc::crc32::{self, Hasher32};
@@ -70,7 +69,7 @@ impl TableBlock {
 
 #[derive(Clone)]
 pub struct Table {
-    file: Arc<Box<RandomAccess>>,
+    file: Rc<Box<RandomAccess>>,
     file_size: usize,
     cache_id: cache::CacheID,
 
@@ -83,7 +82,7 @@ pub struct Table {
 
 impl Table {
     /// Creates a new table reader operating on unformatted keys (i.e., UserKey).
-    fn new_raw(opt: Options, file: Arc<Box<RandomAccess>>, size: usize) -> Result<Table> {
+    fn new_raw(opt: Options, file: Rc<Box<RandomAccess>>, size: usize) -> Result<Table> {
         let footer = try!(read_footer(file.as_ref().as_ref(), size));
         let indexblock =
             try!(TableBlock::read_block(opt.clone(), file.as_ref().as_ref(), &footer.index));
@@ -129,7 +128,7 @@ impl Table {
     /// Creates a new table reader operating on internal keys (i.e., InternalKey). This means that
     /// a different comparator (internal_key_cmp) and a different filter policy
     /// (InternalFilterPolicy) are used.
-    pub fn new(mut opt: Options, file: Arc<Box<RandomAccess>>, size: usize) -> Result<Table> {
+    pub fn new(mut opt: Options, file: Rc<Box<RandomAccess>>, size: usize) -> Result<Table> {
         opt.cmp = Rc::new(Box::new(InternalKeyCmp(opt.cmp.clone())));
         opt.filter_policy = filter::InternalFilterPolicy::new(opt.filter_policy);
         let t = try!(Table::new_raw(opt, file, size));
@@ -153,7 +152,7 @@ impl Table {
             }
         }
 
-        // Two times as_ref(): First time to get a ref from Arc<>, then one from Box<>.
+        // Two times as_ref(): First time to get a ref from Rc<>, then one from Box<>.
         let b =
             try!(TableBlock::read_block(self.opt.clone(), self.file.as_ref().as_ref(), location));
 
@@ -475,8 +474,8 @@ mod tests {
         (d, size)
     }
 
-    fn wrap_buffer(src: Vec<u8>) -> Arc<Box<RandomAccess>> {
-        Arc::new(Box::new(src))
+    fn wrap_buffer(src: Vec<u8>) -> Rc<Box<RandomAccess>> {
+        Rc::new(Box::new(src))
     }
 
     #[test]

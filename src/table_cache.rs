@@ -10,8 +10,9 @@ use table_reader::Table;
 
 use integer_encoding::FixedIntWriter;
 
+use std::cell::RefCell;
 use std::path::Path;
-use std::sync::Arc;
+use std::rc::Rc;
 
 const DEFAULT_SUFFIX: &str = "ldb";
 
@@ -31,6 +32,8 @@ pub struct TableCache {
     cache: Cache<Table>,
     opts: Options,
 }
+
+pub type SharedTableCache = Rc<RefCell<TableCache>>;
 
 impl TableCache {
     /// Create a new TableCache for the database named `db`, caching up to `entries` tables.
@@ -64,7 +67,7 @@ impl TableCache {
     fn open_table(&mut self, file_num: u64) -> Result<Table> {
         let name = table_name(&self.dbname, file_num, DEFAULT_SUFFIX);
         let path = Path::new(&name);
-        let file = Arc::new(self.opts.env.open_random_access_file(&path)?);
+        let file = Rc::new(self.opts.env.open_random_access_file(&path)?);
         let file_size = self.opts.env.size_of(&path)?;
         // No SSTable file name compatibility.
         let table = Table::new(self.opts.clone(), file, file_size)?;
