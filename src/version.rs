@@ -230,51 +230,52 @@ impl Version {
                                   end: InternalKey<'b>)
                                   -> Vec<FileMetaHandle> {
         assert!(level < NUM_LEVELS);
-        let mut inputs = vec![];
         let (mut ubegin, mut uend) = (parse_internal_key(begin).2.to_vec(),
                                       parse_internal_key(end).2.to_vec());
 
-        let mut done = false;
-        while !done {
-            // By default, only do one search. In the special case outlined below, done is set to
-            // false in order to restart the search from scratch.
-            done = true;
+        loop {
+            match do_search(self, level, ubegin, uend) {
+                (Some((newubegin, newuend)), _) => {
+                    ubegin = newubegin;
+                    uend = newuend;
+                },
+                (None, result) => return result
+            }
+        }
 
-            'inner: for f in self.files[level].iter() {
+        // the actual search happens in this inner function. This is done to enhance the control
+        // flow. It takes the smallest and largest user keys and returns a new pair of user keys if
+        // the search range should be expanded, or a list of overlapping files.
+        fn do_search(myself: &Version, level: usize, ubegin: Vec<u8>, uend: Vec<u8>) -> (Option<(Vec<u8>, Vec<u8>)>, Vec<FileMetaHandle>) {
+            let mut inputs = vec![];
+            for f in myself.files[level].iter() {
                 let ((_, _, fsmallest), (_, _, flargest)) = (parse_internal_key(&(*f).smallest),
                                                              parse_internal_key(&(*f).largest));
                 // Skip files that are not overlapping.
-                if !ubegin.is_empty() && self.user_cmp.cmp(flargest, &ubegin) == Ordering::Less {
-                    continue 'inner;
+                if !ubegin.is_empty() && myself.user_cmp.cmp(flargest, &ubegin) == Ordering::Less {
+                    continue;
                 } else if !uend.is_empty() &&
-                          self.user_cmp.cmp(fsmallest, &uend) == Ordering::Greater {
-                    continue 'inner;
+                          myself.user_cmp.cmp(fsmallest, &uend) == Ordering::Greater {
+                    continue;
                 } else {
                     inputs.push(f.clone());
                     // In level 0, files may overlap each other. Check if the new file begins
-                    // before begin or ends after end, and expand the range, if so. Then, restart
+                    // before ubegin or ends after uend, and expand the range, if so. Then, restart
                     // the search.
                     if level == 0 {
                         if !ubegin.is_empty() &&
-                           self.user_cmp.cmp(fsmallest, &ubegin) == Ordering::Less {
-                            ubegin = fsmallest.to_vec();
-                            inputs.truncate(0);
-                            done = false;
-                            break 'inner;
+                           myself.user_cmp.cmp(fsmallest, &ubegin) == Ordering::Less {
+                            return (Some((fsmallest.to_vec(), uend)), inputs)
                         } else if !uend.is_empty() &&
-                                  self.user_cmp.cmp(flargest, &uend) == Ordering::Greater {
-                            uend = flargest.to_vec();
-                            inputs.truncate(0);
-                            done = false;
-                            break 'inner;
-                        } else {
+                                  myself.user_cmp.cmp(flargest, &uend) == Ordering::Greater {
+                            return (Some((ubegin, flargest.to_vec())), inputs)
                         }
                     }
                 }
             }
+            (None, inputs)
         }
 
-        inputs
     }
 
     fn new_concat_iter(&self, level: usize) -> VersionIter {
