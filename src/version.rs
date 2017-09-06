@@ -513,7 +513,7 @@ mod tests {
                                       ("bba".as_bytes(), "val3".as_bytes())];
         let t2 = write_table(&env, f2, 4, 2);
         // Level 1
-        let f3: &[(&[u8], &[u8])] = &[("caa".as_bytes(), "val1".as_bytes()),
+        let f3: &[(&[u8], &[u8])] = &[("aaa".as_bytes(), "val1".as_bytes()),
                                       ("cab".as_bytes(), "val2".as_bytes()),
                                       ("cba".as_bytes(), "val3".as_bytes())];
         let t3 = write_table(&env, f3, 7, 3);
@@ -542,6 +542,24 @@ mod tests {
         v.files[1] = vec![t3, t4, t5];
         v.files[2] = vec![t6, t7];
         v
+    }
+
+    #[test]
+    fn test_version_overlap_in_level() {
+        let v = make_version();
+
+        for &(level, (k1, k2), want) in &[(0, ("000".as_bytes(), "003".as_bytes()), false),
+                                          (0, ("aa0".as_bytes(), "abx".as_bytes()), true),
+                                          (1, ("012".as_bytes(), "013".as_bytes()), false),
+                                          (1, ("abc".as_bytes(), "def".as_bytes()), true),
+                                          (2, ("xxx".as_bytes(), "xyz".as_bytes()), false),
+                                          (2, ("gac".as_bytes(), "gaz".as_bytes()), true)] {
+            if want {
+                assert!(v.overlap_in_level(level, k1, k2));
+            } else {
+                assert!(!v.overlap_in_level(level, k1, k2));
+            }
+        }
     }
 
     #[test]
@@ -585,6 +603,23 @@ mod tests {
             let r = v.overlapping_inputs(1, from.internal_key(), to.internal_key());
             assert_eq!(r.len(), 0);
         }
+    }
+
+    #[test]
+    fn test_version_record_read_sample() {
+        let mut v = make_version();
+        let k = LookupKey::new("aab".as_bytes(), MAX_SEQUENCE_NUMBER);
+        let only_in_one = LookupKey::new("cax".as_bytes(), MAX_SEQUENCE_NUMBER);
+
+        assert!(!v.record_read_sample(&k));
+        assert!(!v.record_read_sample(&only_in_one));
+
+        for fs in v.files.iter() {
+            for f in fs {
+                f.borrow_mut().allowed_seeks = 0;
+            }
+        }
+        assert!(v.record_read_sample(&k));
     }
 
     #[test]
