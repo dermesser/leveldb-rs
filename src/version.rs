@@ -44,7 +44,7 @@ impl Version {
     /// get_full_impl does the same as get(), but implements the entire logic itself instead of
     /// delegating some of it to get_overlapping().
     #[allow(unused_assignments)]
-    fn get_full_impl(&mut self, key: &LookupKey) -> Result<Option<(Vec<u8>, GetStats)>> {
+    fn get_full_impl(&self, key: &LookupKey) -> Result<Option<(Vec<u8>, GetStats)>> {
         let ikey = key.internal_key();
         let ukey = key.user_key();
         let icmp = InternalKeyCmp(self.user_cmp.clone());
@@ -95,8 +95,15 @@ impl Version {
                 last_read_level = level;
                 last_read = Some(f.clone());
 
-                let val = self.table_cache.borrow_mut().get(f.borrow().num, ikey)?;
-                return Ok(val.map(|v| (v, stats)));
+                // We receive both key and value from the table. Because we're using InternalKey
+                // keys, we now need to check whether the found entry's user key is equal to the
+                // one we're looking for (get() just returns the next-bigger key).
+                if let Ok(Some((k, v))) = self.table_cache.borrow_mut().get(f.borrow().num, ikey) {
+                    if self.user_cmp.cmp(parse_internal_key(&k).2, key.user_key()) ==
+                       Ordering::Equal {
+                        return Ok(Some((v, stats)));
+                    }
+                }
             }
         }
         Ok(None)
@@ -105,7 +112,7 @@ impl Version {
     /// get returns the value for the specified key using the persistent tables contained in this
     /// Version.
     #[allow(unused_assignments)]
-    fn get(&mut self, key: &LookupKey) -> Result<Option<(Vec<u8>, GetStats)>> {
+    fn get(&self, key: &LookupKey) -> Result<Option<(Vec<u8>, GetStats)>> {
         let levels = self.get_overlapping(key);
         let ikey = key.internal_key();
         let mut stats = GetStats {
@@ -125,8 +132,15 @@ impl Version {
                 last_read_level = level;
                 last_read = Some(f.clone());
 
-                let val = self.table_cache.borrow_mut().get(f.borrow().num, ikey)?;
-                return Ok(val.map(|v| (v, stats)));
+                // We receive both key and value from the table. Because we're using InternalKey
+                // keys, we now need to check whether the found entry's user key is equal to the
+                // one we're looking for (get() just returns the next-bigger key).
+                if let Ok(Some((k, v))) = self.table_cache.borrow_mut().get(f.borrow().num, ikey) {
+                    if self.user_cmp.cmp(parse_internal_key(&k).2, key.user_key()) ==
+                       Ordering::Equal {
+                        return Ok(Some((v, stats)));
+                    }
+                }
             }
         }
         Ok(None)
@@ -453,19 +467,25 @@ mod tests {
 
     use cmp::DefaultCmp;
     use env::Env;
+    use error::Result;
     use mem_env::MemEnv;
     use options::Options;
     use table_builder::TableBuilder;
     use table_cache::{table_name, TableCache};
     use types::share;
 
-    fn new_file(num: u64, smallest: &[u8], largest: &[u8]) -> FileMetaHandle {
+    fn new_file(num: u64,
+                smallest: &[u8],
+                smallestix: u64,
+                largest: &[u8],
+                largestix: u64)
+                -> FileMetaHandle {
         share(FileMetaData {
             allowed_seeks: 10,
             size: 163840,
             num: num,
-            smallest: LookupKey::new(smallest, MAX_SEQUENCE_NUMBER).internal_key().to_vec(),
-            largest: LookupKey::new(largest, 0).internal_key().to_vec(),
+            smallest: LookupKey::new(smallest, smallestix).internal_key().to_vec(),
+            largest: LookupKey::new(largest, largestix).internal_key().to_vec(),
         })
     }
 
@@ -481,7 +501,7 @@ mod tests {
         let keys: Vec<Vec<u8>> = contents.iter()
             .map(|&(k, _)| {
                 seq += 1;
-                LookupKey::new(k, seq).internal_key().to_vec()
+                LookupKey::new(k, seq - 1).internal_key().to_vec()
             })
             .collect();
 
@@ -492,8 +512,10 @@ mod tests {
         }
 
         let f = new_file(num,
-                         LookupKey::new(contents[0].0, MAX_SEQUENCE_NUMBER).internal_key(),
-                         LookupKey::new(contents[contents.len() - 1].0, 0).internal_key());
+                         contents[0].0,
+                         startseq,
+                         contents[contents.len() - 1].0,
+                         startseq + (contents.len() - 1) as u64);
         f.borrow_mut().size = tbl.finish() as u64;
         f
     }
@@ -542,6 +564,33 @@ mod tests {
         v.files[1] = vec![t3, t4, t5];
         v.files[2] = vec![t6, t7];
         v
+    }
+
+    #[test]
+    fn test_version_get_simple() {
+        let v = make_version();
+        let cases: &[(&[u8], u64, Result<Option<Vec<u8>>>)] =
+            &[("aaa".as_bytes(), 0, Ok(None)),
+              ("aaa".as_bytes(), 1, Ok(Some("val1".as_bytes().to_vec()))),
+              ("aab".as_bytes(), 100, Ok(Some("val2".as_bytes().to_vec()))),
+              ("daa".as_bytes(), 100, Ok(Some("val1".as_bytes().to_vec()))),
+              ("dab".as_bytes(), 1, Ok(None)),
+              ("dac".as_bytes(), 100, Ok(None)),
+              ("gba".as_bytes(), 100, Ok(Some("val3".as_bytes().to_vec()))),
+              ("gbb".as_bytes(), 100, Ok(None))];
+
+        for ref c in cases {
+            match v.get(&LookupKey::new(c.0, c.1)) {
+                Ok(Some((val, _))) => assert_eq!(c.2.as_ref().unwrap().as_ref().unwrap(), &val),
+                Ok(None) => assert!(c.2.as_ref().unwrap().as_ref().is_none()),
+                Err(_) => assert!(c.2.is_err()),
+            }
+            match v.get_full_impl(&LookupKey::new(c.0, c.1)) {
+                Ok(Some((val, _))) => assert_eq!(c.2.as_ref().unwrap().as_ref().unwrap(), &val),
+                Ok(None) => assert!(c.2.as_ref().unwrap().as_ref().is_none()),
+                Err(_) => assert!(c.2.is_err()),
+            }
+        }
     }
 
     #[test]
@@ -625,7 +674,7 @@ mod tests {
     #[test]
     fn test_version_key_ordering() {
         time_test!();
-        let fmh = new_file(1, &[1, 0, 0], &[2, 0, 0]);
+        let fmh = new_file(1, &[1, 0, 0], 0, &[2, 0, 0], 1);
         let cmp = InternalKeyCmp(Rc::new(Box::new(DefaultCmp)));
 
         // Keys before file.
@@ -649,12 +698,12 @@ mod tests {
     fn test_version_file_overlaps() {
         time_test!();
 
-        let files_disjoint = [new_file(1, &[2, 0, 0], &[3, 0, 0]),
-                              new_file(2, &[3, 0, 1], &[4, 0, 0]),
-                              new_file(3, &[4, 0, 1], &[5, 0, 0])];
-        let files_joint = [new_file(1, &[2, 0, 0], &[3, 0, 0]),
-                           new_file(2, &[2, 5, 0], &[4, 0, 0]),
-                           new_file(3, &[3, 5, 1], &[5, 0, 0])];
+        let files_disjoint = [new_file(1, &[2, 0, 0], 0, &[3, 0, 0], 1),
+                              new_file(2, &[3, 0, 1], 0, &[4, 0, 0], 1),
+                              new_file(3, &[4, 0, 1], 0, &[5, 0, 0], 1)];
+        let files_joint = [new_file(1, &[2, 0, 0], 0, &[3, 0, 0], 1),
+                           new_file(2, &[2, 5, 0], 0, &[4, 0, 0], 1),
+                           new_file(3, &[3, 5, 1], 0, &[5, 0, 0], 1)];
         let cmp = InternalKeyCmp(Rc::new(Box::new(DefaultCmp)));
 
         assert!(some_file_overlaps_range(&cmp, &files_joint, &[2, 5, 0], &[3, 1, 0]));
