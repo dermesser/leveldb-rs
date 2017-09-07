@@ -103,7 +103,7 @@ impl Cmp for InternalKeyCmp {
 
     fn find_shortest_sep(&self, a: &[u8], b: &[u8]) -> Vec<u8> {
         let (_, seqa, keya) = key_types::parse_internal_key(a);
-        let (_, _, keyb) = key_types::parse_internal_key(b);
+        let keyb = key_types::parse_internal_key(b).2;
 
         let sep: Vec<u8> = self.0.find_shortest_sep(keya, keyb);
 
