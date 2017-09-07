@@ -193,10 +193,15 @@ impl Table {
         iter
     }
 
-    /// Retrieve value from table. This function uses the attached filters, so is better suited if
-    /// you frequently look for non-existing values (as it will detect the non-existence of an
-    /// entry in a block without having to load the block).
-    pub fn get<'a>(&self, key: InternalKey<'a>) -> Option<Vec<u8>> {
+    /// Retrieve next-biggest entry for key from table. This function uses the attached filters, so
+    /// is better suited if you frequently look for non-existing values (as it will detect the
+    /// non-existence of an entry in a block without having to load the block).
+    ///
+    /// The caller must check if the returned key is acceptable, as it may not be an exact match
+    /// for key. This is done this way because some key types, like internal keys, will not result
+    /// in an exact match; it depends on other comparators than the one that the table reader knows
+    /// whether a match is acceptable.
+    pub fn get<'a>(&self, key: InternalKey<'a>) -> Option<(Vec<u8>, Vec<u8>)> {
         let mut index_iter = self.indexblock.iter();
         index_iter.seek(key);
 
@@ -231,8 +236,8 @@ impl Table {
         // Go to entry and check if it's the wanted entry.
         iter.seek(key);
         if let Some((k, v)) = current_key_val(&iter) {
-            if self.opt.cmp.cmp(key, &k) == Ordering::Equal {
-                Some(v)
+            if self.opt.cmp.cmp(&k, key) >= Ordering::Equal {
+                Some((k, v))
             } else {
                 None
             }
@@ -449,7 +454,7 @@ mod tests {
         opt.block_size = 32;
         opt.filter_policy = BloomPolicy::new(4);
 
-        let mut i = 0 as u64;
+        let mut i = 1 as u64;
         let data: Vec<(Vec<u8>, &'static str)> = build_data()
             .into_iter()
             .map(|(k, v)| {
@@ -519,19 +524,16 @@ mod tests {
 
         // Go forward again, to last entry.
         while let Some((key, _)) = iter.next() {
-            println!("{:?}", key);
             if key.as_slice() == "zzz".as_bytes() {
                 break;
             }
         }
 
         assert!(iter.valid());
-        println!("{:?}", current_key_val(&iter));
         // backwards count
         let mut j = 0;
 
         while iter.prev() {
-            println!("{:?}", current_key_val(&iter));
             if let Some((k, v)) = current_key_val(&iter) {
                 j += 1;
                 assert_eq!((data[data.len() - 1 - j].0.as_bytes(),
@@ -666,15 +668,17 @@ mod tests {
         let mut _iter = table.iter();
         // Test that all of the table's entries are reachable via get()
         for (k, v) in LdbIteratorIter::wrap(&mut _iter) {
-            assert_eq!(table2.get(&k), Some(v));
+            assert_eq!(table2.get(&k), Some((k, v)));
         }
 
         assert_eq!(table.opt.block_cache.lock().unwrap().count(), 3);
 
+        // test that filters work and don't return anything at all.
         assert!(table.get("aaa".as_bytes()).is_none());
         assert!(table.get("aaaa".as_bytes()).is_none());
         assert!(table.get("aa".as_bytes()).is_none());
         assert!(table.get("abcd".as_bytes()).is_none());
+        assert!(table.get("abb".as_bytes()).is_none());
         assert!(table.get("zzy".as_bytes()).is_none());
         assert!(table.get("zz1".as_bytes()).is_none());
         assert!(table.get("zz{".as_bytes()).is_none());
@@ -700,6 +704,8 @@ mod tests {
             assert_eq!(k.len(), 3 + 8);
         }
 
+        assert!(table.get(LookupKey::new("abc".as_bytes(), 1000).internal_key()).is_some());
+
         let mut iter = table.iter();
 
         loop {
@@ -719,7 +725,6 @@ mod tests {
     #[test]
     fn test_table_reader_checksum() {
         let (mut src, size) = build_table(build_data());
-        println!("{}", size);
 
         src[10] += 1;
 

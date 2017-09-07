@@ -45,13 +45,12 @@ impl TableCache {
         }
     }
 
-    pub fn get<'a>(&mut self, file_num: u64, key: InternalKey<'a>) -> Result<Option<Vec<u8>>> {
+    pub fn get<'a>(&mut self,
+                   file_num: u64,
+                   key: InternalKey<'a>)
+                   -> Result<Option<(Vec<u8>, Vec<u8>)>> {
         let tbl = self.get_table(file_num)?;
-        if let Some(r) = tbl.get(key) {
-            Ok(Some(r))
-        } else {
-            Ok(None)
-        }
+        Ok(tbl.get(key))
     }
 
     /// Return a table from cache, or open the backing file, then cache and return it.
