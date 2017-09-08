@@ -504,6 +504,8 @@ mod tests {
         let cases: &[(&[u8], u64, Result<Option<Vec<u8>>>)] =
             &[("aaa".as_bytes(), 0, Ok(None)),
               ("aaa".as_bytes(), 1, Ok(Some("val1".as_bytes().to_vec()))),
+              ("aaa".as_bytes(), 100, Ok(Some("val1".as_bytes().to_vec()))),
+              ("aab".as_bytes(), 0, Ok(None)),
               ("aab".as_bytes(), 100, Ok(Some("val2".as_bytes().to_vec()))),
               ("daa".as_bytes(), 100, Ok(Some("val1".as_bytes().to_vec()))),
               ("dab".as_bytes(), 1, Ok(None)),
