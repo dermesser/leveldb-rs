@@ -44,6 +44,7 @@ pub struct Options {
     // pub logger: Logger,
     pub write_buffer_size: usize,
     pub max_open_files: usize,
+    pub max_file_size: usize,
     pub block_cache: Rc<Mutex<Cache<TableBlock>>>,
     pub block_size: usize,
     pub block_restart_interval: usize,
@@ -62,6 +63,7 @@ impl Default for Options {
             paranoid_checks: false,
             write_buffer_size: WRITE_BUFFER_SIZE,
             max_open_files: 1 << 10,
+            max_file_size: 2 << 20,
             // 2000 elements by default
             block_cache: Rc::new(Mutex::new(Cache::new(BLOCK_CACHE_CAPACITY / BLOCK_MAX_SIZE))),
             block_size: BLOCK_MAX_SIZE,
