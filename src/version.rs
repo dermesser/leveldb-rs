@@ -1,10 +1,9 @@
 use cmp::{Cmp, InternalKeyCmp};
 use error::Result;
 use key_types::{parse_internal_key, InternalKey, LookupKey, UserKey};
-use table_cache::SharedTableCache;
+use table_cache::TableCache;
 use table_reader::TableIterator;
-use types::{MAX_SEQUENCE_NUMBER, FileMetaData, LdbIterator, Shared};
-use version_set::NUM_LEVELS;
+use types::{MAX_SEQUENCE_NUMBER, NUM_LEVELS, FileMetaData, LdbIterator, Shared};
 
 use std::cmp::Ordering;
 use std::default::Default;
@@ -13,25 +12,25 @@ use std::rc::Rc;
 /// FileMetaHandle is a reference-counted FileMetaData object with interior mutability. This is
 /// necessary to provide a shared metadata container that can be modified while referenced by e.g.
 /// multiple versions.
-type FileMetaHandle = Shared<FileMetaData>;
+pub type FileMetaHandle = Shared<FileMetaData>;
 
 /// Contains statistics about seeks occurred in a file.
-struct GetStats {
+pub struct GetStats {
     file: Option<FileMetaHandle>,
     level: usize,
 }
 
-struct Version {
-    table_cache: SharedTableCache,
+pub struct Version {
+    table_cache: Shared<TableCache>,
     user_cmp: Rc<Box<Cmp>>,
-    files: [Vec<FileMetaHandle>; NUM_LEVELS],
+    pub files: [Vec<FileMetaHandle>; NUM_LEVELS],
 
-    file_to_compact: Option<FileMetaHandle>,
-    file_to_compact_lvl: usize,
+    pub file_to_compact: Option<FileMetaHandle>,
+    pub file_to_compact_lvl: usize,
 }
 
 impl Version {
-    fn new(cache: SharedTableCache, ucmp: Rc<Box<Cmp>>) -> Version {
+    fn new(cache: Shared<TableCache>, ucmp: Rc<Box<Cmp>>) -> Version {
         Version {
             table_cache: cache,
             user_cmp: ucmp,
@@ -273,7 +272,7 @@ struct VersionIter {
     // NOTE: Maybe we need to change this to Rc to support modification of the file set after
     // creation of the iterator. Versions should be immutable, though.
     files: Vec<FileMetaHandle>,
-    cache: SharedTableCache,
+    cache: Shared<TableCache>,
     cmp: InternalKeyCmp,
 
     current: Option<TableIterator>,
@@ -477,7 +476,7 @@ mod tests {
                          startseq,
                          contents[contents.len() - 1].0,
                          startseq + (contents.len() - 1) as u64);
-        f.borrow_mut().size = tbl.finish() as u64;
+        f.borrow_mut().size = tbl.finish();
         f
     }
 
