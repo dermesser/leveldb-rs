@@ -90,8 +90,6 @@ impl<'a, It: LdbIterator> Iterator for LdbIteratorIter<'a, It> {
 /// This shared test takes an iterator with exactly four elements and tests that it fulfills the
 /// generic iterator properties. Every iterator defined in this code base should pass this test.
 pub fn test_iterator_properties<It: LdbIterator>(mut it: It) {
-    time_test!("iterator-properties");
-
     assert!(!it.valid());
     assert!(it.advance());
     assert!(it.valid());

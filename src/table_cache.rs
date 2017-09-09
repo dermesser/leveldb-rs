@@ -7,21 +7,21 @@ use error::Result;
 use key_types::InternalKey;
 use options::Options;
 use table_reader::Table;
+use types::FileNum;
 
 use integer_encoding::FixedIntWriter;
 
-use std::cell::RefCell;
 use std::path::Path;
 use std::rc::Rc;
 
 const DEFAULT_SUFFIX: &str = "ldb";
 
-pub fn table_name(name: &str, num: u64, suff: &str) -> String {
+pub fn table_name(name: &str, num: FileNum, suff: &str) -> String {
     assert!(num > 0);
     format!("{}/{:06}.{}", name, num, suff)
 }
 
-fn filenum_to_key(num: u64) -> cache::CacheKey {
+fn filenum_to_key(num: FileNum) -> cache::CacheKey {
     let mut buf = [0; 16];
     (&mut buf[..]).write_fixedint(num).unwrap();
     buf
@@ -32,8 +32,6 @@ pub struct TableCache {
     cache: Cache<Table>,
     opts: Options,
 }
-
-pub type SharedTableCache = Rc<RefCell<TableCache>>;
 
 impl TableCache {
     /// Create a new TableCache for the database named `db`, caching up to `entries` tables.
@@ -46,7 +44,7 @@ impl TableCache {
     }
 
     pub fn get<'a>(&mut self,
-                   file_num: u64,
+                   file_num: FileNum,
                    key: InternalKey<'a>)
                    -> Result<Option<(Vec<u8>, Vec<u8>)>> {
         let tbl = self.get_table(file_num)?;
@@ -54,7 +52,7 @@ impl TableCache {
     }
 
     /// Return a table from cache, or open the backing file, then cache and return it.
-    pub fn get_table(&mut self, file_num: u64) -> Result<Table> {
+    pub fn get_table(&mut self, file_num: FileNum) -> Result<Table> {
         let key = filenum_to_key(file_num);
         if let Some(t) = self.cache.get(&key) {
             return Ok(t.clone());
@@ -63,7 +61,7 @@ impl TableCache {
     }
 
     /// Open a table on the file system and read it.
-    fn open_table(&mut self, file_num: u64) -> Result<Table> {
+    fn open_table(&mut self, file_num: FileNum) -> Result<Table> {
         let name = table_name(&self.dbname, file_num, DEFAULT_SUFFIX);
         let path = Path::new(&name);
         let file = Rc::new(self.opts.env.open_random_access_file(&path)?);
