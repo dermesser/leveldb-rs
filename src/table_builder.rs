@@ -273,10 +273,12 @@ mod tests {
         opt.block_restart_interval = 3;
         let mut b = TableBuilder::new_raw(opt, &mut d);
 
-        let data = vec![("abc", "def"), ("abd", "dee"), ("bcd", "asa"), ("bsr", "a00")];
+        let data = vec![("abc", "def"), ("abe", "dee"), ("bcd", "asa"), ("dcc", "a00")];
+        let data2 = vec![("abd", "def"), ("abf", "dee"), ("ccd", "asa"), ("dcd", "a00")];
 
-        for &(k, v) in data.iter() {
-            b.add(k.as_bytes(), v.as_bytes());
+        for i in 0..data.len() {
+            b.add(&data[i].0.as_bytes(), &data[i].1.as_bytes());
+            b.add(&data2[i].0.as_bytes(), &data2[i].1.as_bytes());
         }
 
         assert!(b.filter_block.is_some());

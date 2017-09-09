@@ -700,8 +700,9 @@ mod tests {
 
         // Check that we're actually using internal keys
         let mut _iter = table.iter();
-        for (ref k, _) in LdbIteratorIter::wrap(&mut _iter) {
+        for (ref k, ref v) in LdbIteratorIter::wrap(&mut _iter) {
             assert_eq!(k.len(), 3 + 8);
+            assert_eq!(table.get(k).unwrap(), (k.to_vec(), v.to_vec()));
         }
 
         assert!(table.get(LookupKey::new("abc".as_bytes(), 1000).internal_key()).is_some());
