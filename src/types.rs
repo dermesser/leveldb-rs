@@ -90,7 +90,7 @@ pub fn current_key_val<It: LdbIterator + ?Sized>(it: &It) -> Option<(Vec<u8>, Ve
 pub type FileNum = u64;
 
 /// Describes a file on disk.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct FileMetaData {
     // default: size / 16384.
     pub allowed_seeks: isize,
