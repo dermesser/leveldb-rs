@@ -417,29 +417,24 @@ fn some_file_overlaps_range<'a, 'b>(cmp: &InternalKeyCmp,
 }
 
 #[cfg(test)]
-mod tests {
+pub mod testutil {
     use super::*;
-
-    use std::default::Default;
-    use std::path::Path;
-
     use cmp::DefaultCmp;
     use env::Env;
-    use error::Result;
     use mem_env::MemEnv;
-    use merging_iter::MergingIter;
     use options::Options;
     use table_builder::TableBuilder;
-    use table_cache::{table_name, TableCache};
-    use test_util::{test_iterator_properties, LdbIteratorIter};
-    use types::share;
+    use table_cache::table_name;
+    use types::{share, FileMetaData, FileNum};
 
-    fn new_file(num: u64,
-                smallest: &[u8],
-                smallestix: u64,
-                largest: &[u8],
-                largestix: u64)
-                -> FileMetaHandle {
+    use std::path::Path;
+
+    pub fn new_file(num: u64,
+                    smallest: &[u8],
+                    smallestix: u64,
+                    largest: &[u8],
+                    largestix: u64)
+                    -> FileMetaHandle {
         share(FileMetaData {
             allowed_seeks: 10,
             size: 163840,
@@ -451,11 +446,11 @@ mod tests {
 
     /// write_table creates a table with the given number and contents (must be sorted!) in the
     /// memenv. The sequence numbers given to keys start with startseq.
-    fn write_table(me: &MemEnv,
-                   contents: &[(&[u8], &[u8])],
-                   startseq: u64,
-                   num: u64)
-                   -> FileMetaHandle {
+    pub fn write_table(me: &MemEnv,
+                       contents: &[(&[u8], &[u8])],
+                       startseq: u64,
+                       num: FileNum)
+                       -> FileMetaHandle {
         let dst = me.open_writable_file(Path::new(&table_name("db", num, "ldb"))).unwrap();
         let mut seq = startseq;
         let keys: Vec<Vec<u8>> = contents.iter()
@@ -480,10 +475,12 @@ mod tests {
         f
     }
 
-    fn make_version() -> Version {
-        time_test!("make_version");
+    pub fn make_version() -> (Version, Options) {
         let mut opts = Options::default();
         let env = MemEnv::new();
+
+        // The different levels overlap in a sophisticated manner to be able to test compactions
+        // and so on.
 
         // Level 0 (overlapping)
         let f1: &[(&[u8], &[u8])] = &[("aaa".as_bytes(), "val1".as_bytes()),
@@ -505,10 +502,10 @@ mod tests {
         let t4 = write_table(&env, f4, 10, 4);
         let f5: &[(&[u8], &[u8])] = &[("eaa".as_bytes(), "val1".as_bytes()),
                                       ("eab".as_bytes(), "val2".as_bytes()),
-                                      ("eba".as_bytes(), "val3".as_bytes())];
+                                      ("fab".as_bytes(), "val3".as_bytes())];
         let t5 = write_table(&env, f5, 13, 5);
         // Level 2
-        let f6: &[(&[u8], &[u8])] = &[("faa".as_bytes(), "val1".as_bytes()),
+        let f6: &[(&[u8], &[u8])] = &[("cab".as_bytes(), "val1".as_bytes()),
                                       ("fab".as_bytes(), "val2".as_bytes()),
                                       ("fba".as_bytes(), "val3".as_bytes())];
         let t6 = write_table(&env, f6, 16, 6);
@@ -526,18 +523,38 @@ mod tests {
 
 
         opts.set_env(Box::new(env));
-        let cache = TableCache::new("db", opts, 100);
+        let cache = TableCache::new("db", opts.clone(), 100);
         let mut v = Version::new(share(cache), Rc::new(Box::new(DefaultCmp)));
         v.files[0] = vec![t1, t2];
         v.files[1] = vec![t3, t4, t5];
         v.files[2] = vec![t6, t7];
         v.files[3] = vec![t8, t9];
-        v
+        (v, opts)
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use super::testutil::*;
+
+    use std::default::Default;
+    use std::path::Path;
+
+    use cmp::DefaultCmp;
+    use env::Env;
+    use error::Result;
+    use mem_env::MemEnv;
+    use merging_iter::MergingIter;
+    use options::Options;
+    use table_builder::TableBuilder;
+    use table_cache::{table_name, TableCache};
+    use test_util::{test_iterator_properties, LdbIteratorIter};
+    use types::share;
 
     #[test]
     fn test_version_concat_iter() {
-        let v = make_version();
+        let v = make_version().0;
 
         let expected_entries = vec![0, 9, 6, 4];
         for l in 1..4 {
@@ -549,14 +566,14 @@ mod tests {
 
     #[test]
     fn test_version_concat_iter_properties() {
-        let v = make_version();
+        let v = make_version().0;
         let iter = v.new_concat_iter(3);
         test_iterator_properties(iter);
     }
 
     #[test]
     fn test_version_all_iters() {
-        let v = make_version();
+        let v = make_version().0;
         let iters = v.new_iters().unwrap();
         let mut opt = Options::default();
         opt.set_comparator(Box::new(InternalKeyCmp(Rc::new(Box::new(DefaultCmp)))));
@@ -575,7 +592,7 @@ mod tests {
 
     #[test]
     fn test_version_get_simple() {
-        let v = make_version();
+        let v = make_version().0;
         let cases: &[(&[u8], u64, Result<Option<Vec<u8>>>)] =
             &[("aaa".as_bytes(), 0, Ok(None)),
               ("aaa".as_bytes(), 1, Ok(Some("val1".as_bytes().to_vec()))),
@@ -599,7 +616,7 @@ mod tests {
 
     #[test]
     fn test_version_overlap_in_level() {
-        let v = make_version();
+        let v = make_version().0;
 
         for &(level, (k1, k2), want) in &[(0, ("000".as_bytes(), "003".as_bytes()), false),
                                           (0, ("aa0".as_bytes(), "abx".as_bytes()), true),
@@ -617,7 +634,7 @@ mod tests {
 
     #[test]
     fn test_version_overlapping_inputs() {
-        let v = make_version();
+        let v = make_version().0;
 
         time_test!("overlapping-inputs");
         {
@@ -660,7 +677,7 @@ mod tests {
 
     #[test]
     fn test_version_record_read_sample() {
-        let mut v = make_version();
+        let mut v = make_version().0;
         let k = LookupKey::new("aab".as_bytes(), MAX_SEQUENCE_NUMBER);
         let only_in_one = LookupKey::new("cax".as_bytes(), MAX_SEQUENCE_NUMBER);
 
