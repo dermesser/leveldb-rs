@@ -1,6 +1,7 @@
 
 use cmp::{Cmp, InternalKeyCmp};
-use key_types::{parse_internal_key, InternalKey, UserKey};
+use error::Result;
+use key_types::{parse_internal_key, InternalKey, LookupKey, UserKey};
 use log::LogWriter;
 use options::Options;
 use table_cache::TableCache;
@@ -32,11 +33,11 @@ struct Compaction {
 
 impl Compaction {
     // Note: opt.cmp should be the user-supplied or default comparator (not an InternalKeyCmp).
-    fn new(opt: &Options, level: usize) -> Compaction {
+    fn new(opt: &Options, level: usize, input: Option<Shared<Version>>) -> Compaction {
         Compaction {
             level: level,
             max_file_size: opt.max_file_size,
-            input_version: None,
+            input_version: input,
             level_ixs: Default::default(),
             cmp: opt.cmp.clone(),
 
@@ -96,11 +97,7 @@ impl Compaction {
     }
 
     fn is_trivial_move(&self) -> bool {
-        let inputs_size = self.grandparents
-            .as_ref()
-            .unwrap_or(&vec![])
-            .iter()
-            .fold(0, |a, f| a + f.borrow().size);
+        let inputs_size = total_size(self.grandparents.as_ref().unwrap().iter());
         self.num_inputs(0) == 1 && self.num_inputs(1) == 0 && inputs_size < 10 * self.max_file_size
     }
 
@@ -109,7 +106,8 @@ impl Compaction {
         let grandparents = self.grandparents.as_ref().unwrap();
         let icmp = InternalKeyCmp(self.cmp.clone());
         while self.grandparent_ix < grandparents.len() &&
-              icmp.cmp(k, &grandparents[self.grandparent_ix].borrow().largest) == Ordering::Greater {
+              icmp.cmp(k, &grandparents[self.grandparent_ix].borrow().largest) ==
+              Ordering::Greater {
             if self.seen_key {
                 self.overlapped_bytes += grandparents[self.grandparent_ix].borrow().size;
             }
@@ -143,6 +141,7 @@ pub struct VersionSet {
     log: Option<LogWriter<Box<Write>>>,
     versions: Vec<Shared<Version>>,
     current: Option<Shared<Version>>,
+    compaction_ptrs: [Vec<u8>; NUM_LEVELS],
 }
 
 impl VersionSet {
@@ -164,6 +163,7 @@ impl VersionSet {
             log: None,
             versions: vec![],
             current: None,
+            compaction_ptrs: Default::default(),
         }
     }
 
@@ -205,4 +205,155 @@ impl VersionSet {
         }
         offset
     }
+
+    fn compact_range<'a, 'b>(&mut self,
+                             level: usize,
+                             from: InternalKey<'a>,
+                             to: InternalKey<'b>)
+                             -> Option<Compaction> {
+        assert!(self.current.is_some());
+        let mut inputs =
+            self.current.as_ref().unwrap().borrow().overlapping_inputs(level, from, to);
+        if inputs.is_empty() {
+            return None;
+        }
+
+        if level > 0 {
+            let mut total = 0;
+            for i in 0..inputs.len() {
+                total += inputs[i].borrow().size;
+                if total > self.opt.max_file_size {
+                    inputs.truncate(i + 1);
+                    break;
+                }
+            }
+        }
+
+        let mut c = Compaction::new(&self.opt, level, self.current.clone());
+        c.inputs[0] = inputs;
+        self.setup_other_inputs(&mut c);
+        Some(c)
+    }
+
+    fn setup_other_inputs(&mut self, compaction: &mut Compaction) {
+        let icmp = InternalKeyCmp(self.opt.cmp.clone());
+        let (mut smallest, mut largest) = get_range(&icmp, compaction.inputs[0].iter());
+
+        assert!(self.current.is_some());
+        // Set up level+1 inputs.
+        compaction.inputs[1] = self.current
+            .as_ref()
+            .unwrap()
+            .borrow()
+            .overlapping_inputs(compaction.level, &smallest, &largest);
+
+        let (mut allstart, mut alllimit) =
+            get_range(&icmp,
+                      compaction.inputs[0].iter().chain(compaction.inputs[1].iter()));
+
+        // Check if we can add more inputs in the current level without having to compact more
+        // inputs from level+1.
+        if !compaction.inputs[1].is_empty() {
+            let expanded0 = self.current
+                .as_ref()
+                .unwrap()
+                .borrow()
+                .overlapping_inputs(compaction.level, &allstart, &alllimit);
+            let inputs1_size = total_size(compaction.inputs[1].iter());
+            let expanded_size = total_size(expanded0.iter());
+            // ...if we picked up more files in the current level, and the total size is acceptable
+            if expanded0.len() > compaction.num_inputs(0) &&
+               (inputs1_size + expanded_size) < 25 * self.opt.max_file_size {
+                let (new_start, new_limit) = get_range(&icmp, expanded0.iter());
+                let expanded1 = self.current
+                    .as_ref()
+                    .unwrap()
+                    .borrow()
+                    .overlapping_inputs(compaction.level + 1, &new_start, &new_limit);
+                if expanded1.len() == compaction.num_inputs(1) {
+                    // TODO: Log this.
+
+                    smallest = new_start;
+                    largest = new_limit;
+                    compaction.inputs[0] = expanded0;
+                    compaction.inputs[1] = expanded1;
+                    let (newallstart, newalllimit) =
+                        get_range(&icmp,
+                                  compaction.inputs[0].iter().chain(compaction.inputs[1].iter()));
+                    allstart = newallstart;
+                    alllimit = newalllimit;
+                }
+            }
+        }
+
+        // Set the list of grandparent (l+2) inputs to the files overlapped by the current overall
+        // range.
+        if compaction.level + 2 < NUM_LEVELS {
+            if let Some(ref mut grandparents) = compaction.grandparents {
+                *grandparents = self.current
+                    .as_ref()
+                    .unwrap()
+                    .borrow()
+                    .overlapping_inputs(compaction.level + 2, &allstart, &alllimit);
+            }
+        }
+
+        // TODO: add log statement about compaction.
+
+        compaction.edit.set_compact_pointer(compaction.level, &largest);
+        self.compaction_ptrs[compaction.level] = largest;
+    }
+
+    fn write_snapshot<W: Write>(&self, lw: &mut LogWriter<W>) -> Result<usize> {
+        let mut edit = VersionEdit::new();
+        edit.set_comparator_name(self.opt.cmp.id());
+
+        // Save compaction pointers.
+        for level in 0..NUM_LEVELS {
+            if !self.compaction_ptrs[level].is_empty() {
+                edit.set_compact_pointer(level, &self.compaction_ptrs[level]);
+            }
+        }
+
+        assert!(self.current.is_some());
+        let current = self.current.as_ref().unwrap().borrow();
+        // Save files.
+        for level in 0..NUM_LEVELS {
+            let fs = &current.files[level];
+            for f in fs {
+                edit.add_file(level, f.borrow().clone());
+            }
+        }
+
+        lw.add_record(&edit.encode())
+    }
+}
+
+/// get_range returns the indices of the files within files that have the smallest lower bound
+/// respectively the largest upper bound.
+fn get_range<'a, C: Cmp, I: Iterator<Item = &'a FileMetaHandle>>(c: &C,
+                                                                 files: I)
+                                                                 -> (Vec<u8>, Vec<u8>) {
+    let mut smallest = None;
+    let mut largest = None;
+    for f in files {
+        if smallest.is_none() {
+            smallest = Some(f.borrow().smallest.clone());
+        }
+        if largest.is_none() {
+            largest = Some(f.borrow().largest.clone());
+        }
+        let f = f.borrow();
+        if c.cmp(&f.smallest, smallest.as_ref().unwrap()) == Ordering::Less {
+            smallest = Some(f.smallest.clone());
+        }
+        if c.cmp(&f.largest, largest.as_ref().unwrap()) == Ordering::Greater {
+            largest = Some(f.largest.clone());
+        }
+    }
+    (smallest.unwrap(), largest.unwrap())
+}
+
+fn total_size<'a, I: Iterator<Item = &'a FileMetaHandle>>(files: I) -> usize {
+    files.fold(0, |a, f| a + f.borrow().size)
 }

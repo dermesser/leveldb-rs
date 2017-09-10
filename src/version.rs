@@ -178,11 +178,11 @@ impl Version {
     }
 
     /// overlapping_inputs returns all files that may contain keys between begin and end.
-    fn overlapping_inputs<'a, 'b>(&self,
-                                  level: usize,
-                                  begin: InternalKey<'a>,
-                                  end: InternalKey<'b>)
-                                  -> Vec<FileMetaHandle> {
+    pub fn overlapping_inputs<'a, 'b>(&self,
+                                      level: usize,
+                                      begin: InternalKey<'a>,
+                                      end: InternalKey<'b>)
+                                      -> Vec<FileMetaHandle> {
         assert!(level < NUM_LEVELS);
         let (mut ubegin, mut uend) = (parse_internal_key(begin).2.to_vec(),
                                       parse_internal_key(end).2.to_vec());
