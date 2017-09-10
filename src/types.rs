@@ -93,7 +93,7 @@ pub type FileNum = u64;
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct FileMetaData {
     // default: size / 16384.
-    pub allowed_seeks: isize,
+    pub allowed_seeks: usize,
     pub num: FileNum,
     pub size: usize,
     // these are in InternalKey format:

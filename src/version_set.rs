@@ -237,9 +237,8 @@ impl VersionSet {
     }
 
     fn setup_other_inputs(&mut self, compaction: &mut Compaction) {
-        let icmp = InternalKeyCmp(self.opt.cmp.clone());
         let level = compaction.level;
-        let (smallest, mut largest) = get_range(&icmp, compaction.inputs[0].iter());
+        let (smallest, mut largest) = get_range(&self.cmp, compaction.inputs[0].iter());
 
         assert!(self.current.is_some());
         // Set up level+1 inputs.
@@ -250,7 +249,7 @@ impl VersionSet {
             .overlapping_inputs(level + 1, &smallest, &largest);
 
         let (mut allstart, mut alllimit) =
-            get_range(&icmp,
+            get_range(&self.cmp,
                       compaction.inputs[0].iter().chain(compaction.inputs[1].iter()));
 
         // Check if we can add more inputs in the current level without having to compact more
@@ -266,7 +265,7 @@ impl VersionSet {
             // ...if we picked up more files in the current level, and the total size is acceptable
             if expanded0.len() > compaction.num_inputs(0) &&
                (inputs1_size + expanded0_size) < 25 * self.opt.max_file_size {
-                let (new_start, new_limit) = get_range(&icmp, expanded0.iter());
+                let (new_start, new_limit) = get_range(&self.cmp, expanded0.iter());
                 let expanded1 = self.current
                     .as_ref()
                     .unwrap()
@@ -280,7 +279,7 @@ impl VersionSet {
                     compaction.inputs[0] = expanded0;
                     compaction.inputs[1] = expanded1;
                     let (newallstart, newalllimit) =
-                        get_range(&icmp,
+                        get_range(&self.cmp,
                                   compaction.inputs[0].iter().chain(compaction.inputs[1].iter()));
                     allstart = newallstart;
                     alllimit = newalllimit;
@@ -306,6 +305,7 @@ impl VersionSet {
     }
 
     fn write_snapshot<W: Write>(&self, lw: &mut LogWriter<W>) -> Result<usize> {
+        assert!(self.current.is_some());
         let mut edit = VersionEdit::new();
         edit.set_comparator_name(self.opt.cmp.id());
 
@@ -316,7 +316,6 @@ impl VersionSet {
             }
         }
 
-        assert!(self.current.is_some());
         let current = self.current.as_ref().unwrap().borrow();
         // Save files.
         for level in 0..NUM_LEVELS {
@@ -325,9 +324,147 @@ impl VersionSet {
                 edit.add_file(level, f.borrow().clone());
             }
         }
-
         lw.add_record(&edit.encode())
     }
+
+    fn log_and_apply(&mut self, edit: &mut VersionEdit) {
+        assert!(self.current.is_some());
+
+        edit.set_log_num(self.log_num);
+        edit.set_prev_log_num(self.prev_log_num);
+        edit.set_next_file(self.next_file_num);
+        edit.set_last_seq(self.last_seq);
+
+        let mut v = Version::new(self.cache.clone(), self.opt.cmp.clone());
+        let mut builder = Builder::new();
+        builder.apply(&edit, &mut self.compaction_ptrs);
+        builder.save_to(&self.cmp, self.current.as_ref().unwrap(), &mut v);
+    }
+}
+
+struct Builder {
+    // (added, deleted) files per level.
+    deleted: [Vec<FileNum>; NUM_LEVELS],
+    added: [Vec<FileMetaHandle>; NUM_LEVELS],
+}
+
+impl Builder {
+    fn new() -> Builder {
+        Builder {
+            deleted: Default::default(),
+            added: Default::default(),
+        }
+    }
+
+    fn apply(&mut self, edit: &VersionEdit, compaction_ptrs: &mut [Vec<u8>; NUM_LEVELS]) {
+        for c in edit.compaction_ptrs.iter() {
+            compaction_ptrs[c.level] = c.key.clone();
+        }
+        for &(level, num) in edit.deleted.iter() {
+            self.deleted[level].push(num);
+        }
+        for &(level, ref f) in edit.new_files.iter() {
+            let mut f = f.clone();
+            f.allowed_seeks = f.size / 16384;
+            if f.allowed_seeks < 100 {
+                f.allowed_seeks = 100;
+            }
+            for i in 0..self.deleted[level].len() {
+                if self.deleted[level][i] == f.num {
+                    self.deleted[level].swap_remove(i);
+                }
+            }
+            self.added[level].push(share(f));
+        }
+    }
+
+    fn maybe_add_file(&mut self,
+                      cmp: &InternalKeyCmp,
+                      v: &mut Version,
+                      level: usize,
+                      f: FileMetaHandle) {
+        // Only add file if it's not already deleted.
+        if self.deleted[level].iter().any(|d| *d == f.borrow().num) {
+            return;
+        }
+        {
+            let files = &v.files[level];
+            if level > 0 && !files.is_empty() {
+                // File must be after last file in level.
+                assert_eq!(cmp.cmp(&files[files.len() - 1].borrow().largest,
+                                   &f.borrow().smallest),
+                           Ordering::Less);
+            }
+        }
+        v.files[level].push(f);
+    }
+
+    fn save_to(&mut self, cmp: &InternalKeyCmp, base: &Shared<Version>, v: &mut Version) {
+        for level in 0..NUM_LEVELS {
+            sort_files_by_smallest(cmp, &mut self.added[level]);
+            // The base version should already have sorted files.
+            sort_files_by_smallest(cmp, &mut base.borrow_mut().files[level]);
+
+            let added = self.added[level].clone();
+            let basefiles = base.borrow().files[level].clone();
+            v.files[level].reserve(basefiles.len() + self.added[level].len());
+
+            let mut iadded = added.into_iter();
+            let mut ibasefiles = basefiles.into_iter();
+            let merged = merge_iters(&mut iadded,
+                                     &mut ibasefiles,
+                                     |a, b| cmp.cmp(&a.borrow().smallest, &b.borrow().smallest));
+            for m in merged {
+                self.maybe_add_file(cmp, v, level, m);
+            }
+
+            // Make sure that there is no overlap in higher levels.
+            if level == 0 {
+                continue;
+            }
+            for i in 1..v.files[level].len() {
+                let (prev_end, this_begin) = (&v.files[level][i - 1].borrow().largest,
+                                              &v.files[level][i].borrow().smallest);
+                assert!(cmp.cmp(prev_end, this_begin) >= Ordering::Equal);
+            }
+        }
+    }
+}
+
+/// sort_files_by_smallest sorts the list of files by the smallest keys of the files.
+fn sort_files_by_smallest<C: Cmp>(cmp: &C, files: &mut Vec<FileMetaHandle>) {
+    files.sort_by(|a, b| cmp.cmp(&a.borrow().smallest, &b.borrow().smallest))
+}
+
+/// merge_iters merges and collects the items from two sorted iterators.
+fn merge_iters<Item,
+               C: Fn(&Item, &Item) -> Ordering,
+               I: Iterator<Item = Item>,
+               J: Iterator<Item = Item>>
+    (iter_a: &mut I,
+     iter_b: &mut J,
+     cmp: C)
+     -> Vec<Item> {
+    let mut a = iter_a.next();
+    let mut b = iter_b.next();
+    let mut out = vec![];
+    while a.is_some() && b.is_some() {
+        let ord = cmp(a.as_ref().unwrap(), b.as_ref().unwrap());
+        if ord == Ordering::Less {
+            out.push(a.unwrap());
+            a = iter_a.next();
+        } else {
+            out.push(b.unwrap());
+            b = iter_b.next();
+        }
+    }
+    for a in iter_a {
+        out.push(a);
+    }
+    for b in iter_b {
+        out.push(b);
+    }
+    out
 }
 
 /// get_range returns the indices of the files within files that have the smallest lower bound
