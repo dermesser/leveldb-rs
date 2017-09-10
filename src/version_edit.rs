@@ -1,13 +1,11 @@
-use error::{Status, StatusCode};
+use error::{err, Result, StatusCode};
 use key_types::InternalKey;
 use types::{FileMetaData, FileNum, SequenceNumber};
 
-use integer_encoding::VarIntWriter;
-use integer_encoding::VarIntReader;
+use integer_encoding::{VarIntReader, VarIntWriter};
 
 use std::collections::HashSet;
-use std::io::Write;
-use std::io::Read;
+use std::io::{Read, Write};
 
 #[derive(PartialEq, Debug, Clone)]
 struct CompactionPointer {
@@ -42,21 +40,21 @@ fn tag_to_enum(t: u32) -> Option<EditTag> {
     }
 }
 
-fn read_length_prefixed<R: Read>(reader: &mut R) -> Result<Vec<u8>, Status> {
+fn read_length_prefixed<R: Read>(reader: &mut R) -> Result<Vec<u8>> {
     if let Ok(klen) = reader.read_varint() {
         let mut keybuf = Vec::new();
         keybuf.resize(klen, 0);
 
         if let Ok(l) = reader.read(&mut keybuf) {
             if l != klen {
-                return Err(Status::new(StatusCode::IOError, "Couldn't read full key"));
+                return err(StatusCode::IOError, "Couldn't read full key");
             }
             return Ok(keybuf);
         } else {
-            return Err(Status::new(StatusCode::IOError, "Couldn't read key"));
+            return err(StatusCode::IOError, "Couldn't read key");
         }
     } else {
-        return Err(Status::new(StatusCode::IOError, "Couldn't read key length"));
+        return err(StatusCode::IOError, "Couldn't read key length");
     }
 }
 
@@ -182,7 +180,7 @@ impl VersionEdit {
         buf
     }
 
-    pub fn decode_from(src: &[u8]) -> Result<VersionEdit, Status> {
+    pub fn decode_from(src: &[u8]) -> Result<VersionEdit> {
         let mut reader = src;
         let mut ve = VersionEdit::new();
 
@@ -194,8 +192,7 @@ impl VersionEdit {
                         if let Ok(c) = String::from_utf8(buf) {
                             ve.comparator = Some(c);
                         } else {
-                            return Err(Status::new(StatusCode::Corruption,
-                                                   "Bad comparator encoding"));
+                            return err(StatusCode::Corruption, "Bad comparator encoding");
                         }
                     }
 
@@ -203,7 +200,7 @@ impl VersionEdit {
                         if let Ok(ln) = reader.read_varint() {
                             ve.log_number = Some(ln);
                         } else {
-                            return Err(Status::new(StatusCode::IOError, "Couldn't read lognumber"));
+                            return err(StatusCode::IOError, "Couldn't read lognumber");
                         }
                     }
 
@@ -211,8 +208,7 @@ impl VersionEdit {
                         if let Ok(nfn) = reader.read_varint() {
                             ve.next_file_number = Some(nfn);
                         } else {
-                            return Err(Status::new(StatusCode::IOError,
-                                                   "Couldn't read next_file_number"));
+                            return err(StatusCode::IOError, "Couldn't read next_file_number");
                         }
                     }
 
@@ -220,8 +216,7 @@ impl VersionEdit {
                         if let Ok(ls) = reader.read_varint() {
                             ve.last_seq = Some(ls);
                         } else {
-                            return Err(Status::new(StatusCode::IOError,
-                                                   "Couldn't read last_sequence"));
+                            return err(StatusCode::IOError, "Couldn't read last_sequence");
                         }
                     }
 
@@ -235,7 +230,7 @@ impl VersionEdit {
                                 key: key,
                             });
                         } else {
-                            return Err(Status::new(StatusCode::IOError, "Couldn't read level"));
+                            return err(StatusCode::IOError, "Couldn't read level");
                         }
                     }
 
@@ -244,11 +239,10 @@ impl VersionEdit {
                             if let Ok(num) = reader.read_varint() {
                                 ve.deleted.insert((lvl, num));
                             } else {
-                                return Err(Status::new(StatusCode::IOError,
-                                                       "Couldn't read file num"));
+                                return err(StatusCode::IOError, "Couldn't read file num");
                             }
                         } else {
-                            return Err(Status::new(StatusCode::IOError, "Couldn't read level"));
+                            return err(StatusCode::IOError, "Couldn't read level");
                         }
                     }
 
@@ -267,16 +261,13 @@ impl VersionEdit {
                                         allowed_seeks: 0,
                                     }))
                                 } else {
-                                    return Err(Status::new(StatusCode::IOError,
-                                                           "Couldn't read file size"));
+                                    return err(StatusCode::IOError, "Couldn't read file size");
                                 }
                             } else {
-                                return Err(Status::new(StatusCode::IOError,
-                                                       "Couldn't read file num"));
+                                return err(StatusCode::IOError, "Couldn't read file num");
                             }
                         } else {
-                            return Err(Status::new(StatusCode::IOError,
-                                                   "Couldn't read file level"));
+                            return err(StatusCode::IOError, "Couldn't read file level");
                         }
                     }
 
@@ -284,13 +275,12 @@ impl VersionEdit {
                         if let Ok(pln) = reader.read_varint() {
                             ve.prev_log_number = Some(pln);
                         } else {
-                            return Err(Status::new(StatusCode::IOError,
-                                                   "Couldn't read prev_log_number"));
+                            return err(StatusCode::IOError, "Couldn't read prev_log_number");
                         }
                     }
                 }
             } else {
-                return Err(Status::new(StatusCode::Corruption, "Invalid tag number"));
+                return err(StatusCode::Corruption, "Invalid tag number");
             }
         }
 

@@ -3,7 +3,9 @@
 //! A record is a bytestring: [checksum: uint32, length: uint16, type: uint8, data: [u8]]
 //! checksum is the crc32 sum of type and data; type is one of RecordType::{Full/First/Middle/Last}
 
-use std::io::{Error, ErrorKind, Read, Result, Write};
+use error::{err, StatusCode, Result};
+
+use std::io::{Error, ErrorKind, Read, Write};
 
 use crc::crc32;
 use crc::Hasher32;
@@ -38,7 +40,7 @@ impl<W: Write> LogWriter<W> {
         }
     }
 
-    pub fn add_record(&mut self, r: &Vec<u8>) -> Result<usize> {
+    pub fn add_record(&mut self, r: &[u8]) -> Result<usize> {
         let mut record = &r[..];
         let mut first_frag = true;
         let mut result = Ok(0);
@@ -158,7 +160,7 @@ impl<R: Read> LogReader<R> {
 
             if self.checksums &&
                !self.check_integrity(typ, &dst[dst_offset..dst_offset + bytes_read], checksum) {
-                return Err(Error::new(ErrorKind::InvalidData, "Invalid Checksum".to_string()));
+                return err(StatusCode::InvalidData, "Invalid Checksum");
             }
 
             dst_offset += length as usize;

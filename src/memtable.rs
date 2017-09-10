@@ -1,6 +1,6 @@
 use key_types::{LookupKey, UserKey};
 use cmp::MemtableKeyCmp;
-use error::{Status, StatusCode, Result};
+use error::{err, StatusCode, Result};
 use key_types::{parse_memtable_key, build_memtable_key};
 use types::{current_key_val, LdbIterator, SequenceNumber, ValueType};
 use skipmap::{SkipMap, SkipMapIter};
@@ -57,11 +57,11 @@ impl MemTable {
                 if tag & 0xff == ValueType::TypeValue as u64 {
                     return Ok(foundkey[valoff..valoff + vallen].to_vec());
                 } else {
-                    return Err(Status::new(StatusCode::NotFound, ""));
+                    return err(StatusCode::NotFound, "");
                 }
             }
         }
-        Err(Status::new(StatusCode::NotFound, ""))
+        err(StatusCode::NotFound, "")
     }
 
     pub fn iter(&self) -> MemtableIterator {

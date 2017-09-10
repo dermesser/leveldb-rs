@@ -67,6 +67,11 @@ impl Status {
 /// LevelDB's result type
 pub type Result<T> = result::Result<T, Status>;
 
+/// err returns a new Status wrapped in a Result.
+pub fn err<T>(code: StatusCode, msg: &str) -> Result<T> {
+    Err(Status::new(code, msg))
+}
+
 impl From<io::Error> for Status {
     fn from(e: io::Error) -> Status {
         let c = match e.kind() {

@@ -3,7 +3,7 @@ use blockhandle::BlockHandle;
 use cache;
 use cmp::InternalKeyCmp;
 use env::RandomAccess;
-use error::{Status, StatusCode, Result};
+use error::{err, StatusCode, Result};
 use filter;
 use filter_block::FilterBlockReader;
 use key_types::InternalKey;
@@ -90,8 +90,8 @@ impl Table {
             try!(TableBlock::read_block(opt.clone(), file.as_ref().as_ref(), &footer.meta_index));
 
         if !indexblock.verify() || !metaindexblock.verify() {
-            return Err(Status::new(StatusCode::InvalidData,
-                                   "Indexblock/Metaindexblock failed verification"));
+            return err(StatusCode::InvalidData,
+                       "Indexblock/Metaindexblock failed verification");
         }
 
         // Open filter block for reading
@@ -157,7 +157,7 @@ impl Table {
             try!(TableBlock::read_block(self.opt.clone(), self.file.as_ref().as_ref(), location));
 
         if !b.verify() {
-            return Err(Status::new(StatusCode::InvalidData, "Data block failed verification"));
+            return err(StatusCode::InvalidData, "Data block failed verification");
         }
         if let Ok(ref mut block_cache) = self.opt.block_cache.lock() {
             // insert a cheap copy (Rc).
@@ -491,7 +491,7 @@ mod tests {
         let table = Table::new_raw(opt, wrap_buffer(src), size).unwrap();
         let mut iter = table.iter();
 
-        let expected_offsets = vec![0,0,0,42,42,42,86];
+        let expected_offsets = vec![0, 0, 0, 42, 42, 42, 86];
         let mut i = 0;
         for (k, _) in LdbIteratorIter::wrap(&mut iter) {
             assert_eq!(expected_offsets[i], table.approx_offset_of(&k));
