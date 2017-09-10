@@ -2,7 +2,7 @@
 
 use env::{Env, FileLock, Logger, RandomAccess};
 use env_common::{micros, sleep_for};
-use error::{Result, Status, StatusCode};
+use error::{err, Result, StatusCode};
 
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
@@ -137,13 +137,16 @@ impl MemFS {
         MemFS { store: Arc::new(Mutex::new(HashMap::new())) }
     }
 
-    /// Open a file for reading. The caller can use the MemFile either inside a MemFileReader or as
+    /// Open a file. The caller can use the MemFile either inside a MemFileReader or as
     /// RandomAccess.
-    fn open_r(&self, p: &Path) -> Result<MemFile> {
+    fn open(&self, p: &Path, create: bool) -> Result<MemFile> {
         let mut fs = self.store.lock().unwrap();
         match fs.entry(path_to_string(p)) {
             Entry::Occupied(o) => Ok(o.get().f.clone()),
             Entry::Vacant(v) => {
+                if !create {
+                    return err(StatusCode::NotFound, "file not found");
+                }
                 let f = MemFile::new();
                 v.insert(MemFSEntry {
                     f: f.clone(),
@@ -155,19 +158,18 @@ impl MemFS {
     }
     /// Open a file for writing.
     fn open_w(&self, p: &Path, append: bool, truncate: bool) -> Result<Box<Write>> {
-        // We can reuse open_r, because we just need to pack the MemFile inside a MemFileWriter.
-        let f = self.open_r(p)?;
+        let f = self.open(p, true)?;
         if truncate {
             f.0.lock().unwrap().clear();
         }
         Ok(Box::new(MemFileWriter::new(f, append)))
     }
     fn exists_(&self, p: &Path) -> Result<bool> {
-        let fs = self.store.lock().unwrap();
+        let fs = self.store.lock()?;
         Ok(fs.contains_key(&path_to_string(p)))
     }
     fn children_of(&self, p: &Path) -> Result<Vec<String>> {
-        let fs = self.store.lock().unwrap();
+        let fs = self.store.lock()?;
         let prefix = path_to_string(p);
         let mut children = Vec::new();
         for k in fs.keys() {
@@ -178,58 +180,58 @@ impl MemFS {
         Ok(children)
     }
     fn size_of_(&self, p: &Path) -> Result<usize> {
-        let mut fs = self.store.lock().unwrap();
+        let mut fs = self.store.lock()?;
         match fs.entry(path_to_string(p)) {
-            Entry::Occupied(o) => Ok(o.get().f.0.lock().unwrap().len()),
-            _ => Err(Status::new(StatusCode::NotFound, "not found")),
+            Entry::Occupied(o) => Ok(o.get().f.0.lock()?.len()),
+            _ => err(StatusCode::NotFound, "not found"),
         }
     }
     fn delete_(&self, p: &Path) -> Result<()> {
-        let mut fs = self.store.lock().unwrap();
+        let mut fs = self.store.lock()?;
         match fs.entry(path_to_string(p)) {
             Entry::Occupied(o) => {
                 o.remove_entry();
                 Ok(())
             }
-            _ => Err(Status::new(StatusCode::NotFound, "not found")),
+            _ => err(StatusCode::NotFound, "not found"),
         }
     }
     fn rename_(&self, from: &Path, to: &Path) -> Result<()> {
-        let mut fs = self.store.lock().unwrap();
+        let mut fs = self.store.lock()?;
         match fs.remove(&path_to_string(from)) {
             Some(v) => {
                 fs.insert(path_to_string(to), v);
                 Ok(())
             }
-            None => Err(Status::new(StatusCode::NotFound, "not found")),
+            None => err(StatusCode::NotFound, "not found"),
         }
     }
     fn lock_(&self, p: &Path) -> Result<FileLock> {
-        let mut fs = self.store.lock().unwrap();
+        let mut fs = self.store.lock()?;
         match fs.entry(path_to_string(p)) {
             Entry::Occupied(mut o) => {
                 if o.get().locked {
-                    Err(Status::new(StatusCode::LockError, "already locked"))
+                    err(StatusCode::LockError, "already locked")
                 } else {
                     o.get_mut().locked = true;
                     Ok(FileLock { id: path_to_string(p) })
                 }
             }
-            Entry::Vacant(_) => Err(Status::new(StatusCode::NotFound, "not found")),
+            Entry::Vacant(_) => err(StatusCode::NotFound, "not found"),
         }
     }
     fn unlock_(&self, l: FileLock) -> Result<()> {
-        let mut fs = self.store.lock().unwrap();
+        let mut fs = self.store.lock()?;
         match fs.entry(l.id) {
             Entry::Occupied(mut o) => {
                 if !o.get().locked {
-                    Err(Status::new(StatusCode::LockError, "unlocking unlocked file"))
+                    err(StatusCode::LockError, "unlocking unlocked file")
                 } else {
                     o.get_mut().locked = false;
                     Ok(())
                 }
             }
-            Entry::Vacant(_) => Err(Status::new(StatusCode::NotFound, "not found")),
+            Entry::Vacant(_) => err(StatusCode::NotFound, "not found"),
         }
     }
 }
@@ -245,11 +247,11 @@ impl MemEnv {
 
 impl Env for MemEnv {
     fn open_sequential_file(&self, p: &Path) -> Result<Box<Read>> {
-        let f = self.0.open_r(p)?;
+        let f = self.0.open(p, false)?;
         Ok(Box::new(MemFileReader::new(f, 0)))
     }
     fn open_random_access_file(&self, p: &Path) -> Result<Box<RandomAccess>> {
-        self.0.open_r(p).map(|m| Box::new(m) as Box<RandomAccess>)
+        self.0.open(p, false).map(|m| Box::new(m) as Box<RandomAccess>)
     }
     fn open_writable_file(&self, p: &Path) -> Result<Box<Write>> {
         self.0.open_w(p, true, true)
@@ -273,14 +275,14 @@ impl Env for MemEnv {
     }
     fn mkdir(&self, p: &Path) -> Result<()> {
         if self.exists(p)? {
-            Err(Status::new(StatusCode::AlreadyExists, ""))
+            err(StatusCode::AlreadyExists, "")
         } else {
             Ok(())
         }
     }
     fn rmdir(&self, p: &Path) -> Result<()> {
         if !self.exists(p)? {
-            Err(Status::new(StatusCode::NotFound, ""))
+            err(StatusCode::NotFound, "")
         } else {
             Ok(())
         }
@@ -377,12 +379,12 @@ mod tests {
             write!(w2, "World").unwrap();
         }
         {
-            let mut r = MemFileReader::new(fs.open_r(&path).unwrap(), 0);
+            let mut r = MemFileReader::new(fs.open(&path, false).unwrap(), 0);
             let mut s = String::new();
             assert_eq!(r.read_to_string(&mut s).unwrap(), 10);
             assert_eq!(s, "HelloWorld");
 
-            let mut r2 = MemFileReader::new(fs.open_r(&path).unwrap(), 2);
+            let mut r2 = MemFileReader::new(fs.open(&path, false).unwrap(), 2);
             s.clear();
             assert_eq!(r2.read_to_string(&mut s).unwrap(), 8);
             assert_eq!(s, "lloWorld");
@@ -413,7 +415,7 @@ mod tests {
             assert!(w.flush().is_ok());
         }
         {
-            let mut r = MemFileReader::new(fs.open_r(&path).unwrap(), 0);
+            let mut r = MemFileReader::new(fs.open(&path, false).unwrap(), 0);
             let mut s = String::new();
             assert_eq!(r.read_to_string(&mut s).unwrap(), 32);
             assert_eq!(s, "OveXyzitingEverythingWithGarbage");
@@ -511,24 +513,25 @@ mod tests {
     #[test]
     fn test_memenv_all() {
         let me = MemEnv::new();
-        let (p1, p2, p3, p4) =
-            (Path::new("/a/b"), Path::new("/a/c"), Path::new("/a/d"), Path::new("/a/e"));
+        let (p1, p2, p3) = (Path::new("/a/b"), Path::new("/a/c"), Path::new("/a/d"));
         let nonexist = Path::new("/x/y");
-        me.open_sequential_file(p1).unwrap();
-        me.open_random_access_file(p2).unwrap();
-        me.open_writable_file(p3).unwrap();
-        me.open_appendable_file(p4).unwrap();
+        me.open_writable_file(p2).unwrap();
+        me.open_appendable_file(p3).unwrap();
+        me.open_sequential_file(p2).unwrap();
+        me.open_random_access_file(p3).unwrap();
 
         assert!(me.exists(p2).unwrap());
-        assert_eq!(me.children(Path::new("/a/")).unwrap().len(), 4);
-        assert_eq!(me.size_of(p1).unwrap(), 0);
+        assert_eq!(me.children(Path::new("/a/")).unwrap().len(), 2);
+        assert_eq!(me.size_of(p2).unwrap(), 0);
 
-        me.delete(p1).unwrap();
+        me.delete(p2).unwrap();
         assert!(me.mkdir(p3).is_err());
         me.mkdir(p1).unwrap();
         me.rmdir(p3).unwrap();
         assert!(me.rmdir(nonexist).is_err());
-        me.rename(p2, p3).unwrap();
+
+        me.open_writable_file(p1).unwrap();
+        me.rename(p1, p3).unwrap();
         assert!(!me.exists(p1).unwrap());
         assert!(me.rename(nonexist, p1).is_err());
 
