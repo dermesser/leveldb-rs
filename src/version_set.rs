@@ -62,7 +62,6 @@ impl Compaction {
     fn input(&self, parent: usize, i: usize) -> FileMetaHandle {
         assert!(parent < 2);
         assert!(i < self.inputs[parent].len());
-
         self.inputs[parent][i].clone()
     }
 
@@ -70,25 +69,23 @@ impl Compaction {
     /// compaction's level plus 2. I.e., whether the levels for this compaction are the last ones
     /// to contain the key.
     fn is_base_level_for<'a>(&mut self, k: UserKey<'a>) -> bool {
-        if let Some(ref inp_version) = self.input_version {
-            for level in self.level + 2..NUM_LEVELS {
-                let files = &inp_version.borrow().files[level];
-                while self.level_ixs[level] < files.len() {
-                    let f = files[self.level_ixs[level]].borrow();
-                    if self.cmp.cmp(k, parse_internal_key(&f.largest).2) <= Ordering::Equal {
-                        if self.cmp.cmp(k, parse_internal_key(&f.smallest).2) >= Ordering::Equal {
-                            // key is in this file's range, so this is not the base level.
-                            return false;
-                        }
-                        break;
+        assert!(self.input_version.is_some());
+        let inp_version = self.input_version.as_ref().unwrap();
+        for level in self.level + 2..NUM_LEVELS {
+            let files = &inp_version.borrow().files[level];
+            while self.level_ixs[level] < files.len() {
+                let f = files[self.level_ixs[level]].borrow();
+                if self.cmp.cmp(k, parse_internal_key(&f.largest).2) <= Ordering::Equal {
+                    if self.cmp.cmp(k, parse_internal_key(&f.smallest).2) >= Ordering::Equal {
+                        // key is in this file's range, so this is not the base level.
+                        return false;
                     }
-                    self.level_ixs[level] += 1;
+                    break;
                 }
+                self.level_ixs[level] += 1;
             }
-            true
-        } else {
-            unimplemented!()
         }
+        true
     }
 
     fn num_inputs(&self, parent: usize) -> usize {
@@ -179,13 +176,17 @@ impl VersionSet {
         files.into_iter().collect()
     }
 
+    fn current(&self) -> Option<Shared<Version>> {
+        self.current.clone()
+    }
+
     fn add_version(&mut self, v: Version) {
         let sv = share(v);
         self.current = Some(sv.clone());
         self.versions.push(sv);
     }
 
-    fn approximate_offset<'a>(&self, v: Shared<Version>, key: InternalKey<'a>) -> usize {
+    fn approximate_offset<'a>(&self, v: &Shared<Version>, key: InternalKey<'a>) -> usize {
         let mut offset = 0;
         for level in 0..NUM_LEVELS {
             for f in &v.borrow().files[level] {
@@ -237,7 +238,8 @@ impl VersionSet {
 
     fn setup_other_inputs(&mut self, compaction: &mut Compaction) {
         let icmp = InternalKeyCmp(self.opt.cmp.clone());
-        let (mut smallest, mut largest) = get_range(&icmp, compaction.inputs[0].iter());
+        let level = compaction.level;
+        let (smallest, mut largest) = get_range(&icmp, compaction.inputs[0].iter());
 
         assert!(self.current.is_some());
         // Set up level+1 inputs.
@@ -245,7 +247,7 @@ impl VersionSet {
             .as_ref()
             .unwrap()
             .borrow()
-            .overlapping_inputs(compaction.level, &smallest, &largest);
+            .overlapping_inputs(level + 1, &smallest, &largest);
 
         let (mut allstart, mut alllimit) =
             get_range(&icmp,
@@ -258,22 +260,22 @@ impl VersionSet {
                 .as_ref()
                 .unwrap()
                 .borrow()
-                .overlapping_inputs(compaction.level, &allstart, &alllimit);
+                .overlapping_inputs(level, &allstart, &alllimit);
             let inputs1_size = total_size(compaction.inputs[1].iter());
-            let expanded_size = total_size(expanded0.iter());
+            let expanded0_size = total_size(expanded0.iter());
             // ...if we picked up more files in the current level, and the total size is acceptable
             if expanded0.len() > compaction.num_inputs(0) &&
-               (inputs1_size + expanded_size) < 25 * self.opt.max_file_size {
+               (inputs1_size + expanded0_size) < 25 * self.opt.max_file_size {
                 let (new_start, new_limit) = get_range(&icmp, expanded0.iter());
                 let expanded1 = self.current
                     .as_ref()
                     .unwrap()
                     .borrow()
-                    .overlapping_inputs(compaction.level + 1, &new_start, &new_limit);
+                    .overlapping_inputs(level + 1, &new_start, &new_limit);
                 if expanded1.len() == compaction.num_inputs(1) {
                     // TODO: Log this.
 
-                    smallest = new_start;
+                    // smallest = new_start;
                     largest = new_limit;
                     compaction.inputs[0] = expanded0;
                     compaction.inputs[1] = expanded1;
@@ -288,20 +290,19 @@ impl VersionSet {
 
         // Set the list of grandparent (l+2) inputs to the files overlapped by the current overall
         // range.
-        if compaction.level + 2 < NUM_LEVELS {
-            if let Some(ref mut grandparents) = compaction.grandparents {
-                *grandparents = self.current
-                    .as_ref()
-                    .unwrap()
-                    .borrow()
-                    .overlapping_inputs(compaction.level + 2, &allstart, &alllimit);
-            }
+        if level + 2 < NUM_LEVELS {
+            let grandparents = self.current
+                .as_ref()
+                .unwrap()
+                .borrow()
+                .overlapping_inputs(level + 2, &allstart, &alllimit);
+            compaction.grandparents = Some(grandparents);
         }
 
         // TODO: add log statement about compaction.
 
-        compaction.edit.set_compact_pointer(compaction.level, &largest);
-        self.compaction_ptrs[compaction.level] = largest;
+        compaction.edit.set_compact_pointer(level, &largest);
+        self.compaction_ptrs[level] = largest;
     }
 
     fn write_snapshot<W: Write>(&self, lw: &mut LogWriter<W>) -> Result<usize> {
@@ -356,4 +357,146 @@ fn get_range<'a, C: Cmp, I: Iterator<Item = &'a FileMetaHandle>>(c: &C,
 
 fn total_size<'a, I: Iterator<Item = &'a FileMetaHandle>>(files: I) -> usize {
     files.fold(0, |a, f| a + f.borrow().size)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use version::testutil::make_version;
+    use cmp::DefaultCmp;
+    use types::FileMetaData;
+
+    fn example_files() -> Vec<FileMetaHandle> {
+        let mut f1 = FileMetaData::default();
+        f1.smallest = "f".as_bytes().to_vec();
+        f1.largest = "g".as_bytes().to_vec();
+        let mut f2 = FileMetaData::default();
+        f2.smallest = "e".as_bytes().to_vec();
+        f2.largest = "f".as_bytes().to_vec();
+        let mut f3 = FileMetaData::default();
+        f3.smallest = "a".as_bytes().to_vec();
+        f3.largest = "b".as_bytes().to_vec();
+        let mut f4 = FileMetaData::default();
+        f4.smallest = "q".as_bytes().to_vec();
+        f4.largest = "z".as_bytes().to_vec();
+        vec![f1, f2, f3, f4].into_iter().map(share).collect()
+    }
+
+    #[test]
+    fn test_version_set_total_size() {
+        let mut f1 = FileMetaData::default();
+        f1.size = 10;
+        let mut f2 = FileMetaData::default();
+        f2.size = 20;
+        let mut f3 = FileMetaData::default();
+        f3.size = 30;
+        let files = vec![share(f1), share(f2), share(f3)];
+        assert_eq!(60, total_size(files.iter()));
+    }
+
+    #[test]
+    fn test_version_set_get_range() {
+        let cmp = DefaultCmp;
+        let fs = example_files();
+        assert_eq!(("a".as_bytes().to_vec(), "z".as_bytes().to_vec()),
+                   get_range(&cmp, fs.iter()));
+    }
+
+    #[test]
+    fn test_version_set_compaction() {
+        let (v, opt) = make_version();
+        let mut vs = VersionSet::new("db".to_string(),
+                                     opt.clone(),
+                                     share(TableCache::new("db", opt, 100)));
+        time_test!();
+        vs.add_version(v);
+
+        {
+            // approximate_offset()
+            let v = vs.current().unwrap();
+            assert_eq!(0,
+                       vs.approximate_offset(&v,
+                                             LookupKey::new("aaa".as_bytes(), 9000)
+                                                 .internal_key()));
+            assert_eq!(216,
+                       vs.approximate_offset(&v,
+                                             LookupKey::new("bab".as_bytes(), 9000)
+                                                 .internal_key()));
+            assert_eq!(1085,
+                       vs.approximate_offset(&v,
+                                             LookupKey::new("fab".as_bytes(), 9000)
+                                                 .internal_key()));
+        }
+        {
+            // live_files()
+            assert_eq!(9, vs.live_files().len());
+        }
+
+        // The following tests reuse the same version set and verify that various compactions work
+        // like they should.
+        {
+            time_test!("compaction tests");
+            let v = vs.current().unwrap();
+
+            // compact level 0 with a partial range.
+            let from = LookupKey::new("000".as_bytes(), 1000);
+            let to = LookupKey::new("ab".as_bytes(), 1010);
+            let c = vs.compact_range(0, from.internal_key(), to.internal_key()).unwrap();
+            assert_eq!(2, c.inputs[0].len());
+            assert_eq!(1, c.inputs[1].len());
+            assert_eq!(1, c.grandparents.unwrap().len());
+
+            // compact level 0, but entire range of keys in version.
+            let from = LookupKey::new("000".as_bytes(), 1000);
+            let to = LookupKey::new("zzz".as_bytes(), 1010);
+            let c = vs.compact_range(0, from.internal_key(), to.internal_key()).unwrap();
+            assert_eq!(2, c.inputs[0].len());
+            assert_eq!(1, c.inputs[1].len());
+            assert_eq!(1, c.grandparents.unwrap().len());
+
+            // Expand input range on higher level.
+            let from = LookupKey::new("dab".as_bytes(), 1000);
+            let to = LookupKey::new("eab".as_bytes(), 1010);
+            let c = vs.compact_range(1, from.internal_key(), to.internal_key()).unwrap();
+            assert_eq!(3, c.inputs[0].len());
+            assert_eq!(1, c.inputs[1].len());
+            assert_eq!(0, c.grandparents.unwrap().len());
+
+            // is_trivial_move
+            let from = LookupKey::new("fab".as_bytes(), 1000);
+            let to = LookupKey::new("fba".as_bytes(), 1010);
+            let c = vs.compact_range(2, from.internal_key(), to.internal_key()).unwrap();
+            assert!(c.is_trivial_move());
+
+            // should_stop_before
+            let from = LookupKey::new("000".as_bytes(), 1000);
+            let to = LookupKey::new("zzz".as_bytes(), 1010);
+            let mid = LookupKey::new("abc".as_bytes(), 1010);
+            let mut c = vs.compact_range(0, from.internal_key(), to.internal_key()).unwrap();
+            println!("{:?}", v.borrow().files);
+            println!("{:?}", c.inputs);
+            println!("{:?}", c.grandparents);
+            assert!(!c.should_stop_before(from.internal_key()));
+            assert!(!c.should_stop_before(mid.internal_key()));
+            assert!(!c.should_stop_before(to.internal_key()));
+
+            // is_base_level_for
+            let from = LookupKey::new("000".as_bytes(), 1000);
+            let to = LookupKey::new("zzz".as_bytes(), 1010);
+            let mut c = vs.compact_range(0, from.internal_key(), to.internal_key()).unwrap();
+            assert!(c.is_base_level_for("aaa".as_bytes()));
+            assert!(!c.is_base_level_for("hac".as_bytes()));
+
+            // input/add_input_deletions
+            let from = LookupKey::new("000".as_bytes(), 1000);
+            let to = LookupKey::new("zzz".as_bytes(), 1010);
+            let mut c = vs.compact_range(0, from.internal_key(), to.internal_key()).unwrap();
+            for inp in &[(0, 0, 1), (0, 1, 2), (1, 0, 3)] {
+                let f = c.input(inp.0, inp.1);
+                assert_eq!(inp.2, f.borrow().num);
+            }
+            c.add_input_deletions();
+            assert_eq!(23, c.edit.encode().len())
+        }
+    }
 }
