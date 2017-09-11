@@ -27,6 +27,8 @@ pub struct Version {
 
     pub file_to_compact: Option<FileMetaHandle>,
     pub file_to_compact_lvl: usize,
+    pub compaction_score: Option<f64>,
+    pub compaction_level: Option<usize>,
 }
 
 impl Version {
@@ -37,6 +39,8 @@ impl Version {
             files: Default::default(),
             file_to_compact: None,
             file_to_compact_lvl: 0,
+            compaction_score: None,
+            compaction_level: None,
         }
     }
 

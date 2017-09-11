@@ -61,10 +61,10 @@ fn read_length_prefixed<R: Read>(reader: &mut R) -> Result<Vec<u8>> {
 /// Manages changes to the set of managed SSTables and logfiles.
 pub struct VersionEdit {
     comparator: Option<String>,
-    log_number: Option<FileNum>,
-    prev_log_number: Option<FileNum>,
-    next_file_number: Option<FileNum>,
-    last_seq: Option<SequenceNumber>,
+    pub log_number: Option<FileNum>,
+    pub prev_log_number: Option<FileNum>,
+    pub next_file_number: Option<FileNum>,
+    pub last_seq: Option<SequenceNumber>,
 
     pub compaction_ptrs: Vec<CompactionPointer>,
     pub deleted: HashSet<(usize, FileNum)>,

@@ -1,7 +1,12 @@
 //! A collection of fundamental and/or simple types used by other modules
 
+use error::{err, Result, StatusCode};
+
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::str::FromStr;
+
+pub const NUM_LEVELS: usize = 7;
 
 #[derive(Debug, PartialOrd, PartialEq)]
 pub enum ValueType {
@@ -101,4 +106,71 @@ pub struct FileMetaData {
     pub largest: Vec<u8>,
 }
 
-pub const NUM_LEVELS: usize = 7;
+#[derive(Debug, Clone, PartialEq)]
+pub enum FileType {
+    Log,
+    DBLock,
+    Table,
+    Descriptor,
+    Current,
+    Temp,
+    InfoLog,
+}
+
+pub fn parse_file_name(f: &str) -> Result<(FileNum, FileType)> {
+    if f == "CURRENT" {
+        return Ok((0, FileType::Current));
+    } else if f == "LOCK" {
+        return Ok((0, FileType::DBLock));
+    } else if f == "LOG" || f == "LOG.old" {
+        return Ok((0, FileType::InfoLog));
+    } else if f.starts_with("MANIFEST-") {
+        if let Some(ix) = f.find('-') {
+            if let Ok(num) = FileNum::from_str_radix(&f[ix + 1..], 10) {
+                return Ok((num, FileType::Descriptor));
+            }
+            return err(StatusCode::InvalidArgument,
+                       "manifest file number is invalid");
+        }
+        return err(StatusCode::InvalidArgument, "manifest file has no dash");
+    } else if let Some(ix) = f.find('.') {
+        // 00012345.log 00123.sst ...
+        if let Ok(num) = FileNum::from_str_radix(&f[0..ix], 10) {
+            let typ = match &f[ix + 1..] {
+                "sst" | "ldb" => FileType::Table,
+                "dbtmp" => FileType::Temp,
+                _ => {
+                    return err(StatusCode::InvalidArgument,
+                               "unknown numbered file extension")
+                }
+            };
+            return Ok((num, typ));
+        }
+        return err(StatusCode::InvalidArgument,
+                   "invalid file number for table or temp file");
+    }
+    err(StatusCode::InvalidArgument, "unknown file type")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_types_parse_file_name() {
+        for c in &[("CURRENT", (0, FileType::Current)),
+                   ("LOCK", (0, FileType::DBLock)),
+                   ("LOG", (0, FileType::InfoLog)),
+                   ("LOG.old", (0, FileType::InfoLog)),
+                   ("MANIFEST-01234", (1234, FileType::Descriptor)),
+                   ("001122.sst", (1122, FileType::Table)),
+                   ("001122.ldb", (1122, FileType::Table)),
+                   ("001122.dbtmp", (1122, FileType::Temp))] {
+            assert_eq!(parse_file_name(c.0).unwrap(), c.1);
+        }
+        assert!(parse_file_name("xyz.LOCK").is_err());
+        assert!(parse_file_name("01a.sst").is_err());
+        assert!(parse_file_name("0011.abc").is_err());
+        assert!(parse_file_name("MANIFEST-trolol").is_err());
+    }
+}

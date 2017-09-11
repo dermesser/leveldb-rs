@@ -100,6 +100,11 @@ impl<W: Write> LogWriter<W> {
         self.current_block_offset += s;
         Ok(s)
     }
+
+    pub fn flush(&mut self) -> Result<()> {
+        self.dst.flush()?;
+        Ok(())
+    }
 }
 
 
