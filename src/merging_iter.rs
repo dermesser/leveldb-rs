@@ -32,12 +32,12 @@ pub struct MergingIter {
 
 impl MergingIter {
     /// Construct a new merging iterator.
-    pub fn new(opt: Options, iters: Vec<Box<LdbIterator>>) -> MergingIter {
+    pub fn new(cmp: Rc<Box<Cmp>>, iters: Vec<Box<LdbIterator>>) -> MergingIter {
         let mi = MergingIter {
             iters: iters,
             current: None,
             direction: Direction::Fwd,
-            cmp: opt.cmp,
+            cmp: cmp,
         };
         mi
     }
@@ -195,6 +195,7 @@ impl LdbIterator for MergingIter {
 mod tests {
     use super::*;
 
+    use cmp::DefaultCmp;
     use options::Options;
     use test_util::{test_iterator_properties, LdbIteratorIter, TestLdbIter};
     use types::{current_key_val, LdbIterator};
@@ -206,7 +207,7 @@ mod tests {
         let iter = skm.iter();
         let mut iter2 = skm.iter();
 
-        let mut miter = MergingIter::new(Options::default(), vec![Box::new(iter)]);
+        let mut miter = MergingIter::new(Rc::new(Box::new(DefaultCmp)), vec![Box::new(iter)]);
 
         loop {
             if let Some((k, v)) = miter.next() {
@@ -228,7 +229,8 @@ mod tests {
         let iter = skm.iter();
         let iter2 = skm.iter();
 
-        let mut miter = MergingIter::new(Options::default(), vec![Box::new(iter), Box::new(iter2)]);
+        let mut miter = MergingIter::new(Rc::new(Box::new(DefaultCmp)),
+                                         vec![Box::new(iter), Box::new(iter2)]);
 
         loop {
             if let Some((k, v)) = miter.next() {
@@ -249,7 +251,8 @@ mod tests {
         let val = "def".as_bytes();
         let iter = TestLdbIter::new(vec![(b("aba"), val), (b("abc"), val)]);
         let iter2 = TestLdbIter::new(vec![(b("abb"), val), (b("abd"), val)]);
-        let miter = MergingIter::new(Options::default(), vec![Box::new(iter), Box::new(iter2)]);
+        let miter = MergingIter::new(Rc::new(Box::new(DefaultCmp)),
+                                     vec![Box::new(iter), Box::new(iter2)]);
         test_iterator_properties(miter);
     }
 
@@ -259,7 +262,8 @@ mod tests {
         let iter = TestLdbIter::new(vec![(b("aba"), val), (b("abc"), val), (b("abe"), val)]);
         let iter2 = TestLdbIter::new(vec![(b("abb"), val), (b("abd"), val)]);
 
-        let mut miter = MergingIter::new(Options::default(), vec![Box::new(iter), Box::new(iter2)]);
+        let mut miter = MergingIter::new(Rc::new(Box::new(DefaultCmp)),
+                                         vec![Box::new(iter), Box::new(iter2)]);
 
         // miter should return the following sequence: [aba, abb, abc, abd, abe]
 
@@ -302,7 +306,8 @@ mod tests {
         let it2 = TestLdbIter::new(vec![(&b("abb"), val), (&b("abd"), val)]);
         let expected = vec![b("aba"), b("abb"), b("abc"), b("abd"), b("abe")];
 
-        let mut iter = MergingIter::new(Options::default(), vec![Box::new(it1), Box::new(it2)]);
+        let mut iter = MergingIter::new(Rc::new(Box::new(DefaultCmp)),
+                                        vec![Box::new(it1), Box::new(it2)]);
 
         let mut i = 0;
         for (k, _) in LdbIteratorIter::wrap(&mut iter) {
@@ -318,7 +323,8 @@ mod tests {
         let it1 = TestLdbIter::new(vec![(b("aba"), val), (b("abc"), val), (b("abe"), val)]);
         let it2 = TestLdbIter::new(vec![(b("abb"), val), (b("abd"), val)]);
 
-        let mut iter = MergingIter::new(Options::default(), vec![Box::new(it1), Box::new(it2)]);
+        let mut iter = MergingIter::new(Rc::new(Box::new(DefaultCmp)),
+                                        vec![Box::new(it1), Box::new(it2)]);
 
         assert!(!iter.valid());
         iter.advance();

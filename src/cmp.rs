@@ -4,6 +4,8 @@ use types;
 use std::cmp::Ordering;
 use std::rc::Rc;
 
+type WrappedCmp = Rc<Box<Cmp>>;
+
 /// Comparator trait, supporting types that can be nested (i.e., add additional functionality on
 /// top of an inner comparator)
 pub trait Cmp {

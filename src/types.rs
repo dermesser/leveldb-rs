@@ -91,6 +91,27 @@ pub fn current_key_val<It: LdbIterator + ?Sized>(it: &It) -> Option<(Vec<u8>, Ve
     }
 }
 
+impl LdbIterator for Box<LdbIterator> {
+    fn advance(&mut self) -> bool {
+        self.as_mut().advance()
+    }
+    fn current(&self, key: &mut Vec<u8>, val: &mut Vec<u8>) -> bool {
+        self.as_ref().current(key, val)
+    }
+    fn seek(&mut self, key: &[u8]) {
+        self.as_mut().seek(key)
+    }
+    fn reset(&mut self) {
+        self.as_mut().reset()
+    }
+    fn valid(&self) -> bool {
+        self.as_ref().valid()
+    }
+    fn prev(&mut self) -> bool {
+        self.as_mut().prev()
+    }
+}
+
 /// The unique (sequential) number of a file.
 pub type FileNum = u64;
 
