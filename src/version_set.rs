@@ -8,7 +8,7 @@ use merging_iter::MergingIter;
 use options::Options;
 use table_cache::TableCache;
 use types::{parse_file_name, share, NUM_LEVELS, FileNum, FileType, LdbIterator, Shared};
-use version::{new_version_iter, FileMetaHandle, Version};
+use version::{new_version_iter, total_size, FileMetaHandle, Version};
 use version_edit::VersionEdit;
 
 use std::cmp::Ordering;
@@ -142,6 +142,7 @@ pub struct VersionSet {
     pub log_num: u64,
     pub prev_log_num: u64,
 
+    // TODO: Remove this.
     versions: Vec<Shared<Version>>,
     current: Option<Shared<Version>>,
     compaction_ptrs: [Vec<u8>; NUM_LEVELS],
@@ -173,6 +174,7 @@ impl VersionSet {
         }
     }
 
+    /// live_files returns files currently needed.
     fn live_files(&self) -> Vec<FileNum> {
         let mut files = HashSet::new();
         for version in &self.versions {
@@ -185,8 +187,33 @@ impl VersionSet {
         files.into_iter().collect()
     }
 
-    // current returns a reference to the current version. It panics if there is no current
-    // version.
+    /// release_compaction checks if the input_version of a compaction is held in the VersionSet,
+    /// and removes it if needed. This typically happens after a compaction has finished.
+    ///
+    /// We need to hold the list of all live versions so that if someone asks for the live files
+    /// while a compaction is happening, we still know all files -- even ones that will soon be
+    /// removed. (TODO: Check if this makes sense in a non-concurrent world; if it doesn't, remove
+    /// the versions field).
+    ///
+    /// NOT TESTED.
+    fn _release_compaction(&mut self, c: &Compaction) {
+        let current = self.current.as_ref().unwrap();
+        if let Some(ref v) = c.input_version {
+            // We don't remove the current version.
+            if Rc::ptr_eq(v, current) {
+                return;
+            }
+            for i in 0..self.versions.len() {
+                if Rc::ptr_eq(v, &self.versions[i]) {
+                    self.versions.swap_remove(i);
+                    break;
+                }
+            }
+        }
+    }
+
+    /// current returns a reference to the current version. It panics if there is no current
+    /// version.
     fn current(&self) -> Shared<Version> {
         assert!(self.current.is_some());
         self.current.as_ref().unwrap().clone()
@@ -218,6 +245,13 @@ impl VersionSet {
         if self.next_file_num <= n {
             self.next_file_num = n + 1;
         }
+    }
+
+    fn needs_compaction(&self) -> bool {
+        assert!(self.current.is_some());
+        let v = self.current.as_ref().unwrap();
+        let v = v.borrow();
+        v.compaction_score.unwrap_or(0.0) >= 1.0 || v.file_to_compact.is_some()
     }
 
     fn approximate_offset<'a>(&self, v: &Shared<Version>, key: InternalKey<'a>) -> usize {
@@ -832,10 +866,6 @@ fn get_range<'a, C: Cmp, I: Iterator<Item = &'a FileMetaHandle>>(c: &C,
         }
     }
     (smallest.unwrap(), largest.unwrap())
-}
-
-fn total_size<'a, I: Iterator<Item = &'a FileMetaHandle>>(files: I) -> usize {
-    files.fold(0, |a, f| a + f.borrow().size)
 }
 
 #[cfg(test)]
