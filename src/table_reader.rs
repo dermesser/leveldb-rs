@@ -135,6 +135,8 @@ impl Table {
         Ok(t)
     }
 
+    /// block_cache_handle creates a CacheKey for a block with a given offset to be used in the
+    /// block cache.
     fn block_cache_handle(&self, block_off: usize) -> cache::CacheKey {
         let mut dst = [0; 2 * 8];
         (&mut dst[..8]).write_fixedint(self.cache_id).expect("error writing to vec");
@@ -146,8 +148,8 @@ impl Table {
     /// cache.
     fn read_block(&self, location: &BlockHandle) -> Result<TableBlock> {
         let cachekey = self.block_cache_handle(location.offset());
-            if let Some(block) = self.opt.block_cache.borrow_mut().get(&cachekey) {
-                return Ok(block.clone());
+        if let Some(block) = self.opt.block_cache.borrow_mut().get(&cachekey) {
+            return Ok(block.clone());
         }
 
         // Two times as_ref(): First time to get a ref from Rc<>, then one from Box<>.
@@ -157,8 +159,8 @@ impl Table {
         if !b.verify() {
             return err(StatusCode::InvalidData, "Data block failed verification");
         }
-            // insert a cheap copy (Rc).
-            self.opt.block_cache.borrow_mut().insert(&cachekey, b.clone());
+        // insert a cheap copy (Rc).
+        self.opt.block_cache.borrow_mut().insert(&cachekey, b.clone());
 
         Ok(b)
     }
@@ -330,22 +332,20 @@ impl LdbIterator for TableIterator {
 
         self.index_block.seek(to);
 
-        if let Some((past_block, handle)) = current_key_val(&self.index_block) {
-            if self.table.opt.cmp.cmp(to, &past_block) <= Ordering::Equal {
-                // ok, found right block: continue
-                if let Ok(()) = self.load_block(&handle) {
-                    self.current_block.seek(to);
-                    self.init = true;
-                } else {
-                    self.reset();
-                    return;
-                }
+        let (past_block, handle) = current_key_val(&self.index_block)
+            .expect("current() on index block should return value");
+        if self.table.opt.cmp.cmp(to, &past_block) <= Ordering::Equal {
+            // ok, found right block: continue
+            if let Ok(()) = self.load_block(&handle) {
+                self.current_block.seek(to);
+                self.init = true;
             } else {
                 self.reset();
                 return;
             }
         } else {
-            panic!("Unexpected None from current() (bug)");
+            self.reset();
+            return;
         }
     }
 
@@ -396,7 +396,7 @@ impl LdbIterator for TableIterator {
 #[cfg(test)]
 mod tests {
     use filter::BloomPolicy;
-    use options::Options;
+    use options;
     use table_builder::TableBuilder;
     use test_util::{test_iterator_properties, LdbIteratorIter};
     use types::{current_key_val, LdbIterator};
@@ -421,7 +421,7 @@ mod tests {
     // reason, a call f(v, v.len()) doesn't work for borrowing reasons.
     fn build_table(data: Vec<(&'static str, &'static str)>) -> (Vec<u8>, usize) {
         let mut d = Vec::with_capacity(512);
-        let mut opt = Options::default();
+        let mut opt = options::for_test();
         opt.block_restart_interval = 2;
         opt.block_size = 32;
 
@@ -445,7 +445,7 @@ mod tests {
     // Build a table containing keys in InternalKey format.
     fn build_internal_table() -> (Vec<u8>, usize) {
         let mut d = Vec::with_capacity(512);
-        let mut opt = Options::default();
+        let mut opt = options::for_test();
         opt.block_restart_interval = 1;
         opt.block_size = 32;
         opt.filter_policy = Rc::new(Box::new(BloomPolicy::new(4)));
@@ -482,7 +482,7 @@ mod tests {
     #[test]
     fn test_table_approximate_offset() {
         let (src, size) = build_table(build_data());
-        let mut opt = Options::default();
+        let mut opt = options::for_test();
         opt.block_size = 32;
         let table = Table::new_raw(opt, wrap_buffer(src), size).unwrap();
         let mut iter = table.iter();
@@ -501,7 +501,7 @@ mod tests {
     #[test]
     fn test_table_block_cache_use() {
         let (src, size) = build_table(build_data());
-        let mut opt = Options::default();
+        let mut opt = options::for_test();
         opt.block_size = 32;
 
         let table = Table::new_raw(opt.clone(), wrap_buffer(src), size).unwrap();
@@ -524,7 +524,7 @@ mod tests {
         let (src, size) = build_table(build_data());
         let data = build_data();
 
-        let table = Table::new_raw(Options::default(), wrap_buffer(src), size).unwrap();
+        let table = Table::new_raw(options::for_test(), wrap_buffer(src), size).unwrap();
         let mut iter = table.iter();
         let mut i = 0;
 
@@ -568,7 +568,7 @@ mod tests {
     fn test_table_iterator_filter() {
         let (src, size) = build_table(build_data());
 
-        let table = Table::new_raw(Options::default(), wrap_buffer(src), size).unwrap();
+        let table = Table::new_raw(options::for_test(), wrap_buffer(src), size).unwrap();
         assert!(table.filters.is_some());
         let filter_reader = table.filters.clone().unwrap();
         let mut iter = table.iter();
@@ -588,7 +588,7 @@ mod tests {
     fn test_table_iterator_state_behavior() {
         let (src, size) = build_table(build_data());
 
-        let table = Table::new_raw(Options::default(), wrap_buffer(src), size).unwrap();
+        let table = Table::new_raw(options::for_test(), wrap_buffer(src), size).unwrap();
         let mut iter = table.iter();
 
         // behavior test
@@ -618,7 +618,7 @@ mod tests {
         let mut data = build_data();
         data.truncate(4);
         let (src, size) = build_table(data);
-        let table = Table::new_raw(Options::default(), wrap_buffer(src), size).unwrap();
+        let table = Table::new_raw(options::for_test(), wrap_buffer(src), size).unwrap();
         test_iterator_properties(table.iter());
     }
 
@@ -627,7 +627,7 @@ mod tests {
         let (src, size) = build_table(build_data());
         let data = build_data();
 
-        let table = Table::new_raw(Options::default(), wrap_buffer(src), size).unwrap();
+        let table = Table::new_raw(options::for_test(), wrap_buffer(src), size).unwrap();
         let mut iter = table.iter();
         let mut i = 0;
 
@@ -660,7 +660,7 @@ mod tests {
     fn test_table_iterator_seek() {
         let (src, size) = build_table(build_data());
 
-        let table = Table::new_raw(Options::default(), wrap_buffer(src), size).unwrap();
+        let table = Table::new_raw(options::for_test(), wrap_buffer(src), size).unwrap();
         let mut iter = table.iter();
 
         iter.seek("bcd".as_bytes());
@@ -677,7 +677,7 @@ mod tests {
     fn test_table_get() {
         let (src, size) = build_table(build_data());
 
-        let table = Table::new_raw(Options::default(), wrap_buffer(src), size).unwrap();
+        let table = Table::new_raw(options::for_test(), wrap_buffer(src), size).unwrap();
         let table2 = table.clone();
 
         let mut _iter = table.iter();
@@ -710,7 +710,7 @@ mod tests {
 
         let (src, size) = build_internal_table();
 
-        let table = Table::new(Options::default(), wrap_buffer(src), size).unwrap();
+        let table = Table::new(options::for_test(), wrap_buffer(src), size).unwrap();
         let filter_reader = table.filters.clone().unwrap();
 
         // Check that we're actually using internal keys
@@ -744,7 +744,7 @@ mod tests {
 
         src[10] += 1;
 
-        let table = Table::new_raw(Options::default(), wrap_buffer(src), size).unwrap();
+        let table = Table::new_raw(options::for_test(), wrap_buffer(src), size).unwrap();
 
         assert!(table.filters.is_some());
         assert_eq!(table.filters.as_ref().unwrap().num(), 1);

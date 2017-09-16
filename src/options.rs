@@ -3,7 +3,7 @@ use cmp::{Cmp, DefaultCmp};
 use disk_env;
 use env::Env;
 use filter;
-use infolog::Logger;
+use infolog::{self, Logger};
 use table_reader::TableBlock;
 use types::{share, SequenceNumber, Shared};
 
@@ -76,6 +76,12 @@ impl Default for Options {
             filter_policy: Rc::new(Box::new(filter::BloomPolicy::new(DEFAULT_BITS_PER_KEY))),
         }
     }
+}
+
+pub fn for_test() -> Options {
+    let mut o = Options::default();
+    o.log = share(infolog::stdout());
+    o
 }
 
 impl Options {
