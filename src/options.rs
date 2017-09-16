@@ -80,7 +80,7 @@ impl Default for Options {
 
 pub fn for_test() -> Options {
     let mut o = Options::default();
-    o.log = share(infolog::stdout());
+    o.log = share(infolog::stderr());
     o
 }
 
