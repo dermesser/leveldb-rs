@@ -15,6 +15,7 @@ const HEADER_SIZE: usize = 12;
 /// [tag: 1, keylen: ~var, key: keylen, vallen: ~var, val: vallen]
 pub struct WriteBatch {
     entries: Vec<u8>,
+    sync: bool,
 }
 
 impl WriteBatch {
@@ -22,11 +23,22 @@ impl WriteBatch {
         let mut v = Vec::with_capacity(128);
         v.resize(HEADER_SIZE, 0);
 
-        WriteBatch { entries: v }
+        WriteBatch {
+            entries: v,
+            sync: false,
+        }
+    }
+
+    /// set_sync allows for forcing a flush for this batch.
+    pub fn set_sync(&mut self, sync: bool) {
+        self.sync = sync;
     }
 
     fn from(buf: Vec<u8>) -> WriteBatch {
-        WriteBatch { entries: buf }
+        WriteBatch {
+            entries: buf,
+            sync: false,
+        }
     }
 
     #[allow(unused_assignments)]
