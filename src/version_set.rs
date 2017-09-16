@@ -234,9 +234,15 @@ impl VersionSet {
         self.versions.push(sv);
     }
 
-    fn new_file_number(&mut self) -> FileNum {
+    pub fn new_file_number(&mut self) -> FileNum {
         self.next_file_num += 1;
         self.next_file_num - 1
+    }
+
+    pub fn reuse_file_number(&mut self, n: FileNum) {
+        if n == self.next_file_num - 1 {
+            self.next_file_num = n;
+        }
     }
 
     fn mark_file_number_used(&mut self, n: FileNum) {
