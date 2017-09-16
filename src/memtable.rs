@@ -169,7 +169,7 @@ mod tests {
     use key_types::*;
     use test_util::{test_iterator_properties, LdbIteratorIter};
     use types::*;
-    use options::Options;
+    use options;
 
     #[test]
     fn test_shift_left() {
@@ -183,7 +183,7 @@ mod tests {
     }
 
     fn get_memtable() -> MemTable {
-        let mut mt = MemTable::new(Options::default());
+        let mut mt = MemTable::new(options::for_test());
         let entries = vec![(115, "abc", "122"),
                            (120, "abc", "123"),
                            (121, "abd", "124"),
@@ -204,7 +204,7 @@ mod tests {
 
     #[test]
     fn test_memtable_add() {
-        let mut mt = MemTable::new_raw(Options::default());
+        let mut mt = MemTable::new_raw(options::for_test());
         mt.add(123,
                ValueType::TypeValue,
                "abc".as_bytes(),
@@ -337,7 +337,7 @@ mod tests {
 
     #[test]
     fn test_memtable_iterator_behavior() {
-        let mut mt = MemTable::new(Options::default());
+        let mut mt = MemTable::new(options::for_test());
         let entries = vec![(115, "abc", "122"),
                            (120, "abc", "123"),
                            (121, "abd", "124"),

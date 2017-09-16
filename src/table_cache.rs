@@ -83,6 +83,7 @@ mod tests {
     use super::*;
     use cache;
     use mem_env::MemEnv;
+    use options;
     use table_builder::TableBuilder;
     use test_util::LdbIteratorIter;
 
@@ -119,7 +120,7 @@ mod tests {
     fn test_table_cache() {
         // Tests that a table can be written to a MemFS file, read back by the table cache and
         // parsed/iterated by the table reader.
-        let mut opt = Options::default();
+        let mut opt = options::for_test();
         opt.set_env(Box::new(MemEnv::new()));
         let dbname = "testdb1";
         let tablename = table_name(dbname, 123, DEFAULT_SUFFIX);

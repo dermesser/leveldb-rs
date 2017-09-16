@@ -358,7 +358,7 @@ impl VersionSet {
         let current = current.borrow();
 
         let level = compaction.level;
-        let (smallest, mut largest) = get_range(&self.cmp, compaction.inputs[0].iter());
+        let (mut smallest, mut largest) = get_range(&self.cmp, compaction.inputs[0].iter());
 
         // Set up level+1 inputs.
         compaction.inputs[1] = current.overlapping_inputs(level + 1, &smallest, &largest);
@@ -379,9 +379,19 @@ impl VersionSet {
                 let (new_start, new_limit) = get_range(&self.cmp, expanded0.iter());
                 let expanded1 = current.overlapping_inputs(level + 1, &new_start, &new_limit);
                 if expanded1.len() == compaction.num_inputs(1) {
-                    // TODO: Log this.
+                    log!(self.opt.log,
+                         "Expanding inputs@{} {}+{} ({}+{} bytes) to {}+{} ({}+{} bytes)",
+                         level,
+                         compaction.inputs[0].len(),
+                         compaction.inputs[1].len(),
+                         total_size(compaction.inputs[0].iter()),
+                         total_size(compaction.inputs[1].iter()),
+                         expanded0.len(),
+                         expanded1.len(),
+                         total_size(expanded0.iter()),
+                         total_size(expanded1.iter()));
 
-                    // smallest = new_start;
+                    smallest = new_start;
                     largest = new_limit;
                     compaction.inputs[0] = expanded0;
                     compaction.inputs[1] = expanded1;
@@ -405,7 +415,11 @@ impl VersionSet {
             compaction.grandparents = Some(grandparents);
         }
 
-        // TODO: add log statement about compaction.
+        log!(self.opt.log,
+             "Compacting @{} {:?} .. {:?}",
+             level,
+             smallest,
+             largest);
 
         compaction.edit().set_compact_pointer(level, &largest);
         self.compaction_ptrs[level] = largest;
@@ -624,13 +638,14 @@ impl VersionSet {
             }
 
             assert!(self.descriptor_log.is_none());
-            if let Ok(f) = self.opt.env.open_appendable_file(Path::new(current_manifest_path)) {
-                // TODO: Log this.
+            let s = self.opt.env.open_appendable_file(Path::new(current_manifest_path));
+            if let Ok(f) = s {
+                log!(self.opt.log, "reusing manifest {}", current_manifest_path);
                 self.descriptor_log = Some(LogWriter::new(f));
                 self.manifest_num = num;
                 return true;
             } else {
-                // TODO: Log this.
+                log!(self.opt.log, "reuse_manifest: {}", s.err().unwrap());
                 return false;
             }
         }
@@ -649,11 +664,14 @@ impl VersionSet {
                 // Add individual iterators for L0 tables.
                 for fi in 0..c.num_inputs(i) {
                     let f = &c.inputs[i][fi];
-                    if let Ok(tbl) = self.cache.borrow_mut().get_table(f.borrow().num) {
+                    let s = self.cache.borrow_mut().get_table(f.borrow().num);
+                    if let Ok(tbl) = s {
                         iters.push(Box::new(tbl.iter()));
                     } else {
-                        // TODO: Log this.
-                        panic!("error opening table");
+                        log!(self.opt.log,
+                             "error opening table {}: {}",
+                             f.borrow().num,
+                             s.err().unwrap());
                     }
                 }
             } else {
@@ -977,12 +995,12 @@ mod tests {
             ve.set_last_seq(30);
 
             // Write first manifest to be recovered from.
-            let manifest = manifest_file_name("db", 1);
+            let manifest = manifest_file_name("db", 19);
             let mffile = opt.env.open_writable_file(Path::new(&manifest)).unwrap();
             let mut lw = LogWriter::new(mffile);
             lw.add_record(&ve.encode()).unwrap();
             lw.flush().unwrap();
-            set_current_file(&opt.env.as_ref(), "db", 1).unwrap();
+            set_current_file(&opt.env.as_ref(), "db", 19).unwrap();
         }
 
         // Recover from new state.
@@ -1010,7 +1028,7 @@ mod tests {
             vs.log_and_apply(ve).unwrap();
 
             assert!(opt.env.exists(Path::new("db/CURRENT")).unwrap());
-            assert!(opt.env.exists(Path::new("db/MANIFEST-000001")).unwrap());
+            assert!(opt.env.exists(Path::new("db/MANIFEST-000019")).unwrap());
             // next_file_num and last_seq are untouched by log_and_apply
             assert_eq!(21, vs.new_file_number());
             assert_eq!(22, vs.next_file_num);

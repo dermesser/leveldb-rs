@@ -250,7 +250,7 @@ impl<'a, Dst: Write> TableBuilder<'a, Dst> {
 mod tests {
     use super::{Footer, TableBuilder};
     use blockhandle::BlockHandle;
-    use options::Options;
+    use options;
 
     #[test]
     fn test_footer() {
@@ -269,7 +269,7 @@ mod tests {
     #[test]
     fn test_table_builder() {
         let mut d = Vec::with_capacity(512);
-        let mut opt = Options::default();
+        let mut opt = options::for_test();
         opt.block_restart_interval = 3;
         let mut b = TableBuilder::new_raw(opt, &mut d);
 
@@ -289,7 +289,7 @@ mod tests {
     #[should_panic]
     fn test_bad_input() {
         let mut d = Vec::with_capacity(512);
-        let mut opt = Options::default();
+        let mut opt = options::for_test();
         opt.block_restart_interval = 3;
         let mut b = TableBuilder::new_raw(opt, &mut d);
 
