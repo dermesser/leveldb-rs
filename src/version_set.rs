@@ -153,10 +153,10 @@ pub struct VersionSet {
 impl VersionSet {
     // Note: opt.cmp should not contain an InternalKeyCmp at this point, but instead the default or
     // user-supplied one.
-    pub fn new(db: String, opt: Options, cache: Shared<TableCache>) -> VersionSet {
+    pub fn new(db: &str, opt: Options, cache: Shared<TableCache>) -> VersionSet {
         let v = share(Version::new(cache.clone(), opt.cmp.clone()));
         VersionSet {
-            dbname: db,
+            dbname: db.to_string(),
             cmp: InternalKeyCmp(opt.cmp.clone()),
             opt: opt,
             cache: cache,
@@ -963,7 +963,7 @@ mod tests {
     #[test]
     fn test_version_set_log_and_apply() {
         let (_, opt) = make_version();
-        let mut vs = VersionSet::new("db".to_string(),
+        let mut vs = VersionSet::new("db",
                                      opt.clone(),
                                      share(TableCache::new("db", opt.clone(), 100)));
 
@@ -1031,9 +1031,7 @@ mod tests {
     #[test]
     fn test_version_set_utils() {
         let (v, opt) = make_version();
-        let mut vs = VersionSet::new("db".to_string(),
-                                     opt.clone(),
-                                     share(TableCache::new("db", opt, 100)));
+        let mut vs = VersionSet::new("db", opt.clone(), share(TableCache::new("db", opt, 100)));
         vs.add_version(v);
         // live_files()
         assert_eq!(9, vs.live_files().len());
@@ -1053,9 +1051,7 @@ mod tests {
     #[test]
     fn test_version_set_pick_compaction() {
         let (mut v, opt) = make_version();
-        let mut vs = VersionSet::new("db".to_string(),
-                                     opt.clone(),
-                                     share(TableCache::new("db", opt, 100)));
+        let mut vs = VersionSet::new("db", opt.clone(), share(TableCache::new("db", opt, 100)));
 
         v.compaction_score = Some(2.0);
         v.compaction_level = Some(0);
@@ -1104,9 +1100,7 @@ mod tests {
     #[test]
     fn test_version_set_compaction() {
         let (v, opt) = make_version();
-        let mut vs = VersionSet::new("db".to_string(),
-                                     opt.clone(),
-                                     share(TableCache::new("db", opt, 100)));
+        let mut vs = VersionSet::new("db", opt.clone(), share(TableCache::new("db", opt, 100)));
         time_test!();
         vs.add_version(v);
 
