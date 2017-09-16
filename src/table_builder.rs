@@ -92,7 +92,7 @@ pub struct TableBuilder<'a, Dst: Write> {
 
 impl<'a, Dst: Write> TableBuilder<'a, Dst> {
     pub fn new_no_filter(mut opt: Options, dst: Dst) -> TableBuilder<'a, Dst> {
-        opt.filter_policy = NoFilterPolicy::new();
+        opt.filter_policy = Rc::new(Box::new(NoFilterPolicy::new()));
         TableBuilder::new(opt, dst)
     }
 }
@@ -105,7 +105,7 @@ impl<'a, Dst: Write> TableBuilder<'a, Dst> {
     /// in an InternalFilterPolicy.
     pub fn new(mut opt: Options, dst: Dst) -> TableBuilder<'a, Dst> {
         opt.cmp = Rc::new(Box::new(InternalKeyCmp(opt.cmp.clone())));
-        opt.filter_policy = InternalFilterPolicy::new(opt.filter_policy);
+        opt.filter_policy = Rc::new(Box::new(InternalFilterPolicy::new(opt.filter_policy)));
         TableBuilder::new_raw(opt, dst)
     }
 

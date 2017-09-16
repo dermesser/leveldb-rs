@@ -130,7 +130,7 @@ impl Table {
     /// (InternalFilterPolicy) are used.
     pub fn new(mut opt: Options, file: Rc<Box<RandomAccess>>, size: usize) -> Result<Table> {
         opt.cmp = Rc::new(Box::new(InternalKeyCmp(opt.cmp.clone())));
-        opt.filter_policy = filter::InternalFilterPolicy::new(opt.filter_policy);
+        opt.filter_policy = Rc::new(Box::new(filter::InternalFilterPolicy::new(opt.filter_policy)));
         let t = try!(Table::new_raw(opt, file, size));
         Ok(t)
     }
@@ -452,7 +452,7 @@ mod tests {
         let mut opt = Options::default();
         opt.block_restart_interval = 1;
         opt.block_size = 32;
-        opt.filter_policy = BloomPolicy::new(4);
+        opt.filter_policy = Rc::new(Box::new(BloomPolicy::new(4)));
 
         let mut i = 1 as u64;
         let data: Vec<(Vec<u8>, &'static str)> = build_data()

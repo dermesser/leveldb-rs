@@ -70,7 +70,7 @@ impl Default for Options {
             block_restart_interval: 16,
             reuse_logs: false,
             compression_type: CompressionType::CompressionNone,
-            filter_policy: filter::BloomPolicy::new(DEFAULT_BITS_PER_KEY),
+            filter_policy: Rc::new(Box::new(filter::BloomPolicy::new(DEFAULT_BITS_PER_KEY))),
         }
     }
 }
