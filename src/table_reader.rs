@@ -112,7 +112,7 @@ impl Table {
             }
         }
         metaindexiter.reset();
-        let cache_id = opt.block_cache.lock().unwrap().new_cache_id();
+        let cache_id = opt.block_cache.borrow_mut().new_cache_id();
 
         Ok(Table {
             file: file,
@@ -146,10 +146,8 @@ impl Table {
     /// cache.
     fn read_block(&self, location: &BlockHandle) -> Result<TableBlock> {
         let cachekey = self.block_cache_handle(location.offset());
-        if let Ok(ref mut block_cache) = self.opt.block_cache.lock() {
-            if let Some(block) = block_cache.get(&cachekey) {
+            if let Some(block) = self.opt.block_cache.borrow_mut().get(&cachekey) {
                 return Ok(block.clone());
-            }
         }
 
         // Two times as_ref(): First time to get a ref from Rc<>, then one from Box<>.
@@ -159,10 +157,8 @@ impl Table {
         if !b.verify() {
             return err(StatusCode::InvalidData, "Data block failed verification");
         }
-        if let Ok(ref mut block_cache) = self.opt.block_cache.lock() {
             // insert a cheap copy (Rc).
-            block_cache.insert(&cachekey, b.clone());
-        }
+            self.opt.block_cache.borrow_mut().insert(&cachekey, b.clone());
 
         Ok(b)
     }
@@ -512,15 +508,15 @@ mod tests {
         let mut iter = table.iter();
 
         // index/metaindex blocks are not cached. That'd be a waste of memory.
-        assert_eq!(opt.block_cache.lock().unwrap().count(), 0);
+        assert_eq!(opt.block_cache.borrow().count(), 0);
         iter.next();
-        assert_eq!(opt.block_cache.lock().unwrap().count(), 1);
+        assert_eq!(opt.block_cache.borrow().count(), 1);
         // This may fail if block parameters or data change. In that case, adapt it.
         iter.next();
         iter.next();
         iter.next();
         iter.next();
-        assert_eq!(opt.block_cache.lock().unwrap().count(), 2);
+        assert_eq!(opt.block_cache.borrow().count(), 2);
     }
 
     #[test]
@@ -690,7 +686,7 @@ mod tests {
             assert_eq!(table2.get(&k), Some((k, v)));
         }
 
-        assert_eq!(table.opt.block_cache.lock().unwrap().count(), 3);
+        assert_eq!(table.opt.block_cache.borrow().count(), 3);
 
         // test that filters work and don't return anything at all.
         assert!(table.get("aaa".as_bytes()).is_none());
