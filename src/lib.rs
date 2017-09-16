@@ -18,6 +18,8 @@ mod env_common;
 mod error;
 mod filter;
 mod filter_block;
+#[macro_use]
+mod infolog;
 mod key_types;
 mod log;
 mod mem_env;
