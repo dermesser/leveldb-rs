@@ -111,9 +111,9 @@ mod tests {
         let data = vec![("abc", "def"), ("abd", "dee"), ("bcd", "asa"), ("bsr", "a00")];
 
         for &(k, v) in data.iter() {
-            b.add(k.as_bytes(), v.as_bytes());
+            b.add(k.as_bytes(), v.as_bytes()).unwrap();
         }
-        b.finish();
+        b.finish().unwrap();
     }
 
     #[test]

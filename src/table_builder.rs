@@ -243,6 +243,7 @@ impl<Dst: Write> TableBuilder<Dst> {
         footer.encode(&mut buf);
 
         self.offset += self.dst.write(&buf[..])?;
+        self.dst.flush()?;
         Ok(self.offset)
     }
 }
@@ -278,12 +279,12 @@ mod tests {
         let data2 = vec![("abd", "def"), ("abf", "dee"), ("ccd", "asa"), ("dcd", "a00")];
 
         for i in 0..data.len() {
-            b.add(&data[i].0.as_bytes(), &data[i].1.as_bytes());
-            b.add(&data2[i].0.as_bytes(), &data2[i].1.as_bytes());
+            b.add(&data[i].0.as_bytes(), &data[i].1.as_bytes()).unwrap();
+            b.add(&data2[i].0.as_bytes(), &data2[i].1.as_bytes()).unwrap();
         }
 
         assert!(b.filter_block.is_some());
-        b.finish();
+        b.finish().unwrap();
     }
 
     #[test]
@@ -298,7 +299,8 @@ mod tests {
         let data = vec![("abc", "def"), ("abc", "dee"), ("bcd", "asa"), ("bsr", "a00")];
 
         for &(k, v) in data.iter() {
-            b.add(k.as_bytes(), v.as_bytes());
+            b.add(k.as_bytes(), v.as_bytes()).unwrap();
         }
+        b.finish().unwrap();
     }
 }
