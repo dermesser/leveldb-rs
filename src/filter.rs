@@ -9,8 +9,9 @@ use integer_encoding::FixedInt;
 pub trait FilterPolicy {
     /// Returns a string identifying this policy.
     fn name(&self) -> &'static str;
-    /// Create a filter matching the given keys.
-    fn create_filter(&self, keys: &Vec<&[u8]>) -> Vec<u8>;
+    /// Create a filter matching the given keys. Keys are given as a long byte array that is
+    /// indexed by the offsets contained in key_offsets.
+    fn create_filter(&self, keys: &[u8], key_offsets: &[usize]) -> Vec<u8>;
     /// Check whether the given key may match the filter.
     fn key_may_match(&self, key: &[u8], filter: &[u8]) -> bool;
 }
@@ -23,8 +24,8 @@ impl FilterPolicy for BoxedFilterPolicy {
     fn name(&self) -> &'static str {
         (**self).name()
     }
-    fn create_filter(&self, keys: &Vec<&[u8]>) -> Vec<u8> {
-        (**self).create_filter(keys)
+    fn create_filter(&self, keys: &[u8], key_offsets: &[usize]) -> Vec<u8> {
+        (**self).create_filter(keys, key_offsets)
     }
     fn key_may_match(&self, key: &[u8], filter: &[u8]) -> bool {
         (**self).key_may_match(key, filter)
@@ -45,7 +46,7 @@ impl FilterPolicy for NoFilterPolicy {
     fn name(&self) -> &'static str {
         "_"
     }
-    fn create_filter(&self, _: &Vec<&[u8]>) -> Vec<u8> {
+    fn create_filter(&self, _: &[u8], _: &[usize]) -> Vec<u8> {
         vec![]
     }
     fn key_may_match(&self, _: &[u8], _: &[u8]) -> bool {
@@ -125,8 +126,8 @@ impl FilterPolicy for BloomPolicy {
     fn name(&self) -> &'static str {
         "leveldb.BuiltinBloomFilter2"
     }
-    fn create_filter(&self, keys: &Vec<&[u8]>) -> Vec<u8> {
-        let filter_bits = keys.len() * self.bits_per_key as usize;
+    fn create_filter(&self, keys: &[u8], key_offsets: &[usize]) -> Vec<u8> {
+        let filter_bits = key_offsets.len() * self.bits_per_key as usize;
         let mut filter: Vec<u8>;
 
         if filter_bits < 64 {
@@ -142,16 +143,16 @@ impl FilterPolicy for BloomPolicy {
         // Encode k at the end of the filter.
         filter.push(self.k as u8);
 
-        for key in keys {
+        // Add all keys to the filter.
+        offset_data_iterate(keys, key_offsets, |key| {
             let mut h = self.bloom_hash(key);
             let delta = (h >> 17) | (h << 15);
-
             for _ in 0..self.k {
                 let bitpos = (h % adj_filter_bits) as usize;
                 filter[bitpos / 8] |= 1 << (bitpos % 8);
                 h = (h as u64 + delta as u64) as u32;
             }
-        }
+        });
 
         filter
     }
@@ -201,15 +202,16 @@ impl<FP: FilterPolicy> FilterPolicy for InternalFilterPolicy<FP> {
         self.internal.name()
     }
 
-    fn create_filter(&self, keys: &Vec<&[u8]>) -> Vec<u8> {
-        let mut mod_keys = keys.clone();
+    fn create_filter(&self, keys: &[u8], key_offsets: &[usize]) -> Vec<u8> {
+        let mut mod_keys = Vec::with_capacity(keys.len() - key_offsets.len() * 8);
+        let mut mod_key_offsets = Vec::with_capacity(key_offsets.len());
         let mut i = 0;
 
-        for key in keys {
-            mod_keys[i] = &key[0..key.len() - 8];
-            i += 1;
-        }
-        self.internal.create_filter(&mod_keys)
+        offset_data_iterate(keys, key_offsets, |key| {
+            mod_key_offsets.push(mod_keys.len());
+            mod_keys.extend_from_slice(&key[0..key.len() - 8]);
+        });
+        self.internal.create_filter(&mod_keys, &mod_key_offsets)
     }
 
     fn key_may_match(&self, key: &[u8], filter: &[u8]) -> bool {
@@ -217,6 +219,19 @@ impl<FP: FilterPolicy> FilterPolicy for InternalFilterPolicy<FP> {
     }
 }
 
+/// offset_data_iterate iterates over the entries in data that are indexed by the offsets given in
+/// offsets. This is e.g. the internal format of a FilterBlock.
+fn offset_data_iterate<F: FnMut(&[u8])>(data: &[u8], offsets: &[usize], mut f: F) {
+    for offix in 0..offsets.len() {
+        let upper = if offix == offsets.len() - 1 {
+            data.len()
+        } else {
+            offsets[offix + 1]
+        };
+        let piece = &data[offsets[offix]..upper];
+        f(piece);
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -225,18 +240,26 @@ mod tests {
 
     const _BITS_PER_KEY: u32 = 12;
 
-    fn input_data() -> Vec<&'static [u8]> {
-        let data = vec!["abc123def456".as_bytes(),
-                        "xxx111xxx222".as_bytes(),
-                        "ab00cd00ab".as_bytes(),
-                        "908070605040302010".as_bytes()];
-        data
+    fn input_data() -> (Vec<u8>, Vec<usize>) {
+        let mut concat = vec![];
+        let mut offs = vec![];
+
+        for d in ["abc123def456".as_bytes(),
+                  "xxx111xxx222".as_bytes(),
+                  "ab00cd00ab".as_bytes(),
+                  "908070605040302010".as_bytes()]
+            .iter() {
+            offs.push(concat.len());
+            concat.extend_from_slice(d);
+        }
+        (concat, offs)
     }
 
     /// Creates a filter using the keys from input_data().
     fn create_filter() -> Vec<u8> {
         let fpol = BloomPolicy::new(_BITS_PER_KEY);
-        let filter = fpol.create_filter(&input_data());
+        let (data, offs) = input_data();
+        let filter = fpol.create_filter(&data, &offs);
 
         assert_eq!(filter, vec![194, 148, 129, 140, 192, 196, 132, 164, 8]);
         filter
@@ -245,13 +268,15 @@ mod tests {
     /// Creates a filter using the keys from input_data() but converted to InternalKey format.
     fn create_internalkey_filter() -> Vec<u8> {
         let fpol = Rc::new(Box::new(InternalFilterPolicy::new(BloomPolicy::new(_BITS_PER_KEY))));
-        let input: Vec<Vec<u8>> = input_data()
-            .into_iter()
-            .map(|k| LookupKey::new(k, 123).internal_key().to_vec())
-            .collect();
-        let input_ = input.iter().map(|k| k.as_slice()).collect();
+        let (data, offs) = input_data();
+        let (mut intdata, mut intoffs) = (vec![], vec![]);
 
-        let filter = fpol.create_filter(&input_);
+        offset_data_iterate(&data, &offs, |key| {
+            let ikey = LookupKey::new(key, 123);
+            intoffs.push(intdata.len());
+            intdata.extend_from_slice(ikey.internal_key());
+        });
+        let filter = fpol.create_filter(&intdata, &intoffs);
 
         filter
     }
@@ -260,10 +285,11 @@ mod tests {
     fn test_filter_bloom() {
         let f = create_filter();
         let fp = BloomPolicy::new(_BITS_PER_KEY);
+        let (data, offs) = input_data();
 
-        for k in input_data().iter() {
-            assert!(fp.key_may_match(k, &f));
-        }
+        offset_data_iterate(&data, &offs, |key| {
+            assert!(fp.key_may_match(key, &f));
+        });
     }
 
     /// This test verifies that InternalFilterPolicy works correctly.

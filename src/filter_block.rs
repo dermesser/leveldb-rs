@@ -24,23 +24,25 @@ fn get_filter_index(offset: usize, base_lg2: u32) -> u32 {
 /// Two consecutive filter offsets may be the same.
 ///
 /// TODO: See if we can remove the lifetime parameter.
-pub struct FilterBlockBuilder<'a> {
+pub struct FilterBlockBuilder {
     policy: BoxedFilterPolicy,
     // filters, concatenated
     filters: Vec<u8>,
     filter_offsets: Vec<usize>,
 
     // Reset on every start_block()
-    keys: Vec<&'a [u8]>,
+    key_offsets: Vec<usize>,
+    keys: Vec<u8>,
 }
 
-impl<'a> FilterBlockBuilder<'a> {
-    pub fn new(fp: BoxedFilterPolicy) -> FilterBlockBuilder<'a> {
+impl FilterBlockBuilder {
+    pub fn new(fp: BoxedFilterPolicy) -> FilterBlockBuilder {
         FilterBlockBuilder {
             policy: fp,
             // some pre-allocation
-            filters: Vec::with_capacity(1024 * 40),
+            filters: Vec::with_capacity(1024),
             filter_offsets: Vec::with_capacity(1024),
+            key_offsets: Vec::with_capacity(1024),
             keys: Vec::with_capacity(1024),
         }
     }
@@ -49,8 +51,9 @@ impl<'a> FilterBlockBuilder<'a> {
         self.policy.name()
     }
 
-    pub fn add_key(&mut self, key: &'a [u8]) {
-        self.keys.push(key);
+    pub fn add_key(&mut self, key: &[u8]) {
+        self.key_offsets.push(self.keys.len());
+        self.keys.extend_from_slice(key);
     }
 
     pub fn start_block(&mut self, offset: usize) {
@@ -64,15 +67,15 @@ impl<'a> FilterBlockBuilder<'a> {
 
     fn generate_filter(&mut self) {
         self.filter_offsets.push(self.filters.len());
-
         if self.keys.is_empty() {
             return;
         }
 
-        let filter = self.policy.create_filter(&self.keys);
+        let filter = self.policy.create_filter(&self.keys, &self.key_offsets);
         self.filters.extend_from_slice(&filter);
 
         self.keys.clear();
+        self.key_offsets.clear();
     }
 
     pub fn finish(mut self) -> Vec<u8> {
