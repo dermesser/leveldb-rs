@@ -183,8 +183,7 @@ impl Table {
     /// Iterators read from the file; thus only one iterator can be borrowed (mutably) per scope
     pub fn iter(&self) -> TableIterator {
         let iter = TableIterator {
-            current_block: self.indexblock.iter(),
-            init: false,
+            current_block: None,
             current_block_off: 0,
             index_block: self.indexblock.iter(),
             table: self.clone(),
@@ -256,12 +255,8 @@ pub struct TableIterator {
     // Instead, reference-counted pointers and locks inside the Table ensure that all
     // TableIterators still share a table.
     table: Table,
-    // We're not using Option<BlockIter>, but instead a separate `init` field. That makes it easier
-    // working with the current block in the iterator methods (no borrowing annoyance as with
-    // Option<>)
-    current_block: BlockIter,
+    current_block: Option<BlockIter>,
     current_block_off: usize,
-    init: bool,
     index_block: BlockIter,
 }
 
@@ -281,10 +276,9 @@ impl TableIterator {
     // Load the block at `handle` into `self.current_block`
     fn load_block(&mut self, handle: &[u8]) -> Result<()> {
         let (new_block_handle, _) = BlockHandle::decode(handle);
+        let block = self.table.read_block(&new_block_handle)?;
 
-        let block = try!(self.table.read_block(&new_block_handle));
-
-        self.current_block = block.block.iter();
+        self.current_block = Some(block.block.iter());
         self.current_block_off = new_block_handle.offset();
 
         Ok(())
@@ -293,44 +287,44 @@ impl TableIterator {
 
 impl LdbIterator for TableIterator {
     fn advance(&mut self) -> bool {
-        // init essentially means that `current_block` is a data block (it's initially filled with
-        // an index block as filler).
-        if self.init {
-            if self.current_block.advance() {
-                true
-            } else {
-                match self.skip_to_next_entry() {
-                    Ok(true) => self.advance(),
-                    Ok(false) => {
-                        self.reset();
-                        false
-                    }
-                    // try next block, this might be corruption
-                    Err(_) => self.advance(),
-                }
-            }
-        } else {
+        // Uninitialized case.
+        if self.current_block.is_none() {
             match self.skip_to_next_entry() {
-                Ok(true) => {
-                    // Only initialize if we got an entry
-                    self.init = true;
-                    self.advance()
-                }
+                Ok(true) => return self.advance(),
                 Ok(false) => {
                     self.reset();
-                    false
+                    return false;
                 }
                 // try next block from index, this might be corruption
-                Err(_) => self.advance(),
+                Err(_) => return self.advance(),
             }
         }
+
+        // Initialized case -- does the current block have more entries?
+        if let Some(ref mut cb) = self.current_block {
+            if cb.advance() {
+                return true;
+            }
+        }
+
+        // If the current block is exhausted, try loading the next block.
+        self.current_block = None;
+        match self.skip_to_next_entry() {
+            Ok(true) => self.advance(),
+            Ok(false) => {
+                self.reset();
+                false
+            }
+            // try next block, this might be corruption
+            Err(_) => self.advance(),
+        }
     }
+
     // A call to valid() after seeking is necessary to ensure that the seek worked (e.g., no error
     // while reading from disk)
     fn seek(&mut self, to: &[u8]) {
         // first seek in index block, rewind by one entry (so we get the next smaller index entry),
         // then set current_block and seek there
-
         self.index_block.seek(to);
 
         let (past_block, handle) = current_key_val(&self.index_block)
@@ -338,8 +332,8 @@ impl LdbIterator for TableIterator {
         if self.table.opt.cmp.cmp(to, &past_block) <= Ordering::Equal {
             // ok, found right block: continue
             if let Ok(()) = self.load_block(&handle) {
-                self.current_block.seek(to);
-                self.init = true;
+                // current_block is always set if load_block() returned Ok.
+                self.current_block.as_mut().unwrap().seek(to);
             } else {
                 self.reset();
                 return;
@@ -352,42 +346,45 @@ impl LdbIterator for TableIterator {
 
     fn prev(&mut self) -> bool {
         // happy path: current block contains previous entry
-        if self.current_block.prev() {
-            true
-        } else {
-            // Go back one block and look for the last entry in the previous block
-            if self.index_block.prev() {
-                if let Some((_, handle)) = current_key_val(&self.index_block) {
-                    if self.load_block(&handle).is_ok() {
-                        self.current_block.seek_to_last();
-                        self.current_block.valid()
-                    } else {
-                        self.reset();
-                        false
-                    }
+        if let Some(ref mut cb) = self.current_block {
+            if cb.prev() {
+                return true;
+            }
+        }
+
+        // Go back one block and look for the last entry in the previous block
+        if self.index_block.prev() {
+            if let Some((_, handle)) = current_key_val(&self.index_block) {
+                if self.load_block(&handle).is_ok() {
+                    self.current_block.as_mut().unwrap().seek_to_last();
+                    self.current_block.as_ref().unwrap().valid()
                 } else {
+                    self.reset();
                     false
                 }
             } else {
                 false
             }
+        } else {
+            false
         }
     }
 
     fn reset(&mut self) {
         self.index_block.reset();
-        self.init = false;
+        self.current_block = None;
     }
 
     // This iterator is special in that it's valid even before the first call to advance(). It
     // behaves correctly, though.
     fn valid(&self) -> bool {
-        self.init && (self.current_block.valid() || self.index_block.valid())
+        self.current_block.is_some() &&
+        (self.current_block.as_ref().unwrap().valid() || self.index_block.valid())
     }
 
     fn current(&self, key: &mut Vec<u8>, val: &mut Vec<u8>) -> bool {
-        if self.init {
-            self.current_block.current(key, val)
+        if let Some(ref cb) = self.current_block {
+            cb.current(key, val)
         } else {
             false
         }
