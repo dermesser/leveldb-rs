@@ -77,7 +77,7 @@ impl Footer {
 /// the index block, padding to fill up to 40 B and at the end the 8B magic number
 /// 0xdb4775248b80fb57.
 
-pub struct TableBuilder<'a, Dst: Write> {
+pub struct TableBuilder<Dst: Write> {
     opt: Options,
     dst: Dst,
 
@@ -87,11 +87,11 @@ pub struct TableBuilder<'a, Dst: Write> {
 
     data_block: Option<BlockBuilder>,
     index_block: Option<BlockBuilder>,
-    filter_block: Option<FilterBlockBuilder<'a>>,
+    filter_block: Option<FilterBlockBuilder>,
 }
 
-impl<'a, Dst: Write> TableBuilder<'a, Dst> {
-    pub fn new_no_filter(mut opt: Options, dst: Dst) -> TableBuilder<'a, Dst> {
+impl<Dst: Write> TableBuilder<Dst> {
+    pub fn new_no_filter(mut opt: Options, dst: Dst) -> TableBuilder<Dst> {
         opt.filter_policy = Rc::new(Box::new(NoFilterPolicy::new()));
         TableBuilder::new(opt, dst)
     }
@@ -99,18 +99,18 @@ impl<'a, Dst: Write> TableBuilder<'a, Dst> {
 
 /// TableBuilder is used for building a new SSTable. It groups entries into blocks,
 /// calculating checksums and bloom filters.
-impl<'a, Dst: Write> TableBuilder<'a, Dst> {
+impl<Dst: Write> TableBuilder<Dst> {
     /// Create a new table builder.
     /// The comparator in opt will be wrapped in a InternalKeyCmp, and the filter policy
     /// in an InternalFilterPolicy.
-    pub fn new(mut opt: Options, dst: Dst) -> TableBuilder<'a, Dst> {
+    pub fn new(mut opt: Options, dst: Dst) -> TableBuilder<Dst> {
         opt.cmp = Rc::new(Box::new(InternalKeyCmp(opt.cmp.clone())));
         opt.filter_policy = Rc::new(Box::new(InternalFilterPolicy::new(opt.filter_policy)));
         TableBuilder::new_raw(opt, dst)
     }
 
     /// Like new(), but doesn't wrap the comparator in an InternalKeyCmp (for testing)
-    pub fn new_raw(opt: Options, dst: Dst) -> TableBuilder<'a, Dst> {
+    pub fn new_raw(opt: Options, dst: Dst) -> TableBuilder<Dst> {
         TableBuilder {
             opt: opt.clone(),
             dst: dst,
