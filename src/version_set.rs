@@ -212,7 +212,7 @@ impl VersionSet {
 
     /// current returns a reference to the current version. It panics if there is no current
     /// version.
-    fn current(&self) -> Shared<Version> {
+    pub fn current(&self) -> Shared<Version> {
         assert!(self.current.is_some());
         self.current.as_ref().unwrap().clone()
     }
@@ -251,7 +251,8 @@ impl VersionSet {
         }
     }
 
-    fn needs_compaction(&self) -> bool {
+    /// needs_compaction returns true if a compaction makes sense at this point.
+    pub fn needs_compaction(&self) -> bool {
         assert!(self.current.is_some());
         let v = self.current.as_ref().unwrap();
         let v = v.borrow();

@@ -205,7 +205,6 @@ impl<FP: FilterPolicy> FilterPolicy for InternalFilterPolicy<FP> {
     fn create_filter(&self, keys: &[u8], key_offsets: &[usize]) -> Vec<u8> {
         let mut mod_keys = Vec::with_capacity(keys.len() - key_offsets.len() * 8);
         let mut mod_key_offsets = Vec::with_capacity(key_offsets.len());
-        let mut i = 0;
 
         offset_data_iterate(keys, key_offsets, |key| {
             mod_key_offsets.push(mod_keys.len());
