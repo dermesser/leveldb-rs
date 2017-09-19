@@ -37,3 +37,5 @@ mod version;
 mod version_edit;
 mod version_set;
 mod write_batch;
+
+mod db_impl;
