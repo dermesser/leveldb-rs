@@ -37,8 +37,11 @@ pub struct LookupKey {
 const U64_SPACE: usize = 8;
 
 impl LookupKey {
-    #[allow(unused_assignments)]
-    pub fn new(k: &[u8], s: SequenceNumber) -> LookupKey {
+    pub fn new<'a>(k: UserKey<'a>, s: SequenceNumber) -> LookupKey {
+        LookupKey::new_full(k, s, ValueType::TypeValue)
+    }
+
+    pub fn new_full<'a>(k: UserKey<'a>, s: SequenceNumber, t: ValueType) -> LookupKey {
         let mut key = Vec::new();
         let internal_keylen = k.len() + U64_SPACE;
         key.resize(k.len() + internal_keylen.required_space() + U64_SPACE, 0);
@@ -47,7 +50,7 @@ impl LookupKey {
             let mut writer = key.as_mut_slice();
             writer.write_varint(internal_keylen).expect("write to slice failed");
             writer.write(k).expect("write to slice failed");
-            writer.write_fixedint(s << 8 | ValueType::TypeValue as u64)
+            writer.write_fixedint(s << 8 | t as u64)
                 .expect("write to slice failed");
         }
 
