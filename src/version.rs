@@ -513,7 +513,7 @@ pub mod testutil {
     use mem_env::MemEnv;
     use options::{self, Options};
     use table_builder::TableBuilder;
-    use table_cache::table_name;
+    use table_cache::table_file_name;
     use types::{share, FileMetaData, FileNum};
 
     use std::path::Path;
@@ -540,7 +540,7 @@ pub mod testutil {
                        startseq: u64,
                        num: FileNum)
                        -> FileMetaHandle {
-        let dst = me.open_writable_file(Path::new(&table_name("db", num, "ldb"))).unwrap();
+        let dst = me.open_writable_file(Path::new(&table_file_name("db", num))).unwrap();
         let mut seq = startseq;
         let keys: Vec<Vec<u8>> = contents.iter()
             .map(|&(k, _)| {
@@ -637,7 +637,7 @@ mod tests {
     use merging_iter::MergingIter;
     use options;
     use table_builder::TableBuilder;
-    use table_cache::{table_name, TableCache};
+    use table_cache::{table_file_name, TableCache};
     use test_util::{test_iterator_properties, LdbIteratorIter};
     use types::share;
 
