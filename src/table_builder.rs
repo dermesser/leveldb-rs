@@ -1,6 +1,7 @@
 use block::{BlockBuilder, BlockContents};
 use blockhandle::BlockHandle;
 use cmp::InternalKeyCmp;
+use error::Result;
 use filter::{InternalFilterPolicy, NoFilterPolicy};
 use filter_block::FilterBlockBuilder;
 use key_types::InternalKey;
@@ -128,7 +129,7 @@ impl<Dst: Write> TableBuilder<Dst> {
     }
 
     /// Add a key to the table. The key as to be lexically greater or equal to the last one added.
-    pub fn add(&mut self, key: InternalKey<'a>, val: &[u8]) {
+    pub fn add<'a>(&mut self, key: InternalKey<'a>, val: &[u8]) -> Result<()> {
         assert!(self.data_block.is_some());
 
         if !self.prev_block_last_key.is_empty() {
@@ -136,7 +137,7 @@ impl<Dst: Write> TableBuilder<Dst> {
         }
 
         if self.data_block.as_ref().unwrap().size_estimate() > self.opt.block_size {
-            self.write_data_block(key);
+            self.write_data_block(key)?;
         }
 
         let dblock = &mut self.data_block.as_mut().unwrap();
@@ -147,12 +148,13 @@ impl<Dst: Write> TableBuilder<Dst> {
 
         self.num_entries += 1;
         dblock.add(key, val);
+        Ok(())
     }
 
     /// Writes an index entry for the current data_block where `next_key` is the first key of the
     /// next block.
     /// Calls write_block() for writing the block to disk.
-    fn write_data_block<'b>(&mut self, next_key: InternalKey<'b>) {
+    fn write_data_block<'b>(&mut self, next_key: InternalKey<'b>) -> Result<()> {
         assert!(self.data_block.is_some());
 
         let block = self.data_block.take().unwrap();
@@ -168,16 +170,17 @@ impl<Dst: Write> TableBuilder<Dst> {
         self.data_block = Some(BlockBuilder::new(self.opt.clone()));
 
         let ctype = self.opt.compression_type;
-
-        self.write_block(contents, ctype);
+        self.write_block(contents, ctype)?;
 
         if let Some(ref mut fblock) = self.filter_block {
             fblock.start_block(self.offset);
         }
+
+        Ok(())
     }
 
     /// Calculates the checksum, writes the block to disk and updates the offset.
-    fn write_block(&mut self, block: BlockContents, t: CompressionType) -> BlockHandle {
+    fn write_block(&mut self, block: BlockContents, t: CompressionType) -> Result<BlockHandle> {
         // compression is still unimplemented
         assert_eq!(t, CompressionType::CompressionNone);
 
@@ -188,19 +191,17 @@ impl<Dst: Write> TableBuilder<Dst> {
         digest.write(&[self.opt.compression_type as u8; TABLE_BLOCK_COMPRESS_LEN]);
         digest.sum32().encode_fixed(&mut buf);
 
-        // TODO: Handle errors here.
-        let _ = self.dst.write(&block);
-        let _ = self.dst.write(&[t as u8; TABLE_BLOCK_COMPRESS_LEN]);
-        let _ = self.dst.write(&buf);
+        self.dst.write(&block)?;
+        self.dst.write(&[t as u8; TABLE_BLOCK_COMPRESS_LEN])?;
+        self.dst.write(&buf)?;
 
         let handle = BlockHandle::new(self.offset, block.len());
-
         self.offset += block.len() + TABLE_BLOCK_COMPRESS_LEN + TABLE_BLOCK_CKSUM_LEN;
 
-        handle
+        Ok(handle)
     }
 
-    pub fn finish(mut self) -> usize {
+    pub fn finish(mut self) -> Result<usize> {
         assert!(self.data_block.is_some());
         let ctype = self.opt.compression_type;
 
@@ -209,7 +210,7 @@ impl<Dst: Write> TableBuilder<Dst> {
             // Find a key reliably past the last key
             let key_past_last =
                 self.opt.cmp.find_short_succ(self.data_block.as_ref().unwrap().last_key());
-            self.write_data_block(&key_past_last);
+            self.write_data_block(&key_past_last)?;
         }
 
         // Create metaindex block
@@ -220,7 +221,7 @@ impl<Dst: Write> TableBuilder<Dst> {
             let fblock = self.filter_block.take().unwrap();
             let filter_key = format!("filter.{}", fblock.filter_name());
             let fblock_data = fblock.finish();
-            let fblock_handle = self.write_block(fblock_data, CompressionType::CompressionNone);
+            let fblock_handle = self.write_block(fblock_data, CompressionType::CompressionNone)?;
 
             let mut handle_enc = [0 as u8; 16];
             let enc_len = fblock_handle.encode_to(&mut handle_enc);
@@ -230,19 +231,19 @@ impl<Dst: Write> TableBuilder<Dst> {
 
         // write metaindex block
         let meta_ix = meta_ix_block.finish();
-        let meta_ix_handle = self.write_block(meta_ix, ctype);
+        let meta_ix_handle = self.write_block(meta_ix, ctype)?;
 
         // write index block
         let index_cont = self.index_block.take().unwrap().finish();
-        let ix_handle = self.write_block(index_cont, ctype);
+        let ix_handle = self.write_block(index_cont, ctype)?;
 
         // write footer.
         let footer = Footer::new(meta_ix_handle, ix_handle);
         let mut buf = [0; FULL_FOOTER_LENGTH];
         footer.encode(&mut buf);
 
-        self.offset += self.dst.write(&buf[..]).unwrap();
-        self.offset
+        self.offset += self.dst.write(&buf[..])?;
+        Ok(self.offset)
     }
 }
 
