@@ -4,6 +4,7 @@ use disk_env;
 use env::Env;
 use filter;
 use infolog::{self, Logger};
+use mem_env::MemEnv;
 use table_reader::TableBlock;
 use types::{share, SequenceNumber, Shared};
 
@@ -80,6 +81,7 @@ impl Default for Options {
 
 pub fn for_test() -> Options {
     let mut o = Options::default();
+    o.env = Rc::new(Box::new(MemEnv::new()));
     o.log = share(infolog::stderr());
     o
 }
