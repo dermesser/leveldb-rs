@@ -457,7 +457,7 @@ impl VersionSet {
 
     /// log_and_apply merges the given edit with the current state and generates a new version. It
     /// writes the VersionEdit to the manifest.
-    fn log_and_apply(&mut self, mut edit: VersionEdit) -> Result<()> {
+    pub fn log_and_apply(&mut self, mut edit: VersionEdit) -> Result<()> {
         assert!(self.current.is_some());
 
         if edit.log_number.is_none() {
