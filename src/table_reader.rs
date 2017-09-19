@@ -29,6 +29,7 @@ fn read_bytes(f: &RandomAccess, location: &BlockHandle) -> Result<Vec<u8>> {
     f.read_at(location.offset(), &mut buf).map(|_| buf)
 }
 
+/// A TableBlock consists of [bytes..., compress (1B), checksum (4B)].
 #[derive(Clone)]
 pub struct TableBlock {
     block: Block,
