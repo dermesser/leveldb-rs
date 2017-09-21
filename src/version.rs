@@ -1,9 +1,9 @@
 use cmp::{Cmp, InternalKeyCmp};
 use error::Result;
-use key_types::{parse_internal_key, InternalKey, LookupKey, UserKey};
+use key_types::{parse_internal_key, InternalKey, LookupKey, UserKey, ValueType};
 use table_cache::TableCache;
 use table_reader::TableIterator;
-use types::{MAX_SEQUENCE_NUMBER, NUM_LEVELS, FileMetaData, FileNum, LdbIterator, Shared, ValueType};
+use types::{MAX_SEQUENCE_NUMBER, NUM_LEVELS, FileMetaData, FileNum, LdbIterator, Shared};
 
 use std::cmp::Ordering;
 use std::default::Default;
