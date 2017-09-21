@@ -74,6 +74,14 @@ impl TableCache {
         self.cache.insert(&filenum_to_key(file_num), table.clone());
         Ok(table)
     }
+
+    pub fn evict(&mut self, file_num: FileNum) -> Result<()> {
+        if self.cache.remove(&filenum_to_key(file_num)).is_some() {
+            Ok(())
+        } else {
+            err(StatusCode::NotFound, "table not present in cache")
+        }
+    }
 }
 
 #[cfg(test)]
@@ -129,10 +137,16 @@ mod tests {
         assert!(opt.env.size_of(tblpath).unwrap() > 20);
 
         let mut cache = TableCache::new(dbname, opt.clone(), 10);
+        assert!(cache.cache.get(&filenum_to_key(123)).is_none());
         assert_eq!(LdbIteratorIter::wrap(&mut cache.get_table(123).unwrap().iter()).count(),
                    4);
         // Test cached table.
         assert_eq!(LdbIteratorIter::wrap(&mut cache.get_table(123).unwrap().iter()).count(),
                    4);
+
+        assert!(cache.cache.get(&filenum_to_key(123)).is_some());
+        assert!(cache.evict(123).is_ok());
+        assert!(cache.evict(123).is_err());
+        assert!(cache.cache.get(&filenum_to_key(123)).is_none());
     }
 }
