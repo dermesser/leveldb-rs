@@ -128,6 +128,20 @@ impl<Dst: Write> TableBuilder<Dst> {
         self.num_entries
     }
 
+    pub fn size_estimate(&self) -> usize {
+        let mut size = 0;
+        if let Some(ref b) = self.data_block {
+            size += b.size_estimate();
+        }
+        if let Some(ref b) = self.index_block {
+            size += b.size_estimate();
+        }
+        if let Some(ref b) = self.filter_block {
+            size += b.size_estimate();
+        }
+        size + self.offset + FULL_FOOTER_LENGTH
+    }
+
     /// Add a key to the table. The key as to be lexically greater or equal to the last one added.
     pub fn add<'a>(&mut self, key: InternalKey<'a>, val: &[u8]) -> Result<()> {
         assert!(self.data_block.is_some());
@@ -283,8 +297,13 @@ mod tests {
             b.add(&data2[i].0.as_bytes(), &data2[i].1.as_bytes()).unwrap();
         }
 
+        let estimate = b.size_estimate();
+
+        assert_eq!(143, estimate);
         assert!(b.filter_block.is_some());
-        b.finish().unwrap();
+
+        let actual = b.finish().unwrap();
+        assert_eq!(233, actual);
     }
 
     #[test]
