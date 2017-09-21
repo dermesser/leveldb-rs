@@ -158,8 +158,6 @@ pub struct VersionSet {
     pub last_seq: u64,
     pub log_num: u64,
 
-    // TODO: Remove this.
-    versions: Vec<Shared<Version>>,
     current: Option<Shared<Version>>,
     compaction_ptrs: [Vec<u8>; NUM_LEVELS],
 
@@ -182,7 +180,6 @@ impl VersionSet {
             last_seq: 0,
             log_num: 0,
 
-            versions: vec![v.clone()],
             current: Some(v),
             compaction_ptrs: Default::default(),
             descriptor_log: None,
@@ -196,7 +193,7 @@ impl VersionSet {
     /// live_files returns the files that are currently active.
     pub fn live_files(&self) -> HashSet<FileNum> {
         let mut files = HashSet::new();
-        for version in &self.versions {
+        if let Some(ref version) = self.current {
             for level in 0..NUM_LEVELS {
                 for file in &version.borrow().files[level] {
                     files.insert(file.borrow().num);
@@ -204,31 +201,6 @@ impl VersionSet {
             }
         }
         files
-    }
-
-    /// release_compaction checks if the input_version of a compaction is held in the VersionSet,
-    /// and removes it if needed. This typically happens after a compaction has finished.
-    ///
-    /// We need to hold the list of all live versions so that if someone asks for the live files
-    /// while a compaction is happening, we still know all files -- even ones that will soon be
-    /// removed. (TODO: Check if this makes sense in a non-concurrent world; if it doesn't, remove
-    /// the versions field).
-    ///
-    /// NOT TESTED.
-    fn _release_compaction(&mut self, c: &Compaction) {
-        let current = self.current.as_ref().unwrap();
-        if let Some(ref v) = c.input_version {
-            // We don't remove the current version.
-            if Rc::ptr_eq(v, current) {
-                return;
-            }
-            for i in 0..self.versions.len() {
-                if Rc::ptr_eq(v, &self.versions[i]) {
-                    self.versions.swap_remove(i);
-                    break;
-                }
-            }
-        }
     }
 
     /// current returns a reference to the current version. It panics if there is no current
@@ -250,10 +222,9 @@ impl VersionSet {
         self.current.as_ref().unwrap().borrow().files[l].len()
     }
 
-    fn add_version(&mut self, v: Version) {
+    pub fn add_version(&mut self, v: Version) {
         let sv = share(v);
         self.current = Some(sv.clone());
-        self.versions.push(sv);
     }
 
     pub fn new_file_number(&mut self) -> FileNum {
@@ -1048,7 +1019,6 @@ mod tests {
             // the following fields are touched by log_and_apply.
             assert_eq!(11, vs.log_num);
 
-            assert_eq!(3, vs.versions.len());
             // The previous "compaction" should have added one file to the first level in the
             // current version.
             assert_eq!(0, vs.current.as_ref().unwrap().borrow().files[0].len());
