@@ -117,7 +117,7 @@ impl Version {
     }
 
     /// level_summary returns a summary of the distribution of tables and bytes in this version.
-    fn level_summary(&self) -> String {
+    pub fn level_summary(&self) -> String {
         let mut acc = String::with_capacity(256);
         for level in 0..NUM_LEVELS {
             let fs = &self.files[level];
