@@ -330,7 +330,7 @@ impl BlockBuilder {
     }
 
     pub fn size_estimate(&self) -> usize {
-        self.buffer.len() + self.restarts.len() * 4 + 4
+        self.buffer.len() + 4 * self.restarts.len() + 4
     }
 
     pub fn reset(&mut self) {

@@ -1,6 +1,6 @@
 use key_types::ValueType;
 use memtable::MemTable;
-use types::{SequenceNumber};
+use types::SequenceNumber;
 use integer_encoding::{VarInt, VarIntWriter, FixedInt};
 
 use std::io::Write;
