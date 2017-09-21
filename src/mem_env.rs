@@ -170,11 +170,14 @@ impl MemFS {
     }
     fn children_of(&self, p: &Path) -> Result<Vec<String>> {
         let fs = self.store.lock()?;
-        let prefix = path_to_string(p);
+        let mut prefix = path_to_string(p);
+        if !prefix.ends_with("/") {
+            prefix.push('/');
+        }
         let mut children = Vec::new();
         for k in fs.keys() {
             if k.starts_with(&prefix) {
-                children.push(k.clone());
+                children.push(k.trim_left_matches(&prefix).to_string());
             }
         }
         Ok(children)
@@ -473,10 +476,10 @@ mod tests {
         for p in &[&path1, &path2, &path3] {
             fs.open_w(*p, false, false).unwrap();
         }
+        let children = fs.children_of(&Path::new("/a")).unwrap();
+        assert!((children == vec!["1.txt", "2.txt"]) || (children == vec!["2.txt", "1.txt"]));
         let children = fs.children_of(&Path::new("/a/")).unwrap();
-        // TODO: Find proper testing framework.
-        assert!((children == vec!["/a/1.txt", "/a/2.txt"]) ||
-                (children == vec!["/a/2.txt", "/a/1.txt"]));
+        assert!((children == vec!["1.txt", "2.txt"]) || (children == vec!["2.txt", "1.txt"]));
     }
 
     #[test]
