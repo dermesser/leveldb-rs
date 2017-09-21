@@ -12,6 +12,7 @@ use log::LogWriter;
 use key_types::{parse_internal_key, ValueType};
 use memtable::MemTable;
 use options::Options;
+use snapshot::{Snapshot, SnapshotList};
 use table_builder::TableBuilder;
 use table_cache::{table_file_name, TableCache};
 use types::{parse_file_name, share, FileMetaData, FileNum, FileType, LdbIterator,
@@ -42,17 +43,20 @@ pub struct DB {
     log_num: Option<FileNum>,
     cache: Shared<TableCache>,
     vset: VersionSet,
+    snaps: SnapshotList,
 
     cstats: [CompactionStats; NUM_LEVELS],
 }
 
 impl DB {
     fn new(name: &str, mut opt: Options) -> DB {
+        if opt.log.is_none() {
+            let log = open_info_log(opt.env.as_ref().as_ref(), &name);
+            opt.log = Some(share(log));
+        }
+
         let cache = share(TableCache::new(&name, opt.clone(), opt.max_open_files - 10));
         let vset = VersionSet::new(&name, opt.clone(), cache.clone());
-
-        let log = open_info_log(opt.env.as_ref().as_ref(), &name);
-        opt.log = share(log);
 
         DB {
             name: name.to_string(),
@@ -69,6 +73,7 @@ impl DB {
             log_num: None,
             cache: cache,
             vset: vset,
+            snaps: SnapshotList::new(),
 
             cstats: Default::default(),
         }
@@ -227,6 +232,12 @@ impl DB {
         assert!(self.vset.num_level_files(cs.compaction.level()) > 0);
         assert!(cs.builder.is_none());
 
+        cs.smallest_seq = if self.snaps.empty() {
+            self.vset.last_seq
+        } else {
+            self.snaps.oldest()
+        };
+
         let mut input = self.vset.make_input_iterator(&cs.compaction);
         input.seek_to_first();
 
@@ -307,7 +318,7 @@ impl DB {
         self.cstats[cs.compaction.level()].add(stats);
         self.install_compaction_results(cs)?;
         log!(self.opt.log,
-             "Compaction finished with {}",
+             "Compaction finished: {}",
              self.vset.current_summary());
 
         Ok(())
@@ -366,9 +377,10 @@ impl DB {
     fn delete_obsolete_files(&mut self) -> Result<()> {
         let files = self.vset.live_files();
         let filenames = self.opt.env.children(Path::new(&self.name))?;
-
+        log!(self.opt.log, "{:?}", filenames);
         for name in filenames {
             if let Ok((num, typ)) = parse_file_name(&name) {
+                log!(self.opt.log, "{} {:?}", num, typ);
                 match typ {
                     FileType::Log => {
                         if num >= self.vset.log_num {
@@ -523,18 +535,19 @@ mod tests {
     use key_types::LookupKey;
     use mem_env::MemEnv;
     use test_util::LdbIteratorIter;
+    use version::testutil::make_version;
 
     #[test]
     fn test_db_impl_open_info_log() {
         let e = MemEnv::new();
         {
-            let l = share(open_info_log(&e, "abc"));
+            let l = Some(share(open_info_log(&e, "abc")));
             assert!(e.exists(Path::new("abc/LOG")).unwrap());
             log!(l, "hello {}", "world");
             assert_eq!(12, e.size_of(Path::new("abc/LOG")).unwrap());
         }
         {
-            let l = share(open_info_log(&e, "abc"));
+            let l = Some(share(open_info_log(&e, "abc")));
             assert!(e.exists(Path::new("abc/LOG.old")).unwrap());
             assert!(e.exists(Path::new("abc/LOG")).unwrap());
             assert_eq!(12, e.size_of(Path::new("abc/LOG.old")).unwrap());
@@ -602,7 +615,7 @@ mod tests {
     }
 
     #[test]
-    fn test_db_impl_make_room_for_write() {
+    fn test_db_impl_memtable_compaction() {
         let mut opt = options::for_test();
         opt.write_buffer_size = 25;
         let mut db = DB::new("db", opt);
@@ -616,5 +629,53 @@ mod tests {
         assert!(db.opt.env.exists(Path::new("db/000002.log")).unwrap());
         assert!(db.opt.env.exists(Path::new("db/000003.ldb")).unwrap());
         assert_eq!(351, db.opt.env.size_of(Path::new("db/000003.ldb")).unwrap());
+        assert_eq!(7,
+                   LdbIteratorIter::wrap(&mut db.cache.borrow_mut().get_table(3).unwrap().iter())
+                       .count());
+    }
+
+    #[test]
+    fn test_db_impl_compaction() {
+        let (mut v, opt) = make_version();
+
+        // Trigger size compaction at level 1.
+        v.compaction_score = Some(2.0);
+        v.compaction_level = Some(1);
+
+        let mut db = DB::new("db", opt.clone());
+        db.vset.add_version(v);
+        db.vset.next_file_num = 10;
+
+        db.start_compaction();
+
+        assert!(!opt.env.exists(Path::new("db/000003.ldb")).unwrap());
+        assert!(opt.env.exists(Path::new("db/000010.ldb")).unwrap());
+        assert_eq!(375, opt.env.size_of(Path::new("db/000010.ldb")).unwrap());
+
+        let v = db.vset.current();
+        assert_eq!(0, v.borrow().files[1].len());
+        assert_eq!(2, v.borrow().files[2].len());
+    }
+
+    #[test]
+    fn test_db_impl_compaction_trivial() {
+        let (mut v, opt) = make_version();
+
+        let to_compact = v.files[2][0].clone();
+        v.file_to_compact = Some(to_compact);
+        v.file_to_compact_lvl = 2;
+
+        let mut db = DB::new("db", opt.clone());
+        db.vset.add_version(v);
+        db.vset.next_file_num = 10;
+
+        db.start_compaction();
+        assert!(opt.env.exists(Path::new("db/000006.ldb")).unwrap());
+        assert!(!opt.env.exists(Path::new("db/000010.ldb")).unwrap());
+        assert_eq!(218, opt.env.size_of(Path::new("db/000006.ldb")).unwrap());
+
+        let v = db.vset.current();
+        assert_eq!(1, v.borrow().files[2].len());
+        assert_eq!(3, v.borrow().files[3].len());
     }
 }

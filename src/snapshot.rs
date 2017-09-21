@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use types::SequenceNumber;
 
-// Opaque snapshot handle; Represents index to SnapshotList.map
+/// Opaque snapshot handle; Represents index to SnapshotList.map
 pub type Snapshot = u64;
 
 /// A list of all snapshots is kept in the DB.
