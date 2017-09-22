@@ -84,6 +84,15 @@ impl DB {
         self.cstats[level].add(cs);
     }
 
+
+    pub fn get_snapshot(&mut self) -> Snapshot {
+        self.snaps.new_snapshot(self.vset.last_seq)
+    }
+
+    pub fn release_snapshot(&mut self, snapshot: Snapshot) {
+        self.snaps.delete(snapshot)
+    }
+
     /// make_room_for_write checks if the memtable has become too large, and triggers a compaction
     /// if it's the case.
     fn make_room_for_write(&mut self) -> Result<()> {
