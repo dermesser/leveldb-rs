@@ -9,7 +9,7 @@ use error::{err, StatusCode, Result};
 use filter::{BoxedFilterPolicy, InternalFilterPolicy};
 use infolog::Logger;
 use log::LogWriter;
-use key_types::{parse_internal_key, ValueType};
+use key_types::{parse_internal_key, InternalKey, ValueType};
 use memtable::MemTable;
 use options::Options;
 use snapshot::{Snapshot, SnapshotList};
@@ -84,6 +84,13 @@ impl DB {
         self.cstats[level].add(cs);
     }
 
+    /// Trigger a compaction based on where this key is located in the different levels.
+    fn record_read_sample<'a>(&mut self, k: InternalKey<'a>) {
+        let current = self.vset.current();
+        if current.borrow_mut().record_read_sample(k) {
+            self.maybe_do_compaction();
+        }
+    }
 
     pub fn get_snapshot(&mut self) -> Snapshot {
         self.snaps.new_snapshot(self.vset.last_seq)
