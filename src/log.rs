@@ -40,6 +40,14 @@ impl<W: Write> LogWriter<W> {
         }
     }
 
+    /// new_with_off opens a writer starting at some offset of an existing log file. The file must
+    /// have the default block size.
+    pub fn new_with_off(writer: W, off: usize) -> LogWriter<W> {
+        let mut w = LogWriter::new(writer);
+        w.current_block_offset = off % BLOCK_SIZE;
+        w
+    }
+
     pub fn add_record(&mut self, r: &[u8]) -> Result<usize> {
         let mut record = &r[..];
         let mut first_frag = true;
@@ -118,10 +126,10 @@ pub struct LogReader<R: Read> {
 }
 
 impl<R: Read> LogReader<R> {
-    pub fn new(src: R, chksum: bool, offset: usize) -> LogReader<R> {
+    pub fn new(src: R, chksum: bool) -> LogReader<R> {
         LogReader {
             src: src,
-            blk_off: offset,
+            blk_off: 0,
             blocksize: BLOCK_SIZE,
             checksums: chksum,
             head_scratch: [0; 7],
@@ -165,7 +173,7 @@ impl<R: Read> LogReader<R> {
 
             if self.checksums &&
                !self.check_integrity(typ, &dst[dst_offset..dst_offset + bytes_read], checksum) {
-                return err(StatusCode::InvalidData, "Invalid Checksum");
+                return err(StatusCode::Corruption, "Invalid Checksum");
             }
 
             dst_offset += length as usize;
@@ -193,16 +201,49 @@ impl<R: Read> LogReader<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Cursor;
 
     #[test]
     fn test_writer() {
-        let data = &"hello world. My first log entry.".as_bytes().to_vec();
+        let data = &["hello world. My first log entry.", "and my second", "and my third"];
         let mut lw = LogWriter::new(Vec::new());
+        let total_len = data.iter().fold(0, |l, d| l + d.len());
 
-        let _ = lw.add_record(&data);
+        for d in data {
+            let _ = lw.add_record(d.as_bytes());
+        }
 
-        assert_eq!(lw.current_block_offset, data.len() + super::HEADER_SIZE);
-        assert_eq!(&lw.dst[super::HEADER_SIZE..], data.as_slice());
+        assert_eq!(lw.current_block_offset, total_len + 3 * super::HEADER_SIZE);
+    }
+
+    #[test]
+    fn test_writer_append() {
+        let data = &["hello world. My first log entry.", "and my second", "and my third"];
+
+        let mut dst = Vec::new();
+        dst.resize(1024, 0 as u8);
+
+        {
+            let mut lw = LogWriter::new(Cursor::new(dst.as_mut_slice()));
+            for d in data {
+                let _ = lw.add_record(d.as_bytes());
+            }
+        }
+
+        let old = dst.clone();
+
+        // Ensure that new_with_off positions the writer correctly. Some ugly mucking about with
+        // cursors and stuff is required.
+        {
+            let offset = data[0].len() + super::HEADER_SIZE;
+            let mut lw = LogWriter::new_with_off(Cursor::new(&mut dst.as_mut_slice()[offset..]),
+                                                 offset);
+            for d in &data[1..] {
+                let _ = lw.add_record(d.as_bytes());
+            }
+        }
+        assert_eq!(old, dst);
+
     }
 
     #[test]
@@ -219,7 +260,7 @@ mod tests {
 
         assert_eq!(lw.dst.len(), 93);
 
-        let mut lr = LogReader::new(lw.dst.as_slice(), true, 0);
+        let mut lr = LogReader::new(lw.dst.as_slice(), true);
         lr.blocksize = super::HEADER_SIZE + 10;
         let mut dst = Vec::with_capacity(128);
         let mut i = 0;
