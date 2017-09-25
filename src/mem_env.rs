@@ -220,7 +220,14 @@ impl MemFS {
                     Ok(FileLock { id: path_to_string(p) })
                 }
             }
-            Entry::Vacant(_) => err(StatusCode::NotFound, "not found"),
+            Entry::Vacant(v) => {
+                let f = MemFile::new();
+                v.insert(MemFSEntry {
+                    f: f.clone(),
+                    locked: true,
+                });
+                Ok(FileLock { id: path_to_string(p) })
+            }
         }
     }
     fn unlock_(&self, l: FileLock) -> Result<()> {
@@ -509,8 +516,8 @@ mod tests {
 
         // Non-existent files.
         let p2 = Path::new("/a/lock2");
-        assert!(fs.lock_(p2).is_err());
-        assert!(fs.unlock_(env::FileLock { id: "/a/lock2".to_string() }).is_err());
+        assert!(fs.lock_(p2).is_ok());
+        assert!(fs.unlock_(env::FileLock { id: "/a/lock2".to_string() }).is_ok());
     }
 
     #[test]
@@ -539,7 +546,7 @@ mod tests {
         assert!(me.rename(nonexist, p1).is_err());
 
         me.unlock(me.lock(p3).unwrap());
-        assert!(me.lock(nonexist).is_err());
+        assert!(me.lock(nonexist).is_ok());
 
         me.new_logger(p1).unwrap();
         assert!(me.micros() > 0);
