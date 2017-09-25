@@ -99,7 +99,7 @@ impl Env for PosixDiskEnv {
         if locks.contains_key(&p.to_str().unwrap().to_string()) {
             Err(Status::new(StatusCode::AlreadyExists, "Lock is held"))
         } else {
-            let f = try!(fs::OpenOptions::new().write(true).open(p));
+            let f = try!(fs::OpenOptions::new().write(true).create(true).open(p));
 
             let flock_arg = libc::flock {
                 l_type: F_WRLCK,
