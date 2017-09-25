@@ -5,7 +5,7 @@ use std::io;
 use std::result;
 use std::sync;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 #[allow(dead_code)]
 pub enum StatusCode {
     OK,
@@ -24,8 +24,8 @@ pub enum StatusCode {
 
 #[derive(Clone, Debug)]
 pub struct Status {
-    code: StatusCode,
-    err: String,
+    pub code: StatusCode,
+    pub err: String,
 }
 
 impl Default for Status {
