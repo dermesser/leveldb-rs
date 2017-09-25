@@ -53,6 +53,7 @@ pub struct Options {
     pub block_restart_interval: usize,
     pub compression_type: CompressionType,
     pub reuse_logs: bool,
+    pub reuse_manifest: bool,
     pub filter_policy: filter::BoxedFilterPolicy,
 }
 
@@ -73,6 +74,7 @@ impl Default for Options {
             block_size: BLOCK_MAX_SIZE,
             block_restart_interval: 16,
             reuse_logs: false,
+            reuse_manifest: true,
             compression_type: CompressionType::CompressionNone,
             filter_policy: Rc::new(Box::new(filter::BloomPolicy::new(DEFAULT_BITS_PER_KEY))),
         }
