@@ -100,15 +100,13 @@ impl WriteBatch {
         }
     }
 
-    pub fn insert_into_memtable(&self, seq: SequenceNumber, mt: &mut MemTable) {
-        let mut sequence_num = seq;
-
+    pub fn insert_into_memtable(&self, mut seq: SequenceNumber, mt: &mut MemTable) {
         for (k, v) in self.iter() {
             match v {
-                Some(v_) => mt.add(sequence_num, ValueType::TypeValue, k, v_),
-                None => mt.add(sequence_num, ValueType::TypeDeletion, k, "".as_bytes()),
+                Some(v_) => mt.add(seq, ValueType::TypeValue, k, v_),
+                None => mt.add(seq, ValueType::TypeDeletion, k, "".as_bytes()),
             }
-            sequence_num += 1;
+            seq += 1;
         }
     }
 
