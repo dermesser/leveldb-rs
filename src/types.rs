@@ -152,6 +152,7 @@ pub fn parse_file_name(f: &str) -> Result<(FileNum, FileType)> {
         // 00012345.log 00123.sst ...
         if let Ok(num) = FileNum::from_str_radix(&f[0..ix], 10) {
             let typ = match &f[ix + 1..] {
+                "log" => FileType::Log,
                 "sst" | "ldb" => FileType::Table,
                 "dbtmp" => FileType::Temp,
                 _ => {
