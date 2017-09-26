@@ -204,7 +204,8 @@ impl DB {
                         -> Result<(bool, SequenceNumber)> {
         let filename = log_file_name(&self.name, log_num);
         let logfile = self.opt.env.open_sequential_file(Path::new(&filename))?;
-        let cmp: Rc<Box<Cmp>> = Rc::new(Box::new(self.cmp.clone()));
+        // Use the user-supplied comparator; it will be wrapped inside a MemtableKeyCmp.
+        let cmp: Rc<Box<Cmp>> = self.opt.cmp.clone();
 
         let mut logreader = LogReader::new(logfile,
                                            // checksum=
