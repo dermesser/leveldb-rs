@@ -10,6 +10,7 @@ use std::io::{Error, ErrorKind, Read, Write};
 use crc::crc32;
 use crc::Hasher32;
 use integer_encoding::FixedInt;
+use integer_encoding::FixedIntWriter;
 
 const BLOCK_SIZE: usize = 32 * 1024;
 const HEADER_SIZE: usize = 4 + 2 + 1;
@@ -97,11 +98,11 @@ impl<W: Write> LogWriter<W> {
         self.digest.write(&[t as u8]);
         self.digest.write(&data[0..len]);
 
-        let chksum = self.digest.sum32();
+        let chksum = mask_crc(self.digest.sum32());
 
         let mut s = 0;
         s += try!(self.dst.write(&chksum.encode_fixed_vec()));
-        s += try!(self.dst.write(&(len as u16).encode_fixed_vec()));
+        s += try!(self.dst.write_fixedint(len as u16));
         s += try!(self.dst.write(&[t as u8]));
         s += try!(self.dst.write(&data[0..len]));
 
@@ -117,6 +118,7 @@ impl<W: Write> LogWriter<W> {
 
 
 pub struct LogReader<R: Read> {
+    // TODO: Wrap src in a buffer to enhance read performance.
     src: R,
     digest: crc32::Digest,
     blk_off: usize,
@@ -194,14 +196,32 @@ impl<R: Read> LogReader<R> {
         self.digest.reset();
         self.digest.write(&[typ]);
         self.digest.write(data);
-        expected == self.digest.sum32()
+        unmask_crc(expected) == self.digest.sum32()
     }
+}
+
+const MASK_DELTA: u32 = 0xa282ead8;
+
+fn mask_crc(c: u32) -> u32 {
+    (c.wrapping_shr(15) | c.wrapping_shl(17)).wrapping_add(MASK_DELTA)
+}
+
+fn unmask_crc(mc: u32) -> u32 {
+    let rot = mc.wrapping_sub(MASK_DELTA);
+    (rot.wrapping_shr(17) | rot.wrapping_shl(15))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::io::Cursor;
+
+    #[test]
+    fn test_crc_mask_crc() {
+        let crc = crc32::checksum_castagnoli("abcde".as_bytes());
+        assert_eq!(crc, unmask_crc(mask_crc(crc)));
+        assert!(crc != mask_crc(crc));
+    }
 
     #[test]
     fn test_writer() {
@@ -259,12 +279,18 @@ mod tests {
         }
 
         assert_eq!(lw.dst.len(), 93);
+        // Corrupt first record.
+        lw.dst[2] += 1;
 
         let mut lr = LogReader::new(lw.dst.as_slice(), true);
         lr.blocksize = super::HEADER_SIZE + 10;
         let mut dst = Vec::with_capacity(128);
-        let mut i = 0;
 
+        // First record is corrupted.
+        assert_eq!(err(StatusCode::Corruption, "Invalid Checksum"),
+                   lr.read(&mut dst));
+
+        let mut i = 1;
         loop {
             let r = lr.read(&mut dst);
 
