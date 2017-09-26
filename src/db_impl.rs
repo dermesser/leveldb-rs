@@ -314,6 +314,31 @@ impl DB {
 }
 
 impl DB {
+    // WRITE //
+
+    fn put(&mut self, k: &[u8], v: &[u8]) -> Result<()> {
+        let mut wb = WriteBatch::new();
+        wb.put(k, v);
+        self.write(wb, false)
+    }
+
+    fn write(&mut self, batch: WriteBatch, sync: bool) -> Result<()> {
+        assert!(self.log.is_some());
+        let entries = batch.count() as u64;
+        let log = self.log.as_mut().unwrap();
+
+        log.add_record(&batch.encode(self.vset.last_seq + 1))?;
+        if sync {
+            log.flush()?;
+        }
+
+        self.vset.last_seq += entries;
+
+        Ok(())
+    }
+}
+
+impl DB {
     // STATISTICS //
     fn add_stats(&mut self, level: usize, cs: CompactionStats) {
         assert!(level < NUM_LEVELS);
@@ -809,6 +834,7 @@ mod tests {
 
     #[test]
     fn test_db_impl_init() {
+        // A sanity check for recovery and basic persistence.
         let opt = options::for_test();
         let env = opt.env.clone();
 
@@ -832,7 +858,7 @@ mod tests {
         {
             let mut opt = opt.clone();
             opt.reuse_manifest = true;
-            let db = DB::open("db", opt.clone()).unwrap();
+            let mut db = DB::open("db", opt.clone()).unwrap();
 
             println!("children after: {:?}",
                      env.children(Path::new("db/")).unwrap());
@@ -841,6 +867,9 @@ mod tests {
             assert!(env.exists(Path::new("db/MANIFEST-000001")).unwrap());
             assert!(env.exists(Path::new("db/LOCK")).unwrap());
             assert!(env.exists(Path::new("db/000003.log")).unwrap());
+
+            db.put("abc".as_bytes(), "def".as_bytes()).unwrap();
+            db.put("abd".as_bytes(), "def".as_bytes()).unwrap();
         }
 
         {
@@ -848,7 +877,7 @@ mod tests {
                      env.children(Path::new("db/")).unwrap());
             let mut opt = opt.clone();
             opt.reuse_manifest = false;
-            let mut db = DB::open("db", opt).unwrap();
+            let db = DB::open("db", opt.clone()).unwrap();
 
             println!("children after: {:?}",
                      env.children(Path::new("db/")).unwrap());
@@ -858,7 +887,19 @@ mod tests {
             assert!(env.exists(Path::new("db/MANIFEST-000002")).unwrap());
             // Obsolete log file is deleted.
             assert!(!env.exists(Path::new("db/000003.log")).unwrap());
+            // New L0 table has been added.
+            assert!(env.exists(Path::new("db/000003.ldb")).unwrap());
             assert!(env.exists(Path::new("db/000004.log")).unwrap());
+            // Check that entry exists and is correct. Phew, long call chain!
+            let current = db.vset.current();
+            log!(opt.log, "files: {:?}", current.borrow().files);
+            assert_eq!("def".as_bytes(),
+                       current.borrow_mut()
+                           .get(LookupKey::new("abc".as_bytes(), 1).internal_key())
+                           .unwrap()
+                           .unwrap()
+                           .0
+                           .as_slice());
         }
 
         {
@@ -868,7 +909,7 @@ mod tests {
             // manifest is written. CURRENT becomes stale.
             let mut opt = opt.clone();
             opt.reuse_logs = true;
-            let mut db = DB::open("db", opt).unwrap();
+            let db = DB::open("db", opt).unwrap();
 
             println!("children after: {:?}",
                      env.children(Path::new("db/")).unwrap());
