@@ -22,7 +22,7 @@ pub enum StatusCode {
     Unknown,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Status {
     pub code: StatusCode,
     pub err: String,
