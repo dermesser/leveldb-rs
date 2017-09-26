@@ -523,7 +523,7 @@ impl VersionSet {
     }
 
     /// recover recovers the state of a LevelDB instance from the files on disk. If recover()
-    /// returns true, proceed with calling log_and_apply().
+    /// returns true, the a manifest needs to be written eventually (using log_and_apply()).
     pub fn recover(&mut self) -> Result<bool> {
         assert!(self.current.is_some());
 
@@ -587,8 +587,15 @@ impl VersionSet {
         self.finalize(&mut v);
         self.add_version(v);
         self.manifest_num = self.next_file_num - 1;
+        log!(self.opt.log,
+             "Recovered manifest with next_file={} manifest_num={} log_num={} last_seq={}",
+             self.next_file_num,
+             self.manifest_num,
+             self.log_num,
+             self.last_seq);
 
-        Ok(self.reuse_manifest(&descfilename, &current))
+        // A new manifest needs to be written only if we don't reuse the existing one.
+        Ok(!self.reuse_manifest(&descfilename, &current))
     }
 
     /// reuse_manifest checks whether the current manifest can be reused.
