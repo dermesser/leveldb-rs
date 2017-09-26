@@ -52,6 +52,8 @@ pub struct DB {
 }
 
 impl DB {
+    // RECOVERY AND INITIALIZATION //
+
     /// new initializes a new DB object, but doesn't touch disk.
     fn new(name: &str, mut opt: Options) -> DB {
         if opt.log.is_none() {
@@ -110,6 +112,24 @@ impl DB {
         db.maybe_do_compaction();
 
         Ok(db)
+    }
+
+    /// initialize_db initializes a new database.
+    fn initialize_db(&mut self) -> Result<()> {
+        let mut ve = VersionEdit::new();
+        ve.set_comparator_name(self.opt.cmp.id());
+        ve.set_log_num(0);
+        ve.set_next_file(2);
+        ve.set_last_seq(0);
+
+        {
+            let manifest = manifest_file_name(&self.name, 1);
+            let manifest_file = self.opt.env.open_writable_file(Path::new(&manifest))?;
+            let mut lw = LogWriter::new(manifest_file);
+            lw.add_record(&ve.encode())?;
+            lw.flush()?;
+        }
+        set_current_file(&self.opt.env, &self.name, 1)
     }
 
     /// recover recovers from the existing state on disk. If the wrapped result is `true`, then
@@ -174,25 +194,9 @@ impl DB {
         Ok(save_manifest)
     }
 
-    /// initialize_db initializes a new database.
-    fn initialize_db(&mut self) -> Result<()> {
-        let mut ve = VersionEdit::new();
-        ve.set_comparator_name(self.opt.cmp.id());
-        ve.set_log_num(0);
-        ve.set_next_file(2);
-        ve.set_last_seq(0);
-
-        {
-            let manifest = manifest_file_name(&self.name, 1);
-            let manifest_file = self.opt.env.open_writable_file(Path::new(&manifest))?;
-            let mut lw = LogWriter::new(manifest_file);
-            lw.add_record(&ve.encode())?;
-            lw.flush()?;
-        }
-        set_current_file(&self.opt.env, &self.name, 1)
-    }
-
-
+    /// recover_log_file reads a single log file into a memtable, writing new L0 tables if
+    /// necessary. If is_last is true, it checks whether the log file can be reused, and sets up
+    /// the database's logging handles appropriately if that's the case.
     fn recover_log_file(&mut self,
                         log_num: FileNum,
                         is_last: bool,
@@ -259,6 +263,57 @@ impl DB {
         Ok((save_manifest, max_seq))
     }
 
+    /// delete_obsolete_files removes files that are no longer needed from the file system.
+    fn delete_obsolete_files(&mut self) -> Result<()> {
+        let files = self.vset.live_files();
+        let filenames = self.opt.env.children(Path::new(&self.name))?;
+        for name in filenames {
+            if let Ok((num, typ)) = parse_file_name(&name) {
+                log!(self.opt.log, "{} {:?}", num, typ);
+                match typ {
+                    FileType::Log => {
+                        if num >= self.vset.log_num {
+                            continue;
+                        }
+                    }
+                    FileType::Descriptor => {
+                        if num >= self.vset.manifest_num {
+                            continue;
+                        }
+                    }
+                    FileType::Table => {
+                        if files.contains(&num) {
+                            continue;
+                        }
+                    }
+                    // NOTE: In this non-concurrent implementation, we likely never find temp
+                    // files.
+                    FileType::Temp => {
+                        if files.contains(&num) {
+                            continue;
+                        }
+                    }
+                    FileType::Current | FileType::DBLock | FileType::InfoLog => continue,
+                }
+
+                // If we're here, delete this file.
+                if typ == FileType::Table {
+                    self.cache.borrow_mut().evict(num).is_ok();
+                }
+                log!(self.opt.log, "Deleting file type={:?} num={}", typ, num);
+                if let Err(e) = self.opt
+                    .env
+                    .delete(Path::new(&format!("{}/{}", &self.name, &name))) {
+                    log!(self.opt.log, "Deleting file num={} failed: {}", num, e);
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+impl DB {
+    // STATISTICS //
     fn add_stats(&mut self, level: usize, cs: CompactionStats) {
         assert!(level < NUM_LEVELS);
         self.cstats[level].add(cs);
@@ -271,7 +326,10 @@ impl DB {
             self.maybe_do_compaction();
         }
     }
+}
 
+impl DB {
+    // SNAPSHOTS //
     pub fn get_snapshot(&mut self) -> Snapshot {
         self.snaps.new_snapshot(self.vset.last_seq)
     }
@@ -279,7 +337,10 @@ impl DB {
     pub fn release_snapshot(&mut self, snapshot: Snapshot) {
         self.snaps.delete(snapshot)
     }
+}
 
+impl DB {
+    // COMPACTIONS //
     /// make_room_for_write checks if the memtable has become too large, and triggers a compaction
     /// if it's the case.
     fn make_room_for_write(&mut self) -> Result<()> {
@@ -575,53 +636,6 @@ impl DB {
         }
         self.vset.log_and_apply(cs.compaction.into_edit())
     }
-
-    fn delete_obsolete_files(&mut self) -> Result<()> {
-        let files = self.vset.live_files();
-        let filenames = self.opt.env.children(Path::new(&self.name))?;
-        for name in filenames {
-            if let Ok((num, typ)) = parse_file_name(&name) {
-                log!(self.opt.log, "{} {:?}", num, typ);
-                match typ {
-                    FileType::Log => {
-                        if num >= self.vset.log_num {
-                            continue;
-                        }
-                    }
-                    FileType::Descriptor => {
-                        if num >= self.vset.manifest_num {
-                            continue;
-                        }
-                    }
-                    FileType::Table => {
-                        if files.contains(&num) {
-                            continue;
-                        }
-                    }
-                    // NOTE: In this non-concurrent implementation, we likely never find temp
-                    // files.
-                    FileType::Temp => {
-                        if files.contains(&num) {
-                            continue;
-                        }
-                    }
-                    FileType::Current | FileType::DBLock | FileType::InfoLog => continue,
-                }
-
-                // If we're here, delete this file.
-                if typ == FileType::Table {
-                    self.cache.borrow_mut().evict(num).is_ok();
-                }
-                log!(self.opt.log, "Deleting file type={:?} num={}", typ, num);
-                if let Err(e) = self.opt
-                    .env
-                    .delete(Path::new(&format!("{}/{}", &self.name, &name))) {
-                    log!(self.opt.log, "Deleting file num={} failed: {}", num, e);
-                }
-            }
-        }
-        Ok(())
-    }
 }
 
 impl Drop for DB {
@@ -797,13 +811,32 @@ mod tests {
         let opt = options::for_test();
         let env = opt.env.clone();
 
+        // Several test cases with different options follow. The printlns can eventually be
+        // removed.
+
         {
+            let mut opt = opt.clone();
+            opt.reuse_manifest = false;
+            let db = DB::open("otherdb", opt.clone()).unwrap();
+
+            println!("children after: {:?}",
+                     env.children(Path::new("otherdb/")).unwrap());
+            assert!(env.exists(Path::new("otherdb/CURRENT")).unwrap());
+            // Database is initialized and initial manifest reused.
+            assert!(!env.exists(Path::new("otherdb/MANIFEST-000001")).unwrap());
+            assert!(env.exists(Path::new("otherdb/MANIFEST-000002")).unwrap());
+            assert!(env.exists(Path::new("otherdb/000003.log")).unwrap());
+        }
+
+        {
+            let mut opt = opt.clone();
+            opt.reuse_manifest = true;
             let db = DB::open("db", opt.clone()).unwrap();
 
             println!("children after: {:?}",
                      env.children(Path::new("db/")).unwrap());
             assert!(env.exists(Path::new("db/CURRENT")).unwrap());
-            // Database is initialized.
+            // Database is initialized and initial manifest reused.
             assert!(env.exists(Path::new("db/MANIFEST-000001")).unwrap());
             assert!(env.exists(Path::new("db/LOCK")).unwrap());
             assert!(env.exists(Path::new("db/000003.log")).unwrap());
@@ -840,6 +873,7 @@ mod tests {
                      env.children(Path::new("db/")).unwrap());
             assert!(!env.exists(Path::new("db/MANIFEST-000001")).unwrap());
             assert!(env.exists(Path::new("db/MANIFEST-000002")).unwrap());
+            assert!(!env.exists(Path::new("db/MANIFEST-000005")).unwrap());
             assert!(env.exists(Path::new("db/000004.log")).unwrap());
             // 000004 should be reused, no new log file should be created.
             assert!(!env.exists(Path::new("db/000006.log")).unwrap());
