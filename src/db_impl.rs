@@ -117,17 +117,17 @@ impl DB {
     /// acquire_lock acquires the lock file.
     fn acquire_lock(&mut self) -> Result<()> {
         let lock_r = self.opt.env.lock(Path::new(&lock_file_name(&self.name)));
-        if let Ok(lockfile) = lock_r {
-            self.lock = Some(lockfile);
-            return Ok(());
+        match lock_r {
+            Ok(lockfile) => {
+                self.lock = Some(lockfile);
+                Ok(())
+            }
+            Err(ref e) if e.code == StatusCode::LockError => {
+                err(StatusCode::LockError,
+                    "database lock is held by another instance")
+            }
+            Err(e) => Err(e),
         }
-
-        let e = lock_r.unwrap_err();
-        if e.code == StatusCode::LockError {
-            return err(StatusCode::LockError,
-                       "database lock is held by another instance");
-        }
-        e
     }
 
     /// release_lock releases the lock file, if it's currently held.
@@ -690,7 +690,7 @@ impl DB {
 
 impl Drop for DB {
     fn drop(&mut self) {
-        self.release_lock();
+        self.release_lock().is_ok();
     }
 }
 
