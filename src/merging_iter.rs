@@ -114,10 +114,11 @@ impl MergingIter {
         }
 
         let mut next_ix = 0;
+        let (mut current, mut smallest, mut valscratch) = (vec![], vec![], vec![]);
 
         for i in 1..self.iters.len() {
-            if let Some((current, _)) = current_key_val(self.iters[i].as_ref()) {
-                if let Some((smallest, _)) = current_key_val(self.iters[next_ix].as_ref()) {
+            if self.iters[i].current(&mut current, &mut valscratch) {
+                if self.iters[next_ix].current(&mut smallest, &mut valscratch) {
                     if self.cmp.cmp(&current, &smallest) == ord {
                         next_ix = i;
                     }
