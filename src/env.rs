@@ -38,7 +38,7 @@ pub trait Env {
     fn rename(&self, &Path, &Path) -> Result<()>;
 
     fn lock(&self, &Path) -> Result<FileLock>;
-    fn unlock(&self, l: FileLock);
+    fn unlock(&self, l: FileLock) -> Result<()>;
 
     fn new_logger(&self, &Path) -> Result<Logger>;
 

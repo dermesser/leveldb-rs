@@ -304,8 +304,8 @@ impl Env for MemEnv {
     fn lock(&self, p: &Path) -> Result<FileLock> {
         self.0.lock_(p)
     }
-    fn unlock(&self, p: FileLock) {
-        self.0.unlock_(p).expect("memfs unlock failed!");
+    fn unlock(&self, p: FileLock) -> Result<()> {
+        self.0.unlock_(p)
     }
 
     fn micros(&self) -> u64 {

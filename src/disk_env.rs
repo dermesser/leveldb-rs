@@ -1,6 +1,6 @@
 use env::{Env, FileLock, Logger, RandomAccess};
 use env_common::{micros, sleep_for};
-use error::{Status, StatusCode, Result};
+use error::{err, Status, StatusCode, Result};
 
 use std::collections::HashMap;
 use std::fs;
@@ -124,11 +124,11 @@ impl Env for PosixDiskEnv {
             Ok(lock)
         }
     }
-    fn unlock(&self, l: FileLock) {
+    fn unlock(&self, l: FileLock) -> Result<()> {
         let mut locks = self.locks.lock().unwrap();
 
         if !locks.contains_key(&l.id) {
-            panic!("Unlocking a file that is not locked!");
+            return err(StatusCode::LockError, "unlocking a file that is not locked!");
         } else {
             let fd = locks.remove(&l.id).unwrap();
             let flock_arg = libc::flock {
@@ -144,10 +144,9 @@ impl Env for PosixDiskEnv {
                             mem::transmute::<&libc::flock, *const libc::flock>(&&flock_arg))
             };
             if result < 0 {
-                // ignore for now
+                return err(StatusCode::LockError, "unlock failed");
             }
-
-            ()
+            Ok(())
         }
     }
 
