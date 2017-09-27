@@ -39,7 +39,7 @@ pub struct Compaction {
 
 impl Compaction {
     // Note: opt.cmp should be the user-supplied or default comparator (not an InternalKeyCmp).
-    fn new(opt: &Options, level: usize, input: Option<Shared<Version>>) -> Compaction {
+    pub fn new(opt: &Options, level: usize, input: Option<Shared<Version>>) -> Compaction {
         Compaction {
             level: level,
             max_file_size: opt.max_file_size,
