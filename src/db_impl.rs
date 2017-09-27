@@ -340,25 +340,35 @@ impl DB {
 impl DB {
     // WRITE //
 
+    /// put adds a single entry.
     fn put(&mut self, k: &[u8], v: &[u8]) -> Result<()> {
         let mut wb = WriteBatch::new();
         wb.put(k, v);
         self.write(wb, false)
     }
 
+    /// write writes an entire WriteBatch. sync determines whether the write should be flushed to
+    /// disk.
     fn write(&mut self, batch: WriteBatch, sync: bool) -> Result<()> {
         assert!(self.log.is_some());
         let entries = batch.count() as u64;
         let log = self.log.as_mut().unwrap();
+        let next = self.vset.last_seq + 1;
 
-        log.add_record(&batch.encode(self.vset.last_seq + 1))?;
+        batch.insert_into_memtable(next, &mut self.mem);
+        log.add_record(&batch.encode(next))?;
         if sync {
             log.flush()?;
         }
-
         self.vset.last_seq += entries;
 
         Ok(())
+    }
+
+    /// flush makes sure that all pending changes (e.g. from put()) are stored on disk.
+    fn flush(&mut self) -> Result<()> {
+        assert!(self.log.is_some());
+        self.log.as_mut().unwrap().flush()
     }
 }
 
