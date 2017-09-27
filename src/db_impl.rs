@@ -882,7 +882,7 @@ mod tests {
         {
             let mut opt = opt.clone();
             opt.reuse_manifest = false;
-            let db = DB::open("otherdb", opt.clone()).unwrap();
+            let _ = DB::open("otherdb", opt.clone()).unwrap();
 
             println!("children after: {:?}",
                      env.children(Path::new("otherdb/")).unwrap());
@@ -968,6 +968,7 @@ mod tests {
         }
     }
 
+    #[allow(unused_variables)]
     #[test]
     fn test_db_impl_locking() {
         let opt = options::for_test();

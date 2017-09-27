@@ -545,7 +545,7 @@ mod tests {
         assert!(!me.exists(p1).unwrap());
         assert!(me.rename(nonexist, p1).is_err());
 
-        me.unlock(me.lock(p3).unwrap());
+        me.unlock(me.lock(p3).unwrap()).unwrap();
         assert!(me.lock(nonexist).is_ok());
 
         me.new_logger(p1).unwrap();

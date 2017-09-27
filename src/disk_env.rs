@@ -128,7 +128,8 @@ impl Env for PosixDiskEnv {
         let mut locks = self.locks.lock().unwrap();
 
         if !locks.contains_key(&l.id) {
-            return err(StatusCode::LockError, "unlocking a file that is not locked!");
+            return err(StatusCode::LockError,
+                       "unlocking a file that is not locked!");
         } else {
             let fd = locks.remove(&l.id).unwrap();
             let flock_arg = libc::flock {
@@ -214,7 +215,7 @@ mod tests {
         {
             let r = env.lock(name);
             assert!(r.is_ok());
-            env.unlock(r.unwrap());
+            env.unlock(r.unwrap()).unwrap();
         }
 
         {
@@ -222,7 +223,7 @@ mod tests {
             assert!(r.is_ok());
             let s = env.lock(name);
             assert!(s.is_err());
-            env.unlock(r.unwrap());
+            env.unlock(r.unwrap()).unwrap();
         }
 
         assert!(env.delete(name).is_ok());
