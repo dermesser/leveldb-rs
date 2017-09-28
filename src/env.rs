@@ -60,3 +60,11 @@ impl Logger {
         let _ = self.dst.write("\n".as_bytes());
     }
 }
+
+pub fn path_to_string(p: &Path) -> String {
+    p.to_str().map(String::from).unwrap()
+}
+
+pub fn path_to_str(p: &Path) -> &str {
+    p.to_str().unwrap()
+}

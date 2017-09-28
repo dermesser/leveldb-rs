@@ -1,6 +1,6 @@
 //! An in-memory implementation of Env.
 
-use env::{Env, FileLock, Logger, RandomAccess};
+use env::{path_to_str, path_to_string, Env, FileLock, Logger, RandomAccess};
 use env_common::{micros, sleep_for};
 use error::{err, Result, StatusCode};
 
@@ -10,10 +10,6 @@ use std::io::{self, Read, Write};
 use std::ops::Deref;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
-
-fn path_to_string(p: &Path) -> String {
-    p.to_str().map(String::from).unwrap()
-}
 
 /// BufferBackedFile is a simple type implementing RandomAccess on a Vec<u8>.
 pub type BufferBackedFile = Vec<u8>;
@@ -145,7 +141,8 @@ impl MemFS {
             Entry::Occupied(o) => Ok(o.get().f.clone()),
             Entry::Vacant(v) => {
                 if !create {
-                    return err(StatusCode::NotFound, "file not found");
+                    return err(StatusCode::NotFound,
+                               &format!("open: file not found: {}", path_to_str(p)));
                 }
                 let f = MemFile::new();
                 v.insert(MemFSEntry {
@@ -166,7 +163,7 @@ impl MemFS {
     }
     fn exists_(&self, p: &Path) -> Result<bool> {
         let fs = self.store.lock()?;
-        Ok(fs.contains_key(&path_to_string(p)))
+        Ok(fs.contains_key(path_to_str(p)))
     }
     fn children_of(&self, p: &Path) -> Result<Vec<String>> {
         let fs = self.store.lock()?;
@@ -186,7 +183,10 @@ impl MemFS {
         let mut fs = self.store.lock()?;
         match fs.entry(path_to_string(p)) {
             Entry::Occupied(o) => Ok(o.get().f.0.lock()?.len()),
-            _ => err(StatusCode::NotFound, "not found"),
+            _ => {
+                err(StatusCode::NotFound,
+                    &format!("size_of: file not found: {}", path_to_str(p)))
+            }
         }
     }
     fn delete_(&self, p: &Path) -> Result<()> {
@@ -196,17 +196,23 @@ impl MemFS {
                 o.remove_entry();
                 Ok(())
             }
-            _ => err(StatusCode::NotFound, "not found"),
+            _ => {
+                err(StatusCode::NotFound,
+                    &format!("delete: file not found: {}", path_to_str(p)))
+            }
         }
     }
     fn rename_(&self, from: &Path, to: &Path) -> Result<()> {
         let mut fs = self.store.lock()?;
-        match fs.remove(&path_to_string(from)) {
+        match fs.remove(path_to_str(from)) {
             Some(v) => {
                 fs.insert(path_to_string(to), v);
                 Ok(())
             }
-            None => err(StatusCode::NotFound, "not found"),
+            _ => {
+                err(StatusCode::NotFound,
+                    &format!("rename: file not found: {}", path_to_str(from)))
+            }
         }
     }
     fn lock_(&self, p: &Path) -> Result<FileLock> {
@@ -214,7 +220,8 @@ impl MemFS {
         match fs.entry(path_to_string(p)) {
             Entry::Occupied(mut o) => {
                 if o.get().locked {
-                    err(StatusCode::LockError, "already locked")
+                    err(StatusCode::LockError,
+                        &format!("already locked: {}", path_to_str(p)))
                 } else {
                     o.get_mut().locked = true;
                     Ok(FileLock { id: path_to_string(p) })
@@ -232,16 +239,21 @@ impl MemFS {
     }
     fn unlock_(&self, l: FileLock) -> Result<()> {
         let mut fs = self.store.lock()?;
+        let id = l.id.clone();
         match fs.entry(l.id) {
             Entry::Occupied(mut o) => {
                 if !o.get().locked {
-                    err(StatusCode::LockError, "unlocking unlocked file")
+                    err(StatusCode::LockError,
+                        &format!("unlocking unlocked file: {}", id))
                 } else {
                     o.get_mut().locked = false;
                     Ok(())
                 }
             }
-            Entry::Vacant(_) => err(StatusCode::NotFound, "not found"),
+            _ => {
+                err(StatusCode::NotFound,
+                    &format!("unlock: file not found: {}", id))
+            }
         }
     }
 }
