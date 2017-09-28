@@ -1,10 +1,10 @@
-use env::{Env, FileLock, Logger, RandomAccess};
+use env::{path_to_str, Env, FileLock, Logger, RandomAccess};
 use env_common::{micros, sleep_for};
 use error::{err, Status, StatusCode, Result};
 
 use std::collections::HashMap;
 use std::fs;
-use std::io::{Read, Write};
+use std::io::{self, Read, Write};
 use std::iter::FromIterator;
 use std::mem;
 use std::os::unix::io::IntoRawFd;
@@ -30,11 +30,20 @@ impl PosixDiskEnv {
     }
 }
 
+/// map_err_with_name annotates an io::Error with information about the operation and the file.
+fn map_err_with_name(method: &'static str, f: &Path, e: io::Error) -> Status {
+    let mut s = Status::from(e);
+    s.err = format!("{}: {}: {}", method, s.err, path_to_str(f));
+    s
+}
+
 // Note: We're using Ok(f()?) in several locations below in order to benefit from the automatic
 // error conversion using std::convert::From.
 impl Env for PosixDiskEnv {
     fn open_sequential_file(&self, p: &Path) -> Result<Box<Read>> {
-        Ok(Box::new(try!(fs::OpenOptions::new().read(true).open(p))))
+        Ok(Box::new(fs::OpenOptions::new().read(true)
+            .open(p)
+            .map_err(|e| map_err_with_name("open (seq)", p, e))?))
     }
     fn open_random_access_file(&self, p: &Path) -> Result<Box<RandomAccess>> {
         Ok(fs::OpenOptions::new().read(true)
@@ -42,28 +51,29 @@ impl Env for PosixDiskEnv {
             .map(|f| {
                 let b: Box<RandomAccess> = Box::new(f);
                 b
-            })?)
+            })
+            .map_err(|e| map_err_with_name("open (randomaccess)", p, e))?)
     }
     fn open_writable_file(&self, p: &Path) -> Result<Box<Write>> {
-        Ok(Box::new(try!(fs::OpenOptions::new()
-            .create(true)
+        Ok(Box::new(fs::OpenOptions::new().create(true)
             .write(true)
             .append(false)
-            .open(p))))
+            .open(p)
+            .map_err(|e| map_err_with_name("open (write)", p, e))?))
     }
     fn open_appendable_file(&self, p: &Path) -> Result<Box<Write>> {
-        Ok(Box::new(try!(fs::OpenOptions::new()
-            .create(true)
+        Ok(Box::new(fs::OpenOptions::new().create(true)
             .write(true)
             .append(true)
-            .open(p))))
+            .open(p)
+            .map_err(|e| map_err_with_name("open (append)", p, e))?))
     }
 
     fn exists(&self, p: &Path) -> Result<bool> {
         Ok(p.exists())
     }
     fn children(&self, p: &Path) -> Result<Vec<String>> {
-        let dir_reader = try!(fs::read_dir(p));
+        let dir_reader = fs::read_dir(p).map_err(|e| map_err_with_name("children", p, e))?;
         let filenames = dir_reader.map(|r| {
                 if !r.is_ok() {
                     "".to_string()
@@ -76,21 +86,21 @@ impl Env for PosixDiskEnv {
         Ok(Vec::from_iter(filenames))
     }
     fn size_of(&self, p: &Path) -> Result<usize> {
-        let meta = try!(fs::metadata(p));
+        let meta = fs::metadata(p).map_err(|e| map_err_with_name("size_of", p, e))?;
         Ok(meta.len() as usize)
     }
 
     fn delete(&self, p: &Path) -> Result<()> {
-        Ok(fs::remove_file(p)?)
+        Ok(fs::remove_file(p).map_err(|e| map_err_with_name("delete", p, e))?)
     }
     fn mkdir(&self, p: &Path) -> Result<()> {
-        Ok(fs::create_dir(p)?)
+        Ok(fs::create_dir(p).map_err(|e| map_err_with_name("mkdir", p, e))?)
     }
     fn rmdir(&self, p: &Path) -> Result<()> {
-        Ok(fs::remove_dir_all(p)?)
+        Ok(fs::remove_dir_all(p).map_err(|e| map_err_with_name("rmdir", p, e))?)
     }
     fn rename(&self, old: &Path, new: &Path) -> Result<()> {
-        Ok(fs::rename(old, new)?)
+        Ok(fs::rename(old, new).map_err(|e| map_err_with_name("rename", old, e))?)
     }
 
     fn lock(&self, p: &Path) -> Result<FileLock> {
@@ -99,7 +109,10 @@ impl Env for PosixDiskEnv {
         if locks.contains_key(&p.to_str().unwrap().to_string()) {
             Err(Status::new(StatusCode::AlreadyExists, "Lock is held"))
         } else {
-            let f = try!(fs::OpenOptions::new().write(true).create(true).open(p));
+            let f = fs::OpenOptions::new().write(true)
+                .create(true)
+                .open(p)
+                .map_err(|e| map_err_with_name("lock", p, e))?;
 
             let flock_arg = libc::flock {
                 l_type: F_WRLCK,
@@ -129,7 +142,7 @@ impl Env for PosixDiskEnv {
 
         if !locks.contains_key(&l.id) {
             return err(StatusCode::LockError,
-                       "unlocking a file that is not locked!");
+                       &format!("unlocking a file that is not locked: {}", l.id));
         } else {
             let fd = locks.remove(&l.id).unwrap();
             let flock_arg = libc::flock {
@@ -145,7 +158,7 @@ impl Env for PosixDiskEnv {
                             mem::transmute::<&libc::flock, *const libc::flock>(&&flock_arg))
             };
             if result < 0 {
-                return err(StatusCode::LockError, "unlock failed");
+                return err(StatusCode::LockError, &format!("unlock failed: {}", l.id));
             }
             Ok(())
         }
