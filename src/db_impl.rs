@@ -1051,6 +1051,81 @@ mod tests {
         }
     }
 
+    // compaction tests //
+
+    /// build_db creates a database filled with the tables created by make_version().
+    fn build_db() -> DB {
+        let name = "db";
+        let (v, opt) = make_version();
+        let mut ve = VersionEdit::new();
+        ve.set_comparator_name(opt.cmp.id());
+        ve.set_log_num(0);
+        // 9 files + 1 manifest we write below.
+        ve.set_next_file(11);
+        // 26 entries in these tables.
+        ve.set_last_seq(26);
+
+        for l in 0..NUM_LEVELS {
+            for f in &v.files[l] {
+                ve.add_file(l, f.borrow().clone());
+            }
+        }
+
+        let manifest = manifest_file_name(name, 11);
+        let manifest_file = opt.env.open_writable_file(Path::new(&manifest)).unwrap();
+        let mut lw = LogWriter::new(manifest_file);
+        lw.add_record(&ve.encode()).unwrap();
+        lw.flush().unwrap();
+        set_current_file(&opt.env, name, 11).unwrap();
+
+        DB::open(name, opt).unwrap()
+    }
+
+    /// set_file_to_compact ensures that the specified table file will be compacted next.
+    fn set_file_to_compact(db: &mut DB, num: FileNum) {
+        let vset = db.vset.current();
+        let mut v = vset.borrow_mut();
+
+        let mut ftc = None;
+        for l in 0..NUM_LEVELS {
+            for f in &v.files[l] {
+                if f.borrow().num == num {
+                    ftc = Some((f.clone(), l));
+                }
+            }
+        }
+        if let Some((f, l)) = ftc {
+            v.file_to_compact = Some(f);
+            v.file_to_compact_lvl = l;
+        } else {
+            panic!("file number not found");
+        }
+    }
+
+    #[allow(unused_variables)]
+    #[test]
+    fn test_db_impl_build_db_sanity() {
+        let db = build_db();
+        let env = &db.opt.env;
+        let name = &db.name;
+
+        assert!(env.exists(Path::new(&log_file_name(name, 12))).unwrap());
+    }
+
+    #[test]
+    fn test_db_impl_compact_single_file() {
+        let mut db = build_db();
+        set_file_to_compact(&mut db, 4);
+        db.maybe_do_compaction().unwrap();
+
+        let env = &db.opt.env;
+        let name = &db.name;
+        assert!(!env.exists(Path::new(&table_file_name(name, 3))).unwrap());
+        assert!(!env.exists(Path::new(&table_file_name(name, 4))).unwrap());
+        assert!(!env.exists(Path::new(&table_file_name(name, 5))).unwrap());
+        assert!(env.exists(Path::new(&table_file_name(name, 13))).unwrap());
+    }
+
     #[test]
     fn test_db_impl_memtable_compaction() {
         let mut opt = options::for_test();
