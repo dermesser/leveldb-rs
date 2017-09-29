@@ -1127,6 +1127,32 @@ mod tests {
     }
 
     #[test]
+    fn test_db_impl_get_from_table() {
+        let mut db = build_db();
+
+        assert_eq!(26, db.vset.last_seq);
+
+        db.put("xyz".as_bytes(), "123".as_bytes()).unwrap();
+
+        // memtable get
+        assert_eq!("123".as_bytes(),
+                   db.get("xyz".as_bytes()).unwrap().as_slice());
+        assert!(db.get_internal(26, "xyz".as_bytes()).unwrap().is_none());
+        assert!(db.get_internal(27, "xyz".as_bytes()).unwrap().is_some());
+
+        // table get
+        assert_eq!("val2".as_bytes(),
+                   db.get("eab".as_bytes()).unwrap().as_slice());
+        assert!(db.get_internal(3, "eab".as_bytes()).unwrap().is_none());
+        assert!(db.get_internal(30, "eab".as_bytes()).unwrap().is_some());
+
+        let ss = db.get_snapshot();
+        assert_eq!("val2".as_bytes(),
+                   db.get_at(&ss, "eab".as_bytes()).unwrap().unwrap().as_slice());
+        db.release_snapshot(ss);
+    }
+
+    #[test]
     fn test_db_impl_compact_single_file() {
         let mut db = build_db();
         set_file_to_compact(&mut db, 4);
