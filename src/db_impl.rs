@@ -9,7 +9,7 @@ use error::{err, Status, StatusCode, Result};
 use filter::{BoxedFilterPolicy, InternalFilterPolicy};
 use infolog::Logger;
 use log::{LogReader, LogWriter};
-use key_types::{parse_internal_key, InternalKey, ValueType};
+use key_types::{parse_internal_key, InternalKey, LookupKey, ValueType};
 use memtable::MemTable;
 use options::Options;
 use snapshot::{Snapshot, SnapshotList};
@@ -367,6 +367,56 @@ impl DB {
     fn flush(&mut self) -> Result<()> {
         assert!(self.log.is_some());
         self.log.as_mut().unwrap().flush()
+    }
+}
+
+impl DB {
+    // READ //
+
+    fn get_internal(&mut self, seq: SequenceNumber, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        let current = self.vset.current();
+        let mut current = current.borrow_mut();
+
+        let lkey = LookupKey::new(key, seq);
+
+        if let Some(v) = self.mem.get(&lkey) {
+            return Ok(Some(v));
+        }
+        if let Some(imm) = self.imm.as_ref() {
+            if let Some(v) = imm.get(&lkey) {
+                return Ok(Some(v));
+            }
+        }
+        if let Ok(Some((v, st))) = current.get(lkey.internal_key()) {
+            if current.update_stats(st) {
+                if let Err(e) = self.maybe_do_compaction() {
+                    log!(self.opt.log, "error while doing compaction in get: {}", e);
+                }
+            }
+            return Ok(Some(v));
+        }
+        Ok(None)
+    }
+
+    /// get_at reads the value for a given key at or before snapshot. It returns Ok(None) if the
+    /// entry wasn't found, and Err(_) if an error occurred.
+    pub fn get_at(&mut self, snapshot: &Snapshot, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        if let Some(seq) = self.snaps.sequence_at(snapshot) {
+            self.get_internal(seq, key)
+        } else {
+            err(StatusCode::InvalidArgument,
+                "get_at: snapshot does not exist")
+        }
+    }
+
+    /// get is a simplified version of get_at(), translating errors to None.
+    pub fn get(&mut self, key: &[u8]) -> Option<Vec<u8>> {
+        let seq = self.vset.last_seq;
+        if let Ok(v) = self.get_internal(seq, key) {
+            v
+        } else {
+            None
+        }
     }
 }
 
