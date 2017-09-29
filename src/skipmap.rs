@@ -74,10 +74,11 @@ impl SkipMap {
     pub fn contains(&self, key: &[u8]) -> bool {
         self.map.borrow().contains(key)
     }
+
+    /// inserts a key into the table. key may not be empty.
     pub fn insert(&mut self, key: Vec<u8>, val: Vec<u8>) {
-        // TODO: Possibly wrap into Mutex.
+        assert!(!key.is_empty());
         self.map.borrow_mut().insert(key, val);
-        // Rc::get_mut(&mut self.map).unwrap().insert(key, val);
     }
 
     pub fn iter(&self) -> SkipMapIter {
@@ -140,7 +141,7 @@ impl InnerSkipMap {
         }
 
         unsafe {
-            if current.is_null() {
+            if current.is_null() || (*current).key.is_empty() {
                 return None;
             } else if self.cmp.cmp(&(*current).key, key) == Ordering::Less {
                 return None;
@@ -349,6 +350,7 @@ impl LdbIterator for SkipMapIter {
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use cmp::MemtableKeyCmp;
     use test_util::{test_iterator_properties, LdbIteratorIter};
     use types::current_key_val;
     use options;
@@ -415,6 +417,17 @@ pub mod tests {
                    "abc".as_bytes());
         assert_eq!(skm.map.borrow().get_next_smaller(&"ab{".as_bytes()).unwrap().key.as_slice(),
                    "abz".as_bytes());
+    }
+
+    #[test]
+    fn test_empty_skipmap_find_memtable_cmp() {
+        // Regression test: Make sure comparator isn't called with empty key.
+        let cmp: Rc<Box<Cmp>> = Rc::new(Box::new(MemtableKeyCmp(options::for_test().cmp)));
+        let skm = SkipMap::new(cmp);
+
+        let mut it = skm.iter();
+        it.seek("abc".as_bytes());
+        assert!(!it.valid());
     }
 
     #[test]
