@@ -31,6 +31,10 @@ impl SnapshotList {
         self.newest
     }
 
+    pub fn sequence_at(&self, ss: &Snapshot) -> Option<SequenceNumber> {
+        self.map.get(ss).map(|sn| *sn)
+    }
+
     pub fn oldest(&self) -> SequenceNumber {
         self.map.get(&self.oldest).unwrap().clone()
     }
