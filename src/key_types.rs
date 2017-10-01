@@ -149,13 +149,20 @@ pub fn parse_memtable_key<'a>(mkey: MemtableKey<'a>) -> (usize, usize, u64, usiz
 }
 
 /// Parse a key in InternalKey format.
-pub fn parse_internal_key<'a>(ikey: InternalKey<'a>) -> (ValueType, u64, UserKey<'a>) {
+pub fn parse_internal_key<'a>(ikey: InternalKey<'a>) -> (ValueType, SequenceNumber, UserKey<'a>) {
     if ikey.is_empty() {
         return (ValueType::TypeDeletion, 0, &ikey[0..0]);
     }
     assert!(ikey.len() >= 8);
     let (typ, seq) = parse_tag(FixedInt::decode_fixed(&ikey[ikey.len() - 8..]));
     return (typ, seq, &ikey[0..ikey.len() - 8]);
+}
+
+/// truncate_to_userkey performs an in-place conversion from InternalKey to UserKey format.
+pub fn truncate_to_userkey(ikey: &mut Vec<u8>) {
+    let len = ikey.len();
+    assert!(len > 8);
+    ikey.truncate(len-8);
 }
 
 #[cfg(test)]
