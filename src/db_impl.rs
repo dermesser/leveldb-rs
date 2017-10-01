@@ -662,6 +662,7 @@ impl DB {
 
                 let fname = table_file_name(&self.name, fnum);
                 let f = self.opt.env.open_writable_file(Path::new(&fname))?;
+                let f = Box::new(io::BufWriter::new(f));
                 cs.builder = Some(TableBuilder::new(self.opt.clone(), f));
                 cs.outputs.push(fmd);
             }
@@ -817,6 +818,7 @@ pub fn build_table<I: LdbIterator>(dbname: &str,
     // TODO: Replace with catch {} when available.
     let r = (|| -> Result<()> {
         let f = opt.env.open_writable_file(Path::new(&filename))?;
+        let f = io::BufWriter::new(f);
         let mut builder = TableBuilder::new(opt.clone(), f);
         while from.advance() {
             assert!(from.current(&mut kbuf, &mut vbuf));
