@@ -1,6 +1,6 @@
 use cmp::Cmp;
 use options::Options;
-use types::{current_key_val, LdbIterator};
+use types::{current_key_val, Direction, LdbIterator};
 
 use std::cmp::Ordering;
 use std::rc::Rc;
@@ -17,12 +17,6 @@ enum SL {
     Largest,
 }
 
-#[derive(PartialEq)]
-enum Direction {
-    Fwd,
-    Rvrs,
-}
-
 pub struct MergingIter {
     iters: Vec<Box<LdbIterator>>,
     current: Option<usize>,
@@ -36,7 +30,7 @@ impl MergingIter {
         let mi = MergingIter {
             iters: iters,
             current: None,
-            direction: Direction::Fwd,
+            direction: Direction::Forward,
             cmp: cmp,
         };
         mi
@@ -53,7 +47,7 @@ impl MergingIter {
 
     /// Adjusts the direction of the iterator depending on whether the last
     /// call was next() or prev(). This basically sets all iterators to one
-    /// entry after (Fwd) or one entry before (Rvrs) the current() entry.
+    /// entry after (Forward) or one entry before (Reverse) the current() entry.
     fn update_direction(&mut self, d: Direction) {
         let mut keybuf = vec![];
         let mut valbuf = vec![];
@@ -61,8 +55,8 @@ impl MergingIter {
         if let Some((key, _)) = current_key_val(self) {
             if let Some(current) = self.current {
                 match d {
-                    Direction::Fwd if self.direction == Direction::Rvrs => {
-                        self.direction = Direction::Fwd;
+                    Direction::Forward if self.direction == Direction::Reverse => {
+                        self.direction = Direction::Forward;
                         for i in 0..self.iters.len() {
                             if i != current {
                                 self.iters[i].seek(&keybuf);
@@ -77,8 +71,8 @@ impl MergingIter {
                             }
                         }
                     }
-                    Direction::Rvrs if self.direction == Direction::Fwd => {
-                        self.direction = Direction::Rvrs;
+                    Direction::Reverse if self.direction == Direction::Forward => {
+                        self.direction = Direction::Reverse;
                         for i in 0..self.iters.len() {
                             if i != current {
                                 self.iters[i].seek(&key);
@@ -137,7 +131,7 @@ impl MergingIter {
 impl LdbIterator for MergingIter {
     fn advance(&mut self) -> bool {
         if let Some(current) = self.current {
-            self.update_direction(Direction::Fwd);
+            self.update_direction(Direction::Forward);
             if !self.iters[current].advance() {
                 // Take this iterator out of rotation; this will return None
                 // for every call to current() and thus it will be ignored
@@ -181,7 +175,7 @@ impl LdbIterator for MergingIter {
     fn prev(&mut self) -> bool {
         if let Some(current) = self.current {
             if self.iters[current].valid() {
-                self.update_direction(Direction::Rvrs);
+                self.update_direction(Direction::Reverse);
                 self.iters[current].prev();
                 self.find_largest();
                 self.valid()
@@ -260,7 +254,7 @@ mod tests {
     }
 
     #[test]
-    fn test_merging_fwd_bckwd() {
+    fn test_merging_forward_backward() {
         let val = "def".as_bytes();
         let iter = TestLdbIter::new(vec![(b("aba"), val), (b("abc"), val), (b("abe"), val)]);
         let iter2 = TestLdbIter::new(vec![(b("abb"), val), (b("abd"), val)]);

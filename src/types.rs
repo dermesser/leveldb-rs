@@ -20,6 +20,12 @@ pub fn share<T>(t: T) -> Rc<RefCell<T>> {
     Rc::new(RefCell::new(t))
 }
 
+#[derive(PartialEq)]
+pub enum Direction {
+    Forward,
+    Reverse,
+}
+
 /// Denotes a key range
 pub struct Range<'a> {
     pub start: &'a [u8],
