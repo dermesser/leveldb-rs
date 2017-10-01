@@ -41,3 +41,4 @@ mod version_set;
 mod write_batch;
 
 mod db_impl;
+mod db_iter;
