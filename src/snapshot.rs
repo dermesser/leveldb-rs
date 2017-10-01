@@ -1,70 +1,92 @@
 use std::collections::HashMap;
-use types::SequenceNumber;
+use types::{share, MAX_SEQUENCE_NUMBER, SequenceNumber, Shared};
 
 /// Opaque snapshot handle; Represents index to SnapshotList.map
-pub type Snapshot = u64;
+type SnapshotHandle = u64;
+
+pub struct Snapshot {
+    id: SnapshotHandle,
+    sl: Shared<InnerSnapshotList>,
+}
+
+impl Drop for Snapshot {
+    fn drop(&mut self) {
+        self.sl.borrow_mut().delete(self.id);
+    }
+}
 
 /// A list of all snapshots is kept in the DB.
+struct InnerSnapshotList {
+    map: HashMap<SnapshotHandle, SequenceNumber>,
+    newest: SnapshotHandle,
+    oldest: SnapshotHandle,
+}
+
 pub struct SnapshotList {
-    map: HashMap<Snapshot, SequenceNumber>,
-    newest: Snapshot,
-    oldest: Snapshot,
+    inner: Shared<InnerSnapshotList>,
 }
 
 impl SnapshotList {
     pub fn new() -> SnapshotList {
         SnapshotList {
-            map: HashMap::new(),
-            newest: 0,
-            oldest: 0,
+            inner: share(InnerSnapshotList {
+                map: HashMap::new(),
+                newest: 0,
+                oldest: 0,
+            }),
         }
     }
 
     pub fn new_snapshot(&mut self, seq: SequenceNumber) -> Snapshot {
-        self.newest += 1;
-        self.map.insert(self.newest, seq);
+        let inner = self.inner.clone();
+        let mut sl = self.inner.borrow_mut();
 
-        if self.oldest == 0 {
-            self.oldest = self.newest;
+        sl.newest += 1;
+        let newest = sl.newest;
+        sl.map.insert(newest, seq);
+
+        if sl.oldest == 0 {
+            sl.oldest = sl.newest;
         }
 
-        self.newest
+        Snapshot {
+            id: sl.newest,
+            sl: inner,
+        }
     }
 
     pub fn sequence_at(&self, ss: &Snapshot) -> Option<SequenceNumber> {
-        self.map.get(ss).map(|sn| *sn)
+        let sl = self.inner.borrow_mut();
+        sl.map.get(&ss.id).map(|sn| *sn)
     }
 
+    /// oldest returns the lowest sequence number of all snapshots. It returns 0 if no snapshots
+    /// are present.
     pub fn oldest(&self) -> SequenceNumber {
-        self.map.get(&self.oldest).unwrap().clone()
+        let oldest =
+            self.inner.borrow().map.iter().fold(MAX_SEQUENCE_NUMBER,
+                                                |s, (seq, _)| if *seq < s { *seq } else { s });
+        if oldest == MAX_SEQUENCE_NUMBER {
+            0
+        } else {
+            oldest
+        }
     }
 
+    /// newest returns the newest sequence number of all snapshots. If no snapshots are present, it
+    /// returns 0.
     pub fn newest(&self) -> SequenceNumber {
-        self.map.get(&self.newest).unwrap().clone()
-    }
-
-    pub fn delete(&mut self, ss: Snapshot) {
-        self.map.remove(&ss);
-        if self.oldest == ss {
-            self.oldest = self.newest;
-            for (seq, _) in self.map.iter() {
-                if *seq < self.oldest {
-                    self.oldest = *seq;
-                }
-            }
-        }
-        if self.newest == ss {
-            self.newest = self.oldest;
-            for (seq, _) in self.map.iter() {
-                if *seq > self.newest {
-                    self.newest = *seq;
-                }
-            }
-        }
+        self.inner.borrow().map.iter().fold(0, |s, (seq, _)| if *seq > s { *seq } else { s })
     }
 
     pub fn empty(&self) -> bool {
-        self.oldest == 0
+        self.inner.borrow().oldest == 0
+    }
+}
+
+impl InnerSnapshotList {
+    fn delete(&mut self, id: SnapshotHandle) {
+        self.map.remove(&id);
     }
 }
 
@@ -72,29 +94,32 @@ impl SnapshotList {
 mod tests {
     use super::*;
 
+    #[allow(unused_variables)]
     #[test]
     fn test_snapshot_list() {
         let mut l = SnapshotList::new();
 
-        assert!(l.empty());
+        {
+            assert!(l.empty());
+            let a = l.new_snapshot(1);
 
-        let oldest = l.new_snapshot(1);
-        l.new_snapshot(2);
-        let newest = l.new_snapshot(0);
+            {
+                let b = l.new_snapshot(2);
 
-        assert!(!l.empty());
+                {
+                    let c = l.new_snapshot(3);
 
-        assert_eq!(l.oldest(), 1);
-        assert_eq!(l.newest(), 0);
+                    assert!(!l.empty());
+                    assert_eq!(l.oldest(), 1);
+                    assert_eq!(l.newest(), 3);
+                }
 
-        l.delete(newest);
+                assert_eq!(l.newest(), 2);
+                assert_eq!(l.oldest(), 1);
+            }
 
-        assert_eq!(l.newest(), 2);
-        assert_eq!(l.oldest(), 1);
-
-        l.delete(oldest);
-
-        assert_eq!(l.oldest(), 2);
+            assert_eq!(l.oldest(), 1);
+        }
+        assert_eq!(l.oldest(), 0);
     }
-
 }
