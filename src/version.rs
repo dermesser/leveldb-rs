@@ -320,7 +320,7 @@ impl Version {
 
     /// new_iters returns a set of iterators that can be merged to yield all entries in this
     /// version.
-    fn new_iters(&self) -> Result<Vec<Box<LdbIterator>>> {
+    pub fn new_iters(&self) -> Result<Vec<Box<LdbIterator>>> {
         let mut iters: Vec<Box<LdbIterator>> = vec![];
         for f in &self.files[0] {
             iters.push(Box::new(self.table_cache.borrow_mut().get_table(f.borrow().num)?.iter()));
