@@ -873,8 +873,69 @@ fn open_info_log<E: Env + ?Sized>(env: &E, db: &str) -> Logger {
 }
 
 #[cfg(test)]
+pub mod testutil {
+    use super::*;
+
+    use options;
+    use key_types::LookupKey;
+    use mem_env::MemEnv;
+    use test_util::LdbIteratorIter;
+    use version::testutil::make_version;
+
+    /// build_db creates a database filled with the tables created by make_version().
+    pub fn build_db() -> DB {
+        let name = "db";
+        let (v, opt) = make_version();
+        let mut ve = VersionEdit::new();
+        ve.set_comparator_name(opt.cmp.id());
+        ve.set_log_num(0);
+        // 9 files + 1 manifest we write below.
+        ve.set_next_file(11);
+        // 26 entries in these tables.
+        ve.set_last_seq(26);
+
+        for l in 0..NUM_LEVELS {
+            for f in &v.files[l] {
+                ve.add_file(l, f.borrow().clone());
+            }
+        }
+
+        let manifest = manifest_file_name(name, 11);
+        let manifest_file = opt.env.open_writable_file(Path::new(&manifest)).unwrap();
+        let mut lw = LogWriter::new(manifest_file);
+        lw.add_record(&ve.encode()).unwrap();
+        lw.flush().unwrap();
+        set_current_file(&opt.env, name, 11).unwrap();
+
+        DB::open(name, opt).unwrap()
+    }
+
+    /// set_file_to_compact ensures that the specified table file will be compacted next.
+    pub fn set_file_to_compact(db: &mut DB, num: FileNum) {
+        let v = db.current();
+        let mut v = v.borrow_mut();
+
+        let mut ftc = None;
+        for l in 0..NUM_LEVELS {
+            for f in &v.files[l] {
+                if f.borrow().num == num {
+                    ftc = Some((f.clone(), l));
+                }
+            }
+        }
+        if let Some((f, l)) = ftc {
+            v.file_to_compact = Some(f);
+            v.file_to_compact_lvl = l;
+        } else {
+            panic!("file number not found");
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
+    use super::testutil::*;
 
     use options;
     use key_types::LookupKey;
@@ -1064,55 +1125,6 @@ mod tests {
             // The last two entries are skipped due to the corruption above.
             assert_eq!(5,
                        LdbIteratorIter::wrap(&mut tbl.iter()).map(|v| println!("{:?}", v)).count());
-        }
-    }
-
-    /// build_db creates a database filled with the tables created by make_version().
-    fn build_db() -> DB {
-        let name = "db";
-        let (v, opt) = make_version();
-        let mut ve = VersionEdit::new();
-        ve.set_comparator_name(opt.cmp.id());
-        ve.set_log_num(0);
-        // 9 files + 1 manifest we write below.
-        ve.set_next_file(11);
-        // 26 entries in these tables.
-        ve.set_last_seq(26);
-
-        for l in 0..NUM_LEVELS {
-            for f in &v.files[l] {
-                ve.add_file(l, f.borrow().clone());
-            }
-        }
-
-        let manifest = manifest_file_name(name, 11);
-        let manifest_file = opt.env.open_writable_file(Path::new(&manifest)).unwrap();
-        let mut lw = LogWriter::new(manifest_file);
-        lw.add_record(&ve.encode()).unwrap();
-        lw.flush().unwrap();
-        set_current_file(&opt.env, name, 11).unwrap();
-
-        DB::open(name, opt).unwrap()
-    }
-
-    /// set_file_to_compact ensures that the specified table file will be compacted next.
-    fn set_file_to_compact(db: &mut DB, num: FileNum) {
-        let vset = db.vset.current();
-        let mut v = vset.borrow_mut();
-
-        let mut ftc = None;
-        for l in 0..NUM_LEVELS {
-            for f in &v.files[l] {
-                if f.borrow().num == num {
-                    ftc = Some((f.clone(), l));
-                }
-            }
-        }
-        if let Some((f, l)) = ftc {
-            v.file_to_compact = Some(f);
-            v.file_to_compact_lvl = l;
-        } else {
-            panic!("file number not found");
         }
     }
 
