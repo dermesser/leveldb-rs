@@ -5,6 +5,8 @@ extern crate crc;
 extern crate integer_encoding;
 extern crate libc;
 extern crate rand;
+
+#[cfg(test)]
 #[macro_use]
 extern crate time_test;
 
