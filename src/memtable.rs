@@ -59,7 +59,7 @@ impl MemTable {
                 if tag & 0xff == ValueType::TypeValue as u64 {
                     return Some(foundkey[valoff..valoff + vallen].to_vec());
                 } else {
-                    return None
+                    return None;
                 }
             }
         }

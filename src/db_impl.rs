@@ -440,12 +440,10 @@ impl DB {
 
 impl DB {
     // SNAPSHOTS //
+
+    /// Returns a snapshot at the current state. The snapshot is released automatically on Drop.
     pub fn get_snapshot(&mut self) -> Snapshot {
         self.snaps.new_snapshot(self.vset.last_seq)
-    }
-
-    pub fn release_snapshot(&mut self, snapshot: Snapshot) {
-        self.snaps.delete(snapshot)
     }
 }
 
@@ -1148,10 +1146,11 @@ mod tests {
         assert!(db.get_internal(3, "eab".as_bytes()).unwrap().is_none());
         assert!(db.get_internal(30, "eab".as_bytes()).unwrap().is_some());
 
-        let ss = db.get_snapshot();
-        assert_eq!("val2".as_bytes(),
-                   db.get_at(&ss, "eab".as_bytes()).unwrap().unwrap().as_slice());
-        db.release_snapshot(ss);
+        {
+            let ss = db.get_snapshot();
+            assert_eq!("val2".as_bytes(),
+                       db.get_at(&ss, "eab".as_bytes()).unwrap().unwrap().as_slice());
+        }
     }
 
     #[test]
