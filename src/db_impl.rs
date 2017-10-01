@@ -423,6 +423,51 @@ impl DB {
 }
 
 impl DB {
+    // ITERATOR //
+
+    /// new_iter returns a DBIterator over the current state of the database. The iterator will not
+    /// return elements added to the database after its creation.
+    pub fn new_iter(&mut self) -> Result<DBIterator> {
+        let snapshot = self.get_snapshot();
+        self.new_iter_at(snapshot)
+    }
+
+    /// new_iter_at returns a DBIterator at the supplied snapshot.
+    pub fn new_iter_at(&mut self, ss: Snapshot) -> Result<DBIterator> {
+        Ok(DBIterator::new(self.opt.cmp.clone(),
+                           self.vset.clone(),
+                           self.merge_iterators()?,
+                           ss))
+    }
+
+    /// merge_iterators produces a MergingIter merging the entries in the memtable, the immutable
+    /// memtable, and table files from all levels.
+    fn merge_iterators(&mut self) -> Result<MergingIter> {
+        let mut iters: Vec<Box<LdbIterator>> = vec![];
+        iters.push(Box::new(self.mem.iter()));
+        if let Some(ref imm) = self.imm {
+            iters.push(Box::new(imm.iter()));
+        }
+
+        // Add iterators for table files.
+        let current = self.current();
+        let current = current.borrow();
+        iters.extend(current.new_iters()?);
+
+        Ok(MergingIter::new(self.internal_cmp.clone(), iters))
+    }
+}
+
+impl DB {
+    // SNAPSHOTS //
+
+    /// Returns a snapshot at the current state. The snapshot is released automatically on Drop.
+    pub fn get_snapshot(&mut self) -> Snapshot {
+        self.snaps.new_snapshot(self.vset.borrow().last_seq)
+    }
+}
+
+impl DB {
     // STATISTICS //
     fn add_stats(&mut self, level: usize, cs: CompactionStats) {
         assert!(level < NUM_LEVELS);
