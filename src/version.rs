@@ -582,7 +582,7 @@ pub mod testutil {
                                       ("bba".as_bytes(), "val3".as_bytes())];
         let t2 = write_table(&env, f2, 4, 2);
         // Level 1
-        let f3: &[(&[u8], &[u8])] = &[("aaa".as_bytes(), "val1".as_bytes()),
+        let f3: &[(&[u8], &[u8])] = &[("aaa".as_bytes(), "val0".as_bytes()),
                                       ("cab".as_bytes(), "val2".as_bytes()),
                                       ("cba".as_bytes(), "val3".as_bytes())];
         let t3 = write_table(&env, f3, 7, 3);

@@ -444,9 +444,13 @@ impl DB {
     /// memtable, and table files from all levels.
     fn merge_iterators(&mut self) -> Result<MergingIter> {
         let mut iters: Vec<Box<LdbIterator>> = vec![];
-        iters.push(Box::new(self.mem.iter()));
+        if self.mem.len() > 0 {
+            iters.push(Box::new(self.mem.iter()));
+        }
         if let Some(ref imm) = self.imm {
-            iters.push(Box::new(imm.iter()));
+            if imm.len() > 0 {
+                iters.push(Box::new(imm.iter()));
+            }
         }
 
         // Add iterators for table files.

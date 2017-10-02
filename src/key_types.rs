@@ -162,7 +162,7 @@ pub fn parse_internal_key<'a>(ikey: InternalKey<'a>) -> (ValueType, SequenceNumb
 pub fn truncate_to_userkey(ikey: &mut Vec<u8>) {
     let len = ikey.len();
     assert!(len > 8);
-    ikey.truncate(len-8);
+    ikey.truncate(len - 8);
 }
 
 #[cfg(test)]
