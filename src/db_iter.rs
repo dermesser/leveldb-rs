@@ -140,9 +140,7 @@ impl LdbIterator for DBIterator {
     fn advance(&mut self) -> bool {
         if !self.valid() {
             self.seek_to_first();
-            if !self.valid() {
-                return false;
-            }
+            return self.valid();
         }
 
         if self.dir == Direction::Reverse {
@@ -259,14 +257,23 @@ fn random_period() -> isize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use types::current_key_val;
     use db_impl::testutil::*;
 
     // not yet passing
-    //#[test]
+    #[test]
     fn db_iter_basic_test() {
         let mut db = build_db();
         let mut iter = db.new_iter().unwrap();
 
-        assert!(iter.advance());
+        // keys and values come from make_version(); they are each the latest entry.
+        let keys: &[&[u8]] = &[b"aaa", b"aab", b"aax", b"aba", b"bab", b"bba", b"cab", b"cba"];
+        let vals: &[&[u8]] = &[b"val0", b"val2", b"val1", b"val3", b"val2", b"val3", b"val1",
+                               b"val3"];
+
+        for (k, v) in keys.iter().zip(vals.iter()) {
+            assert!(iter.advance());
+            assert_eq!((k.to_vec(), v.to_vec()), current_key_val(&iter).unwrap());
+        }
     }
 }
