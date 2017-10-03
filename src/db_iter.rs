@@ -7,6 +7,7 @@ use types::{Direction, LdbIterator, Shared};
 use version_set::VersionSet;
 
 use std::cmp::Ordering;
+use std::mem;
 use std::rc::Rc;
 
 use rand;
@@ -28,8 +29,9 @@ pub struct DBIterator {
     // temporarily stored user key.
     savedkey: Vec<u8>,
     // buffer for reading internal keys
-    buf: Vec<u8>,
+    keybuf: Vec<u8>,
     savedval: Vec<u8>,
+    valbuf: Vec<u8>,
 }
 
 impl DBIterator {
@@ -48,17 +50,18 @@ impl DBIterator {
 
             valid: false,
             savedkey: vec![],
-            buf: vec![],
+            keybuf: vec![],
             savedval: vec![],
+            valbuf: vec![],
         }
     }
 
-    /// record_read_sample records a read sample using the current contents of self.buf, which
+    /// record_read_sample records a read sample using the current contents of self.keybuf, which
     /// should be an InternalKey.
     fn record_read_sample<'a>(&mut self) {
         if self.byte_count < 0 {
             let vset = self.vset.borrow().current();
-            vset.borrow_mut().record_read_sample(&self.buf);
+            vset.borrow_mut().record_read_sample(&self.keybuf);
             self.byte_count += random_period();
         }
     }
@@ -69,9 +72,9 @@ impl DBIterator {
         assert!(self.dir == Direction::Forward);
 
         while self.iter.valid() {
-            self.iter.current(&mut self.buf, &mut self.savedval);
+            self.iter.current(&mut self.keybuf, &mut self.savedval);
             self.record_read_sample();
-            let (typ, seq, ukey) = parse_internal_key(&self.buf);
+            let (typ, seq, ukey) = parse_internal_key(&self.keybuf);
 
             // Skip keys with a sequence number after our snapshot.
             if seq <= self.ss.sequence() {
@@ -97,25 +100,26 @@ impl DBIterator {
         false
     }
 
-    /// find_prev_user_entry finds the next smaller entry before self.savedkey.
+    /// find_prev_user_entry, on a backwards-moving iterator, stores the current entry in
+    /// savedkey/savedval and positions the internal iterator on the entry before.
     fn find_prev_user_entry(&mut self) -> bool {
         assert!(self.dir == Direction::Reverse);
         let mut value_type = ValueType::TypeDeletion;
-        let mut newsavedval = vec![];
 
         // The iterator should be already set to the previous entry if this is a direction change
         // (i.e. first prev() call after advance()). savedkey is set to the key of that entry.
         //
-        // We read the current entry, ignore it for comparison (because value_type is Deletion),
-        // assign it to savedkey and savedval and go back another step (at the end of the loop).
+        // We read the current entry, ignore it for comparison (because the initial value_type is
+        // Deletion), assign it to savedkey and savedval and go back another step (at the end of
+        // the loop).
         //
         // We then look at the entry one *before* the entry we want to return. We check it against
         // the saved key (still containing the key of the desired entry), see that it's less-than,
         // and break. The key and value of the desired entry are in savedkey and savedval.
         while self.iter.valid() {
-            self.iter.current(&mut self.buf, &mut newsavedval);
+            self.iter.current(&mut self.keybuf, &mut self.valbuf);
             self.record_read_sample();
-            let (typ, seq, ukey) = parse_internal_key(&self.buf);
+            let (typ, seq, ukey) = parse_internal_key(&self.keybuf);
 
             if seq > 0 && seq <= self.ss.sequence() {
                 if value_type != ValueType::TypeDeletion &&
@@ -129,9 +133,10 @@ impl DBIterator {
                     self.savedval.clear();
                 } else {
                     self.savedkey.clear();
-                    self.savedkey.extend_from_slice(&ukey);
-                    self.savedval.clear();
-                    self.savedval.extend_from_slice(&newsavedval);
+                    self.savedkey.extend_from_slice(ukey);
+
+                    mem::swap(&mut self.savedval, &mut self.valbuf);
+                    self.valbuf.clear();
                 }
             }
             self.iter.prev();
@@ -170,10 +175,8 @@ impl LdbIterator for DBIterator {
             }
         } else {
             // Save current user key.
-            assert!(self.iter.current(&mut self.buf, &mut self.savedval));
-            let ukey = parse_internal_key(&self.buf).2;
-            self.savedkey.clear();
-            self.savedkey.extend_from_slice(ukey);
+            assert!(self.iter.current(&mut self.savedkey, &mut self.savedval));
+            truncate_to_userkey(&mut self.savedkey);
         }
         self.find_next_user_entry(// skipping=
                                   true)
@@ -182,6 +185,7 @@ impl LdbIterator for DBIterator {
         if !self.valid() {
             return false;
         }
+        // If direction is forward, savedkey and savedval are not used.
         if self.dir == Direction::Forward {
             self.iter.current(key, val);
             truncate_to_userkey(key);
@@ -199,13 +203,13 @@ impl LdbIterator for DBIterator {
             return false;
         }
 
-        let mut newsavedkey = vec![];
-
         if self.dir == Direction::Forward {
-            // scan backwards until we hit a different key; then use the normal scanning procedure.
-            self.iter.current(&mut self.buf, &mut self.savedval);
-            self.savedkey.clear();
-            self.savedkey.extend_from_slice(parse_internal_key(&self.buf).2);
+            // scan backwards until we hit a different key; then use the normal scanning procedure:
+            // find_prev_user_entry() wants savedkey to be the key of the entry that is supposed to
+            // be left in savedkey/savedval, which is why we have to go to the previous entry before
+            // calling it.
+            self.iter.current(&mut self.savedkey, &mut self.savedval);
+            truncate_to_userkey(&mut self.savedkey);
             loop {
                 self.iter.prev();
                 if !self.iter.valid() {
@@ -215,11 +219,10 @@ impl LdbIterator for DBIterator {
                     return false;
                 }
                 // Scan until we hit the next-smaller key.
-                self.iter.current(&mut self.buf, &mut self.savedval);
-                newsavedkey.clear();
-                newsavedkey.extend_from_slice(parse_internal_key(&self.buf).2);
-                if self.cmp.cmp(&newsavedkey, &self.savedkey) == Ordering::Less {
-                    println!("breaking with {:?} / {:?}", newsavedkey, self.savedval);
+                self.iter.current(&mut self.keybuf, &mut self.savedval);
+                truncate_to_userkey(&mut self.keybuf);
+                if self.cmp.cmp(&self.keybuf, &self.savedkey) == Ordering::Less {
+                    println!("breaking with {:?} / {:?}", self.keybuf, self.savedval);
                     break;
                 }
             }
@@ -234,8 +237,7 @@ impl LdbIterator for DBIterator {
         self.dir = Direction::Forward;
         self.savedkey.clear();
         self.savedval.clear();
-        self.buf.clear();
-        self.buf.extend_from_slice(LookupKey::new(to, self.ss.sequence()).internal_key());
+        self.savedkey.extend_from_slice(LookupKey::new(to, self.ss.sequence()).internal_key());
         self.iter.seek(&self.savedkey);
         if self.iter.valid() {
             self.find_next_user_entry(// skipping=
@@ -260,7 +262,7 @@ impl LdbIterator for DBIterator {
         self.valid = false;
         self.savedkey.clear();
         self.savedval.clear();
-        self.buf.clear();
+        self.keybuf.clear();
     }
 }
 
