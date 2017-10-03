@@ -101,14 +101,27 @@ impl DBIterator {
     fn find_prev_user_entry(&mut self) -> bool {
         assert!(self.dir == Direction::Reverse);
         let mut value_type = ValueType::TypeDeletion;
+        let mut newsavedval = vec![];
+
+        // The iterator should be already set to the previous entry if this is a direction change
+        // (i.e. first prev() call after advance()). savedkey is set to the key of that entry.
+        //
+        // We read the current entry, ignore it for comparison (because value_type is Deletion),
+        // assign it to savedkey and savedval and go back another step (at the end of the loop).
+        //
+        // We then look at the entry one *before* the entry we want to return. We check it against
+        // the saved key (still containing the key of the desired entry), see that it's less-than,
+        // and break. The key and value of the desired entry are in savedkey and savedval.
         while self.iter.valid() {
-            self.iter.current(&mut self.buf, &mut self.savedval);
+            self.iter.current(&mut self.buf, &mut newsavedval);
             self.record_read_sample();
             let (typ, seq, ukey) = parse_internal_key(&self.buf);
+            println!("current: {:?} / {:?}", ukey, self.savedval);
 
             if seq > 0 && seq <= self.ss.sequence() {
                 if value_type != ValueType::TypeDeletion &&
                    self.cmp.cmp(ukey, &self.savedkey) == Ordering::Less {
+                    println!("found previous key {:?} / {:?}", ukey, self.savedval);
                     // We found a non-deleted entry for a previous key (in the previous iteration)
                     break;
                 }
@@ -119,6 +132,8 @@ impl DBIterator {
                 } else {
                     self.savedkey.clear();
                     self.savedkey.extend_from_slice(&ukey);
+                    self.savedval.clear();
+                    self.savedval.extend_from_slice(&newsavedval);
                 }
             }
             self.iter.prev();
@@ -206,6 +221,7 @@ impl LdbIterator for DBIterator {
                 newsavedkey.clear();
                 newsavedkey.extend_from_slice(parse_internal_key(&self.buf).2);
                 if self.cmp.cmp(&newsavedkey, &self.savedkey) == Ordering::Less {
+                    println!("breaking with {:?} / {:?}", newsavedkey, self.savedval);
                     break;
                 }
             }
@@ -257,10 +273,9 @@ fn random_period() -> isize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use types::current_key_val;
+    use types::{current_key_val, Direction};
     use db_impl::testutil::*;
 
-    // not yet passing
     #[test]
     fn db_iter_basic_test() {
         let mut db = build_db();
@@ -274,6 +289,50 @@ mod tests {
         for (k, v) in keys.iter().zip(vals.iter()) {
             assert!(iter.advance());
             assert_eq!((k.to_vec(), v.to_vec()), current_key_val(&iter).unwrap());
+        }
+    }
+
+    #[test]
+    fn db_iter_test_fwd_backwd() {
+        let mut db = build_db();
+        let mut iter = db.new_iter().unwrap();
+
+        // keys and values come from make_version(); they are each the latest entry.
+        let keys: &[&[u8]] = &[b"aaa", b"aab", b"aax", b"aba", b"bab", b"bba", b"cab", b"cba"];
+        let vals: &[&[u8]] = &[b"val0", b"val2", b"val1", b"val3", b"val2", b"val3", b"val1",
+                               b"val3"];
+
+        // This specifies the direction that the iterator should move to. Based on this, an index
+        // into keys/vals is incremented/decremented so that we get a nice test checking iterator
+        // move correctness.
+        let dirs: &[Direction] = &[Direction::Forward,
+                                   Direction::Forward,
+                                   Direction::Forward,
+                                   Direction::Reverse,
+                                   Direction::Reverse,
+                                   Direction::Forward,
+                                   Direction::Forward,
+                                   Direction::Reverse,
+                                   Direction::Forward,
+                                   Direction::Forward,
+                                   Direction::Forward,
+                                   Direction::Forward];
+        let mut i = 0;
+        iter.advance();
+        for d in dirs {
+            println!("i = {}", i);
+            assert_eq!((keys[i].to_vec(), vals[i].to_vec()),
+                       current_key_val(&iter).unwrap());
+            match *d {
+                Direction::Forward => {
+                    assert!(iter.advance());
+                    i += 1;
+                }
+                Direction::Reverse => {
+                    assert!(iter.prev());
+                    i -= 1;
+                }
+            }
         }
     }
 }
