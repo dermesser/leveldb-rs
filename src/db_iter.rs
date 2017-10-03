@@ -116,12 +116,10 @@ impl DBIterator {
             self.iter.current(&mut self.buf, &mut newsavedval);
             self.record_read_sample();
             let (typ, seq, ukey) = parse_internal_key(&self.buf);
-            println!("current: {:?} / {:?}", ukey, self.savedval);
 
             if seq > 0 && seq <= self.ss.sequence() {
                 if value_type != ValueType::TypeDeletion &&
                    self.cmp.cmp(ukey, &self.savedkey) == Ordering::Less {
-                    println!("found previous key {:?} / {:?}", ukey, self.savedval);
                     // We found a non-deleted entry for a previous key (in the previous iteration)
                     break;
                 }
@@ -320,7 +318,6 @@ mod tests {
         let mut i = 0;
         iter.advance();
         for d in dirs {
-            println!("i = {}", i);
             assert_eq!((keys[i].to_vec(), vals[i].to_vec()),
                        current_key_val(&iter).unwrap());
             match *d {
