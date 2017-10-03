@@ -100,8 +100,9 @@ impl DBIterator {
         false
     }
 
-    /// find_prev_user_entry, on a backwards-moving iterator, stores the current entry in
-    /// savedkey/savedval and positions the internal iterator on the entry before.
+    /// find_prev_user_entry, on a backwards-moving iterator, stores the newest non-deleted version
+    /// of the entry with the key == self.savedkey that is in the current snapshot, into
+    /// savedkey/savedval.
     fn find_prev_user_entry(&mut self) -> bool {
         assert!(self.dir == Direction::Reverse);
         let mut value_type = ValueType::TypeDeletion;
@@ -136,7 +137,6 @@ impl DBIterator {
                     self.savedkey.extend_from_slice(ukey);
 
                     mem::swap(&mut self.savedval, &mut self.valbuf);
-                    self.valbuf.clear();
                 }
             }
             self.iter.prev();
