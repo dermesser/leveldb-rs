@@ -327,21 +327,19 @@ impl LdbIterator for TableIterator {
         // then set current_block and seek there
         self.index_block.seek(to);
 
-        let (past_block, handle) = current_key_val(&self.index_block)
-            .expect("current() on index block should return value");
-        if self.table.opt.cmp.cmp(to, &past_block) <= Ordering::Equal {
-            // ok, found right block: continue
-            if let Ok(()) = self.load_block(&handle) {
-                // current_block is always set if load_block() returned Ok.
-                self.current_block.as_mut().unwrap().seek(to);
-            } else {
-                self.reset();
-                return;
+        // It's possible that this is a seek past-last; reset in that case.
+        if let Some((past_block, handle)) = current_key_val(&self.index_block) {
+            if self.table.opt.cmp.cmp(to, &past_block) <= Ordering::Equal {
+                // ok, found right block: continue
+                if let Ok(()) = self.load_block(&handle) {
+                    // current_block is always set if load_block() returned Ok.
+                    self.current_block.as_mut().unwrap().seek(to);
+                    return;
+                }
             }
-        } else {
-            self.reset();
-            return;
         }
+        // Reached in case of failure.
+        self.reset();
     }
 
     fn prev(&mut self) -> bool {
@@ -669,6 +667,12 @@ mod tests {
         assert!(iter.valid());
         assert_eq!(current_key_val(&iter),
                    Some(("abc".as_bytes().to_vec(), "def".as_bytes().to_vec())));
+
+        // Seek-past-last invalidates.
+        iter.seek("{{{".as_bytes());
+        assert!(!iter.valid());
+        iter.seek("bbb".as_bytes());
+        assert!(iter.valid());
     }
 
     #[test]
