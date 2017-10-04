@@ -114,9 +114,10 @@ impl DBIterator {
         // Deletion), assign it to savedkey and savedval and go back another step (at the end of
         // the loop).
         //
-        // We then look at the entry one *before* the entry we want to return. We check it against
-        // the saved key (still containing the key of the desired entry), see that it's less-than,
-        // and break. The key and value of the desired entry are in savedkey and savedval.
+        // We repeat this until we hit the first entry with a different user key (possibly going
+        // through newer versions of the same key, because the newest entry is first in order),
+        // then break. The key and value of the latest entry for the desired key have been stored
+        // in the previous iteration to savedkey and savedval.
         while self.iter.valid() {
             self.iter.current(&mut self.keybuf, &mut self.valbuf);
             self.record_read_sample();
@@ -332,6 +333,21 @@ mod tests {
                     i -= 1;
                 }
             }
+        }
+    }
+
+    #[test]
+    fn db_iter_test_seek() {
+        let mut db = build_db();
+        let mut iter = db.new_iter().unwrap();
+
+        let keys: &[&[u8]] = &[b"aab", b"aaa", b"cab", b"eaa", b"aaa", b"iba", b"fba"];
+        let vals: &[&[u8]] = &[b"val2", b"val0", b"val1", b"val1", b"val0", b"val2", b"val3"];
+
+        for (k, v) in keys.iter().zip(vals.iter()) {
+            println!("{:?}", String::from_utf8(k.to_vec()).unwrap());
+            iter.seek(k);
+            assert_eq!((k.to_vec(), v.to_vec()), current_key_val(&iter).unwrap());
         }
     }
 }
