@@ -109,6 +109,10 @@ pub fn test_iterator_properties<It: LdbIterator>(mut it: It) {
     it.reset();
     it.seek(&fourth.as_ref().unwrap().0);
     assert!(it.valid());
+    it.seek(&second.as_ref().unwrap().0);
+    assert!(it.valid());
+    it.prev();
+    assert_eq!(first, current_key_val(&it));
 
     it.reset();
     assert!(!it.valid());
