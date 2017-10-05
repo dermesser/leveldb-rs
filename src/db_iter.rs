@@ -389,4 +389,19 @@ mod tests {
             assert!(k.as_slice() != must_not_appear);
         }
     }
+
+    #[test]
+    fn db_iter_deleted_entry_not_returned_memtable() {
+        let mut db = build_db();
+
+        db.put(b"xyz", b"123").unwrap();
+        db.delete(b"xyz", true).unwrap();
+
+        let mut iter = db.new_iter().unwrap();
+        let must_not_appear = b"xyz";
+
+        for (k, _) in LdbIteratorIter::wrap(&mut iter) {
+            assert!(k.as_slice() != must_not_appear);
+        }
+    }
 }
