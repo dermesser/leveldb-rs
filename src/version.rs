@@ -75,7 +75,7 @@ impl Version {
                 if let Ok(Some((k, v))) = self.table_cache.borrow_mut().get(f.borrow().num, ikey) {
                     // We don't need to check the sequence number; get() will not return an entry
                     // with a higher sequence number than the one in the supplied key.
-                    let (typ, seq, foundkey) = parse_internal_key(&k);
+                    let (typ, _, foundkey) = parse_internal_key(&k);
                     if typ == ValueType::TypeValue &&
                        self.user_cmp.cmp(foundkey, ukey) == Ordering::Equal {
                         return Ok(Some((v, stats)));
@@ -523,6 +523,7 @@ pub mod testutil {
     use super::*;
     use cmp::DefaultCmp;
     use env::Env;
+    use key_types::ValueType;
     use mem_env::MemEnv;
     use options::{self, Options};
     use table_builder::TableBuilder;
@@ -549,16 +550,16 @@ pub mod testutil {
     /// write_table creates a table with the given number and contents (must be sorted!) in the
     /// memenv. The sequence numbers given to keys start with startseq.
     pub fn write_table(me: &Box<Env>,
-                       contents: &[(&[u8], &[u8])],
+                       contents: &[(&[u8], &[u8], ValueType)],
                        startseq: u64,
                        num: FileNum)
                        -> FileMetaHandle {
         let dst = me.open_writable_file(Path::new(&table_file_name("db", num))).unwrap();
         let mut seq = startseq;
         let keys: Vec<Vec<u8>> = contents.iter()
-            .map(|&(k, _)| {
+            .map(|&(k, _, typ)| {
                 seq += 1;
-                LookupKey::new(k, seq - 1).internal_key().to_vec()
+                LookupKey::new_full(k, seq - 1, typ).internal_key().to_vec()
             })
             .collect();
 
@@ -585,42 +586,53 @@ pub mod testutil {
         // and so on.
 
         // Level 0 (overlapping)
-        let f1: &[(&[u8], &[u8])] = &[("aaa".as_bytes(), "val1".as_bytes()),
-                                      ("aab".as_bytes(), "val2".as_bytes()),
-                                      ("aba".as_bytes(), "val3".as_bytes())];
+        let f1: &[(&[u8], &[u8], ValueType)] =
+            &[("aaa".as_bytes(), "val1".as_bytes(), ValueType::TypeValue),
+              ("aab".as_bytes(), "val2".as_bytes(), ValueType::TypeValue),
+              ("aba".as_bytes(), "val3".as_bytes(), ValueType::TypeValue)];
         let t1 = write_table(&env, f1, 1, 1);
-        let f2: &[(&[u8], &[u8])] = &[("aax".as_bytes(), "val1".as_bytes()),
-                                      ("bab".as_bytes(), "val2".as_bytes()),
-                                      ("bba".as_bytes(), "val3".as_bytes())];
+        let f2: &[(&[u8], &[u8], ValueType)] =
+            &[("aax".as_bytes(), "val1".as_bytes(), ValueType::TypeValue),
+              ("bab".as_bytes(), "val2".as_bytes(), ValueType::TypeValue),
+              ("bba".as_bytes(), "val3".as_bytes(), ValueType::TypeValue)];
         let t2 = write_table(&env, f2, 4, 2);
         // Level 1
-        let f3: &[(&[u8], &[u8])] = &[("aaa".as_bytes(), "val0".as_bytes()),
-                                      ("cab".as_bytes(), "val2".as_bytes()),
-                                      ("cba".as_bytes(), "val3".as_bytes())];
+        let f3: &[(&[u8], &[u8], ValueType)] =
+            &[("aaa".as_bytes(), "val0".as_bytes(), ValueType::TypeValue),
+              ("cab".as_bytes(), "val2".as_bytes(), ValueType::TypeValue),
+              ("cba".as_bytes(), "val3".as_bytes(), ValueType::TypeValue)];
         let t3 = write_table(&env, f3, 7, 3);
-        let f4: &[(&[u8], &[u8])] = &[("daa".as_bytes(), "val1".as_bytes()),
-                                      ("dab".as_bytes(), "val2".as_bytes()),
-                                      ("dba".as_bytes(), "val3".as_bytes())];
+        let f4: &[(&[u8], &[u8], ValueType)] =
+            &[("daa".as_bytes(), "val1".as_bytes(), ValueType::TypeValue),
+              ("dab".as_bytes(), "val2".as_bytes(), ValueType::TypeValue),
+              ("dba".as_bytes(), "val3".as_bytes(), ValueType::TypeValue)];
         let t4 = write_table(&env, f4, 10, 4);
-        let f5: &[(&[u8], &[u8])] = &[("eaa".as_bytes(), "val1".as_bytes()),
-                                      ("eab".as_bytes(), "val2".as_bytes()),
-                                      ("fab".as_bytes(), "val3".as_bytes())];
+        let f5: &[(&[u8], &[u8], ValueType)] =
+            &[("eaa".as_bytes(), "val1".as_bytes(), ValueType::TypeValue),
+              ("eab".as_bytes(), "val2".as_bytes(), ValueType::TypeValue),
+              ("fab".as_bytes(), "val3".as_bytes(), ValueType::TypeValue)];
         let t5 = write_table(&env, f5, 13, 5);
         // Level 2
-        let f6: &[(&[u8], &[u8])] = &[("cab".as_bytes(), "val1".as_bytes()),
-                                      ("fab".as_bytes(), "val2".as_bytes()),
-                                      ("fba".as_bytes(), "val3".as_bytes())];
+        let f6: &[(&[u8], &[u8], ValueType)] =
+            &[("cab".as_bytes(), "val1".as_bytes(), ValueType::TypeValue),
+              ("fab".as_bytes(), "val2".as_bytes(), ValueType::TypeValue),
+              ("fba".as_bytes(), "val3".as_bytes(), ValueType::TypeValue)];
         let t6 = write_table(&env, f6, 16, 6);
-        let f7: &[(&[u8], &[u8])] = &[("gaa".as_bytes(), "val1".as_bytes()),
-                                      ("gab".as_bytes(), "val2".as_bytes()),
-                                      ("gba".as_bytes(), "val3".as_bytes())];
-        let t7 = write_table(&env, f7, 19, 7);
+        let f7: &[(&[u8], &[u8], ValueType)] =
+            &[("gaa".as_bytes(), "val1".as_bytes(), ValueType::TypeValue),
+              ("gab".as_bytes(), "val2".as_bytes(), ValueType::TypeValue),
+              ("gba".as_bytes(), "val3".as_bytes(), ValueType::TypeValue),
+              ("gca".as_bytes(), "val3".as_bytes(), ValueType::TypeDeletion),
+              ("gda".as_bytes(), "val3".as_bytes(), ValueType::TypeValue)];
+        let t7 = write_table(&env, f7, 21, 7);
         // Level 3 (2 * 2 entries, for iterator behavior).
-        let f8: &[(&[u8], &[u8])] = &[("haa".as_bytes(), "val1".as_bytes()),
-                                      ("hba".as_bytes(), "val2".as_bytes())];
-        let t8 = write_table(&env, f8, 22, 8);
-        let f9: &[(&[u8], &[u8])] = &[("iaa".as_bytes(), "val1".as_bytes()),
-                                      ("iba".as_bytes(), "val2".as_bytes())];
+        let f8: &[(&[u8], &[u8], ValueType)] =
+            &[("haa".as_bytes(), "val1".as_bytes(), ValueType::TypeValue),
+              ("hba".as_bytes(), "val2".as_bytes(), ValueType::TypeValue)];
+        let t8 = write_table(&env, f8, 23, 8);
+        let f9: &[(&[u8], &[u8], ValueType)] =
+            &[("iaa".as_bytes(), "val1".as_bytes(), ValueType::TypeValue),
+              ("iba".as_bytes(), "val2".as_bytes(), ValueType::TypeValue)];
         let t9 = write_table(&env, f9, 25, 9);
 
 
@@ -657,7 +669,7 @@ mod tests {
     fn test_version_concat_iter() {
         let v = make_version().0;
 
-        let expected_entries = vec![0, 9, 6, 4];
+        let expected_entries = vec![0, 9, 8, 4];
         for l in 1..4 {
             let mut iter = v.new_concat_iter(l);
             let iter = LdbIteratorIter::wrap(&mut iter);
@@ -686,7 +698,7 @@ mod tests {
         opt.set_comparator(Box::new(InternalKeyCmp(Rc::new(Box::new(DefaultCmp)))));
 
         let mut miter = MergingIter::new(opt.cmp.clone(), iters);
-        assert_eq!(LdbIteratorIter::wrap(&mut miter).count(), 25);
+        assert_eq!(LdbIteratorIter::wrap(&mut miter).count(), 27);
 
         // Check that all elements are in order.
         let init = LookupKey::new("000".as_bytes(), MAX_SEQUENCE_NUMBER);
@@ -701,8 +713,8 @@ mod tests {
     fn test_version_summary() {
         let v = make_version().0;
         let expected = "level 0: 2 files, 434 bytes ([(1, 216), (2, 218)]); level 1: 3 files, 651 \
-                        bytes ([(3, 218), (4, 216), (5, 217)]); level 2: 2 files, 434 bytes ([(6, \
-                        218), (7, 216)]); level 3: 2 files, 400 bytes ([(8, 200), (9, 200)]); ";
+                        bytes ([(3, 218), (4, 216), (5, 217)]); level 2: 2 files, 468 bytes ([(6, \
+                        218), (7, 250)]); level 3: 2 files, 400 bytes ([(8, 200), (9, 200)]); ";
         assert_eq!(expected, &v.level_summary());
     }
 
@@ -719,6 +731,8 @@ mod tests {
               ("dab".as_bytes(), 1, Ok(None)),
               ("dac".as_bytes(), 100, Ok(None)),
               ("gba".as_bytes(), 100, Ok(Some("val3".as_bytes().to_vec()))),
+              // deleted key
+              ("gca".as_bytes(), 100, Ok(None)),
               ("gbb".as_bytes(), 100, Ok(None))];
 
         for ref c in cases {

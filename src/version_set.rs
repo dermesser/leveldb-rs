@@ -1043,7 +1043,7 @@ mod tests {
         // num_level_bytes()
         assert_eq!(434, vs.num_level_bytes(0));
         assert_eq!(651, vs.num_level_bytes(1));
-        assert_eq!(434, vs.num_level_bytes(2));
+        assert_eq!(468, vs.num_level_bytes(2));
         // num_level_files()
         assert_eq!(2, vs.num_level_files(0));
         assert_eq!(3, vs.num_level_files(1));
