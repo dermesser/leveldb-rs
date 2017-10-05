@@ -719,6 +719,8 @@ impl DB {
                 continue;
             }
 
+            last_seq_for_key = seq;
+
             if cs.builder.is_none() {
                 let fnum = self.vset.borrow_mut().new_file_number();
                 let mut fmd = FileMetaData::default();
