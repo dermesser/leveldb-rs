@@ -384,16 +384,28 @@ impl DB {
         let current = self.current();
         let mut current = current.borrow_mut();
 
+        // Using this lookup key will skip all entries with higher sequence numbers, because they
+        // will compare "Lesser" using the InternalKeyCmp
         let lkey = LookupKey::new(key, seq);
 
-        if let Some(v) = self.mem.get(&lkey) {
-            return Ok(Some(v));
+        match self.mem.get(&lkey) {
+            (Some(v), _) => return Ok(Some(v)),
+            // deleted entry
+            (None, true) => return Ok(None),
+            // not found entry
+            (None, false) => {}
         }
+
         if let Some(imm) = self.imm.as_ref() {
-            if let Some(v) = imm.get(&lkey) {
-                return Ok(Some(v));
+            match imm.get(&lkey) {
+                (Some(v), _) => return Ok(Some(v)),
+                // deleted entry
+                (None, true) => return Ok(None),
+                // not found entry
+                (None, false) => {}
             }
         }
+
         if let Ok(Some((v, st))) = current.get(lkey.internal_key()) {
             if current.update_stats(st) {
                 if let Err(e) = self.maybe_do_compaction() {

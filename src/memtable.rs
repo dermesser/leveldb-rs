@@ -40,8 +40,10 @@ impl MemTable {
         self.map.insert(build_memtable_key(key, value, t, seq), Vec::new())
     }
 
+    /// get returns the value for the given entry and whether the entry is marked as deleted. This
+    /// is to distinguish between not-found and found-deleted.
     #[allow(unused_variables)]
-    pub fn get(&self, key: &LookupKey) -> Option<Vec<u8>> {
+    pub fn get(&self, key: &LookupKey) -> (Option<Vec<u8>>, bool) {
         let mut iter = self.map.iter();
         iter.seek(key.memtable_key());
 
@@ -52,13 +54,13 @@ impl MemTable {
             // We only care about user key equality here
             if key.user_key() == &foundkey[fkeyoff..fkeyoff + fkeylen] {
                 if tag & 0xff == ValueType::TypeValue as u64 {
-                    return Some(foundkey[valoff..valoff + vallen].to_vec());
+                    return (Some(foundkey[valoff..valoff + vallen].to_vec()), false);
                 } else {
-                    return None;
+                    return (None, true);
                 }
             }
         }
-        None
+        (None, false)
     }
 
     pub fn iter(&self) -> MemtableIterator {
@@ -69,6 +71,8 @@ impl MemTable {
 /// MemtableIterator is an iterator over a MemTable. It is mostly concerned with converting to and
 /// from the MemtableKey format used in the inner map; all key-taking or -returning methods deal
 /// with InternalKeys.
+///
+/// This iterator skips deleted entries.
 pub struct MemtableIterator {
     skipmapiter: SkipMapIter,
 }
@@ -183,14 +187,14 @@ mod tests {
 
     fn get_memtable() -> MemTable {
         let mut mt = MemTable::new(options::for_test().cmp);
-        let entries = vec![(115, "abc", "122"),
-                           (120, "abc", "123"),
-                           (121, "abd", "124"),
-                           (122, "abe", "125"),
-                           (123, "abf", "126")];
+        let entries = vec![(ValueType::TypeValue, 115, "abc", "122"),
+                           (ValueType::TypeValue, 120, "abc", "123"),
+                           (ValueType::TypeValue, 121, "abd", "124"),
+                           (ValueType::TypeDeletion, 122, "abe", "125"),
+                           (ValueType::TypeValue, 123, "abf", "126")];
 
         for e in entries.iter() {
-            mt.add(e.0, ValueType::TypeValue, e.1.as_bytes(), e.2.as_bytes());
+            mt.add(e.1, e.0, e.2.as_bytes(), e.3.as_bytes());
         }
         mt
     }
@@ -220,37 +224,38 @@ mod tests {
         let mt = get_memtable();
 
         // Smaller sequence number doesn't find entry
-        if let Some(v) = mt.get(&LookupKey::new("abc".as_bytes(), 110)) {
+        if let Some(v) = mt.get(&LookupKey::new("abc".as_bytes(), 110)).0 {
             println!("{:?}", v);
             panic!("found");
         }
 
-        if let Some(v) = mt.get(&LookupKey::new("abf".as_bytes(), 110)) {
+        if let Some(v) = mt.get(&LookupKey::new("abf".as_bytes(), 110)).0 {
             println!("{:?}", v);
             panic!("found");
         }
 
         // Bigger sequence number falls back to next smaller
-        if let Some(v) = mt.get(&LookupKey::new("abc".as_bytes(), 116)) {
+        if let Some(v) = mt.get(&LookupKey::new("abc".as_bytes(), 116)).0 {
             assert_eq!(v, "122".as_bytes());
         } else {
             panic!("not found");
         }
 
         // Exact match works
-        if let Some(v) = mt.get(&LookupKey::new("abc".as_bytes(), 120)) {
+        if let (Some(v), deleted) = mt.get(&LookupKey::new("abc".as_bytes(), 120)) {
             assert_eq!(v, "123".as_bytes());
+            assert!(!deleted);
         } else {
             panic!("not found");
         }
 
-        if let Some(v) = mt.get(&LookupKey::new("abe".as_bytes(), 122)) {
-            assert_eq!(v, "125".as_bytes());
+        if let (None, deleted) = mt.get(&LookupKey::new("abe".as_bytes(), 122)) {
+            assert!(deleted);
         } else {
-            panic!("not found");
+            panic!("found deleted");
         }
 
-        if let Some(v) = mt.get(&LookupKey::new("abf".as_bytes(), 129)) {
+        if let Some(v) = mt.get(&LookupKey::new("abf".as_bytes(), 129)).0 {
             assert_eq!(v, "126".as_bytes());
         } else {
             panic!("not found");
@@ -303,7 +308,8 @@ mod tests {
                                                * higher sequence number comes first */
                             "122".as_bytes(),
                             "124".as_bytes(),
-                            "125".as_bytes(),
+                            // deleted entry:
+                            // "125".as_bytes(),
                             "126".as_bytes()];
         let mut i = 0;
 
