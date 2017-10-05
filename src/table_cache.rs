@@ -48,7 +48,7 @@ impl TableCache {
                    key: InternalKey<'a>)
                    -> Result<Option<(Vec<u8>, Vec<u8>)>> {
         let tbl = self.get_table(file_num)?;
-        Ok(tbl.get(key))
+        tbl.get(key)
     }
 
     /// Return a table from cache, or open the backing file, then cache and return it.

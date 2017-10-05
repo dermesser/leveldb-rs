@@ -11,7 +11,7 @@ use integer_encoding::{FixedInt, VarInt, VarIntWriter, FixedIntWriter};
 // TODO: At some point, convert those into actual types with conversions between them. That's a lot
 // of boilerplate, but increases type safety.
 
-#[derive(Debug, PartialOrd, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialOrd, PartialEq)]
 pub enum ValueType {
     TypeDeletion = 0,
     TypeValue = 1,
