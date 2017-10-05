@@ -353,6 +353,13 @@ impl DB {
         self.write(wb, false)
     }
 
+    /// delete deletes a single entry.
+    fn delete(&mut self, k: &[u8], sync: bool) -> Result<()> {
+        let mut wb = WriteBatch::new();
+        wb.delete(k);
+        self.write(wb, sync)
+    }
+
     /// write writes an entire WriteBatch. sync determines whether the write should be flushed to
     /// disk.
     fn write(&mut self, batch: WriteBatch, sync: bool) -> Result<()> {
@@ -1234,6 +1241,25 @@ mod tests {
             assert_eq!("val2".as_bytes(),
                        db.get_at(&ss, "eab".as_bytes()).unwrap().unwrap().as_slice());
         }
+    }
+
+    #[test]
+    fn test_db_impl_delete() {
+        let mut db = build_db();
+
+        db.put(b"xyy", b"123").unwrap();
+        db.put(b"xyz", b"123").unwrap();
+
+        assert!(db.get(b"xyy").is_some());
+        assert!(db.get(b"gaa").is_some());
+
+        // Delete one memtable entry and one table entry.
+        db.delete(b"xyy", true).unwrap();
+        db.delete(b"gaa", true).unwrap();
+
+        assert!(db.get(b"xyy").is_none());
+        assert!(db.get(b"gaa").is_none());
+        assert!(db.get(b"xyz").is_some());
     }
 
     #[test]
