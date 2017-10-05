@@ -275,6 +275,7 @@ fn random_period() -> isize {
 mod tests {
     use super::*;
     use types::{current_key_val, Direction};
+    use test_util::LdbIteratorIter;
     use db_impl::testutil::*;
 
     #[test]
@@ -355,6 +356,7 @@ mod tests {
         let mut db = build_db();
         let mut iter = db.new_iter().unwrap();
 
+        // gca is the deleted entry.
         let keys: &[&[u8]] = &[b"aab", b"aaa", b"cab", b"eaa", b"aaa", b"iba", b"fba"];
         let vals: &[&[u8]] = &[b"val2", b"val0", b"val1", b"val1", b"val0", b"val2", b"val3"];
 
@@ -369,5 +371,22 @@ mod tests {
         assert!(!iter.valid());
         iter.seek(b"aab");
         assert!(iter.valid());
+
+        // Seek skips over deleted entry.
+        iter.seek(b"gca");
+        assert!(iter.valid());
+        assert_eq!((b"gda".to_vec(), b"val5".to_vec()),
+                   current_key_val(&iter).unwrap());
+    }
+
+    #[test]
+    fn db_iter_deleted_entry_not_returned() {
+        let mut db = build_db();
+        let mut iter = db.new_iter().unwrap();
+        let must_not_appear = b"gca";
+
+        for (k, _) in LdbIteratorIter::wrap(&mut iter) {
+            assert!(k.as_slice() != must_not_appear);
+        }
     }
 }
