@@ -50,7 +50,7 @@ impl Version {
     pub fn get<'a>(&self, key: InternalKey<'a>) -> Result<Option<(Vec<u8>, GetStats)>> {
         let levels = self.get_overlapping(key);
         let ikey = key;
-        let ukey = parse_internal_key(key).2;
+        let ukey = parse_internal_key(ikey).2;
 
         let mut stats = GetStats {
             file: None,
@@ -73,7 +73,11 @@ impl Version {
                 // keys, we now need to check whether the found entry's user key is equal to the
                 // one we're looking for (get() just returns the next-bigger key).
                 if let Ok(Some((k, v))) = self.table_cache.borrow_mut().get(f.borrow().num, ikey) {
-                    if self.user_cmp.cmp(parse_internal_key(&k).2, ukey) == Ordering::Equal {
+                    // We don't need to check the sequence number; get() will not return an entry
+                    // with a higher sequence number than the one in the supplied key.
+                    let (typ, seq, foundkey) = parse_internal_key(&k);
+                    if typ == ValueType::TypeValue &&
+                       self.user_cmp.cmp(foundkey, ukey) == Ordering::Equal {
                         return Ok(Some((v, stats)));
                     }
                 }
@@ -352,6 +356,8 @@ pub fn new_version_iter(files: Vec<FileMetaHandle>,
 
 /// VersionIter iterates over the entries in an ordered list of table files (specifically, for
 /// example, the tables in a level).
+///
+/// Note that VersionIter returns entries of type Deletion.
 pub struct VersionIter {
     // NOTE: Maybe we need to change this to Rc to support modification of the file set after
     // creation of the iterator. Versions should be immutable, though.
