@@ -1,7 +1,7 @@
 use block::{Block, BlockIter};
 use blockhandle::BlockHandle;
 use cache;
-use cmp::InternalKeyCmp;
+use cmp::{Cmp, InternalKeyCmp};
 use env::RandomAccess;
 use error::{err, StatusCode, Result};
 use filter;
@@ -132,8 +132,7 @@ impl Table {
     pub fn new(mut opt: Options, file: Rc<Box<RandomAccess>>, size: usize) -> Result<Table> {
         opt.cmp = Rc::new(Box::new(InternalKeyCmp(opt.cmp.clone())));
         opt.filter_policy = Rc::new(Box::new(filter::InternalFilterPolicy::new(opt.filter_policy)));
-        let t = try!(Table::new_raw(opt, file, size));
-        Ok(t)
+        Table::new_raw(opt, file, size)
     }
 
     /// block_cache_handle creates a CacheKey for a block with a given offset to be used in the
@@ -195,11 +194,14 @@ impl Table {
     /// is better suited if you frequently look for non-existing values (as it will detect the
     /// non-existence of an entry in a block without having to load the block).
     ///
-    /// The caller must check if the returned key is acceptable, as it may not be an exact match
-    /// for key. This is done this way because some key types, like internal keys, will not result
-    /// in an exact match; it depends on other comparators than the one that the table reader knows
+    /// The caller must check if the returned key, which is the raw key (not e.g. the user portion
+    /// of an InternalKey) is acceptable (e.g. correct value type or sequence number), as it may
+    /// not be an exact match for key.
+    ///
+    /// This is done this way because some key types, like internal keys, will not result in an
+    /// exact match; it depends on other comparators than the one that the table reader knows
     /// whether a match is acceptable.
-    pub fn get<'a>(&self, key: InternalKey<'a>) -> Option<(Vec<u8>, Vec<u8>)> {
+    pub fn get<'a>(&self, key: InternalKey<'a>) -> Result<Option<(Vec<u8>, Vec<u8>)>> {
         let mut index_iter = self.indexblock.iter();
         index_iter.seek(key);
 
@@ -208,10 +210,10 @@ impl Table {
             if self.opt.cmp.cmp(key, &last_in_block) == Ordering::Less {
                 handle = BlockHandle::decode(&h).0;
             } else {
-                return None;
+                return Ok(None);
             }
         } else {
-            return None;
+            return Ok(None);
         }
 
         // found correct block.
@@ -219,29 +221,22 @@ impl Table {
         // Check bloom (or whatever) filter
         if let Some(ref filters) = self.filters {
             if !filters.key_may_match(handle.offset(), key) {
-                return None;
+                return Ok(None);
             }
         }
 
         // Read block (potentially from cache)
-        let mut iter;
-        if let Ok(tb) = self.read_block(&handle) {
-            iter = tb.block.iter();
-        } else {
-            return None;
-        }
+        let tb = self.read_block(&handle)?;
+        let mut iter = tb.block.iter();
 
         // Go to entry and check if it's the wanted entry.
         iter.seek(key);
         if let Some((k, v)) = current_key_val(&iter) {
             if self.opt.cmp.cmp(&k, key) >= Ordering::Equal {
-                Some((k, v))
-            } else {
-                None
+                return Ok(Some((k, v)));
             }
-        } else {
-            None
         }
+        Ok(None)
     }
 }
 
@@ -535,7 +530,7 @@ mod tests {
 
         // Go forward again, to last entry.
         while let Some((key, _)) = iter.next() {
-            if key.as_slice() == "zzz".as_bytes() {
+            if key.as_slice() == b"zzz" {
                 break;
             }
         }
@@ -572,8 +567,7 @@ mod tests {
         loop {
             if let Some((k, _)) = iter.next() {
                 assert!(filter_reader.key_may_match(iter.current_block_off, &k));
-                assert!(!filter_reader.key_may_match(iter.current_block_off,
-                                                     "somerandomkey".as_bytes()));
+                assert!(!filter_reader.key_may_match(iter.current_block_off, b"somerandomkey"));
             } else {
                 break;
             }
@@ -659,19 +653,19 @@ mod tests {
         let table = Table::new_raw(options::for_test(), wrap_buffer(src), size).unwrap();
         let mut iter = table.iter();
 
-        iter.seek("bcd".as_bytes());
+        iter.seek(b"bcd");
         assert!(iter.valid());
         assert_eq!(current_key_val(&iter),
-                   Some(("bcd".as_bytes().to_vec(), "asa".as_bytes().to_vec())));
-        iter.seek("abc".as_bytes());
+                   Some((b"bcd".to_vec(), b"asa".to_vec())));
+        iter.seek(b"abc");
         assert!(iter.valid());
         assert_eq!(current_key_val(&iter),
-                   Some(("abc".as_bytes().to_vec(), "def".as_bytes().to_vec())));
+                   Some((b"abc".to_vec(), b"def".to_vec())));
 
         // Seek-past-last invalidates.
         iter.seek("{{{".as_bytes());
         assert!(!iter.valid());
-        iter.seek("bbb".as_bytes());
+        iter.seek(b"bbb");
         assert!(iter.valid());
     }
 
@@ -685,20 +679,21 @@ mod tests {
         let mut _iter = table.iter();
         // Test that all of the table's entries are reachable via get()
         for (k, v) in LdbIteratorIter::wrap(&mut _iter) {
-            assert_eq!(table2.get(&k), Some((k, v)));
+            let r = table2.get(&k);
+            assert_eq!(Ok(Some((k, v))), r);
         }
 
         assert_eq!(table.opt.block_cache.borrow().count(), 3);
 
         // test that filters work and don't return anything at all.
-        assert!(table.get("aaa".as_bytes()).is_none());
-        assert!(table.get("aaaa".as_bytes()).is_none());
-        assert!(table.get("aa".as_bytes()).is_none());
-        assert!(table.get("abcd".as_bytes()).is_none());
-        assert!(table.get("abb".as_bytes()).is_none());
-        assert!(table.get("zzy".as_bytes()).is_none());
-        assert!(table.get("zz1".as_bytes()).is_none());
-        assert!(table.get("zz{".as_bytes()).is_none());
+        assert!(table.get(b"aaa").unwrap().is_none());
+        assert!(table.get(b"aaaa").unwrap().is_none());
+        assert!(table.get(b"aa").unwrap().is_none());
+        assert!(table.get(b"abcd").unwrap().is_none());
+        assert!(table.get(b"abb").unwrap().is_none());
+        assert!(table.get(b"zzy").unwrap().is_none());
+        assert!(table.get(b"zz1").unwrap().is_none());
+        assert!(table.get("zz{".as_bytes()).unwrap().is_none());
     }
 
     // This test verifies that the table and filters work with internal keys. This means:
@@ -719,10 +714,10 @@ mod tests {
         let mut _iter = table.iter();
         for (ref k, ref v) in LdbIteratorIter::wrap(&mut _iter) {
             assert_eq!(k.len(), 3 + 8);
-            assert_eq!(table.get(k).unwrap(), (k.to_vec(), v.to_vec()));
+            assert_eq!((k.to_vec(), v.to_vec()), table.get(k).unwrap().unwrap());
         }
 
-        assert!(table.get(LookupKey::new("abc".as_bytes(), 1000).internal_key()).is_some());
+        assert!(table.get(LookupKey::new(b"abc", 1000).internal_key()).unwrap().is_some());
 
         let mut iter = table.iter();
 
@@ -732,8 +727,7 @@ mod tests {
                 let userkey = lk.user_key();
 
                 assert!(filter_reader.key_may_match(iter.current_block_off, userkey));
-                assert!(!filter_reader.key_may_match(iter.current_block_off,
-                                                     "somerandomkey".as_bytes()));
+                assert!(!filter_reader.key_may_match(iter.current_block_off, b"somerandomkey"));
             } else {
                 break;
             }
