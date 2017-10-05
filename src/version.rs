@@ -622,8 +622,8 @@ pub mod testutil {
             &[("gaa".as_bytes(), "val1".as_bytes(), ValueType::TypeValue),
               ("gab".as_bytes(), "val2".as_bytes(), ValueType::TypeValue),
               ("gba".as_bytes(), "val3".as_bytes(), ValueType::TypeValue),
-              ("gca".as_bytes(), "val3".as_bytes(), ValueType::TypeDeletion),
-              ("gda".as_bytes(), "val3".as_bytes(), ValueType::TypeValue)];
+              ("gca".as_bytes(), "val4".as_bytes(), ValueType::TypeDeletion),
+              ("gda".as_bytes(), "val5".as_bytes(), ValueType::TypeValue)];
         let t7 = write_table(&env, f7, 21, 7);
         // Level 3 (2 * 2 entries, for iterator behavior).
         let f8: &[(&[u8], &[u8], ValueType)] =
