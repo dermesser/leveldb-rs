@@ -156,8 +156,8 @@ impl DB {
                        "database already exists and error_if_exists is true");
         }
 
-        // If save_manifest is true, the existing manifest is reused and we should log_and_apply()
-        // later.
+        // If save_manifest is true, we should log_and_apply() later in order to write the new
+        // manifest.
         let mut save_manifest = self.vset.borrow_mut().recover()?;
 
         // Recover from all log files not in the descriptor.
