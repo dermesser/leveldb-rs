@@ -584,7 +584,12 @@ impl DB {
                 Ok(())
             }
         } else {
-            let mut state = CompactionState::new(compaction);
+            let smallest = if self.snaps.empty() {
+                self.vset.borrow().last_seq
+            } else {
+                self.snaps.oldest()
+            };
+            let mut state = CompactionState::new(compaction, smallest);
             if let Err(e) = self.do_compaction_work(&mut state) {
                 state.cleanup(&self.opt.env, &self.name);
                 log!(self.opt.log, "Compaction work failed: {}", e);
@@ -671,12 +676,6 @@ impl DB {
              cs.compaction.level() + 1);
         assert!(self.vset.borrow().num_level_files(cs.compaction.level()) > 0);
         assert!(cs.builder.is_none());
-
-        cs.smallest_seq = if self.snaps.empty() {
-            self.vset.borrow().last_seq
-        } else {
-            self.snaps.oldest()
-        };
 
         let mut input = self.vset.borrow().make_input_iterator(&cs.compaction);
         input.seek_to_first();
@@ -830,10 +829,10 @@ struct CompactionState {
 }
 
 impl CompactionState {
-    fn new(c: Compaction) -> CompactionState {
+    fn new(c: Compaction, smallest: SequenceNumber) -> CompactionState {
         CompactionState {
             compaction: c,
-            smallest_seq: 0,
+            smallest_seq: smallest,
             outputs: vec![],
             builder: None,
             total_bytes: 0,
