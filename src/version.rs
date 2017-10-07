@@ -746,6 +746,27 @@ mod tests {
     }
 
     #[test]
+    fn test_version_get_overlapping_basic() {
+        let v = make_version().0;
+
+        // Overlapped by tables 1 and 2.
+        let ol = v.get_overlapping(LookupKey::new(b"aay", 50).internal_key());
+        // Check that sorting order is newest-first in L0.
+        assert_eq!(2, ol[0][0].borrow().num);
+        // Check that table from L1 matches.
+        assert_eq!(3, ol[1][0].borrow().num);
+
+        let ol = v.get_overlapping(LookupKey::new(b"cb", 50).internal_key());
+        assert_eq!(3, ol[1][0].borrow().num);
+        assert_eq!(6, ol[2][0].borrow().num);
+
+        let ol = v.get_overlapping(LookupKey::new(b"x", 50).internal_key());
+        for i in 0..NUM_LEVELS {
+            assert!(ol[i].is_empty());
+        }
+    }
+
+    #[test]
     fn test_version_overlap_in_level() {
         let v = make_version().0;
 
