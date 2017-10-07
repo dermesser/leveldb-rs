@@ -103,7 +103,8 @@ impl Version {
                 levels[0].push(f_.clone());
             }
         }
-        levels[0].sort_by(|a, b| a.borrow().num.cmp(&b.borrow().num));
+        // Sort by newest first.
+        levels[0].sort_by(|a, b| b.borrow().num.cmp(&a.borrow().num));
 
         let icmp = InternalKeyCmp(self.user_cmp.clone());
         for level in 1..NUM_LEVELS {
