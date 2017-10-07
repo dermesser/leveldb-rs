@@ -1399,4 +1399,42 @@ mod tests {
 
         assert!(!env.exists(Path::new("db/000001.ldb")).unwrap());
     }
+
+    #[test]
+    fn test_db_impl_open_close_reopen() {
+        let opt;
+        {
+            let mut db = build_db();
+            opt = db.opt.clone();
+
+            db.put(b"xx1", b"111").unwrap();
+            db.put(b"xx2", b"112").unwrap();
+            db.put(b"xx3", b"113").unwrap();
+            db.put(b"xx4", b"114").unwrap();
+            db.delete(b"xx2", false).unwrap();
+        }
+
+        {
+            let mut db = DB::open("db", opt.clone()).unwrap();
+
+            let ss = db.get_snapshot();
+            db.put(b"xx4", b"222").unwrap();
+            let ss2 = db.get_snapshot();
+
+            assert_eq!(Some(b"113".to_vec()), db.get_at(&ss, b"xx3").unwrap());
+            assert_eq!(None, db.get_at(&ss, b"xx2").unwrap());
+
+            assert_eq!(Some(b"114".to_vec()), db.get_at(&ss, b"xx4").unwrap());
+            assert_eq!(Some(b"222".to_vec()), db.get_at(&ss2, b"xx4").unwrap());
+        }
+
+        {
+            let mut db = DB::open("db", opt).unwrap();
+
+            let ss = db.get_snapshot();
+            assert_eq!(Some(b"113".to_vec()), db.get_at(&ss, b"xx3").unwrap());
+            assert_eq!(Some(b"222".to_vec()), db.get_at(&ss, b"xx4").unwrap());
+            assert_eq!(None, db.get_at(&ss, b"xx2").unwrap());
+        }
+    }
 }
