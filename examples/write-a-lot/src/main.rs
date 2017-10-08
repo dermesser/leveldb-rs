@@ -4,7 +4,6 @@ extern crate rand;
 use leveldb_rs::DB;
 use leveldb_rs::Options;
 use rand::Rng;
-use rand::AsciiGenerator;
 
 use std::error::Error;
 use std::iter::FromIterator;
@@ -14,9 +13,7 @@ const VAL_LEN: usize = 48;
 
 fn gen_string(len: usize) -> String {
     let mut rng = rand::thread_rng();
-    let mut rand = rng.gen_ascii_chars();
-
-    String::from_iter(rand.take(len))
+    String::from_iter(rng.gen_ascii_chars().take(len))
 }
 
 fn fill_db(db: &mut DB, entries: usize) -> Result<(), Box<Error>> {
@@ -35,5 +32,5 @@ fn main() {
     let opt = Options::default();
     let mut db = DB::open("test1", opt).unwrap();
 
-    fill_db(&mut db, 4096).unwrap();
+    fill_db(&mut db, 16384).unwrap();
 }
