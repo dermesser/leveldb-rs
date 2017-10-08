@@ -1,6 +1,6 @@
 extern crate leveldb_rs;
 
-use leveldb_rs::{DB, Options};
+use leveldb_rs::{DB, LdbIterator, Options};
 
 use std::env::args;
 use std::iter::FromIterator;
@@ -22,11 +22,25 @@ fn delete(db: &mut DB, k: &str) {
     db.flush().unwrap();
 }
 
+fn iter(db: &mut DB) {
+    let mut it = db.new_iter().unwrap();
+    while let Some((k, v)) = it.next() {
+        match (String::from_utf8(k), String::from_utf8(v)) {
+            (Ok(sk), Ok(sv)) => println!("{} => {}", sk, sv),
+            (Err(utf8e), Ok(sv)) => println!("{:?} => {}", utf8e.into_bytes(), sv),
+            (Ok(sk), Err(utf8e)) => println!("{} => {:?}", sk, utf8e.into_bytes()),
+            (Err(utf81), Err(utf82)) => {
+                println!("{:?} => {:?}", utf81.into_bytes(), utf82.into_bytes())
+            }
+        }
+    }
+}
+
 fn main() {
     let args = Vec::from_iter(args());
 
-    if args.len() < 3 {
-        panic!("Usage: {} [get|put|delete] key [val]", args[0]);
+    if args.len() < 2 {
+        panic!("Usage: {} [get|put|delete|iter] [key] [val]", args[0]);
     }
 
     let mut opt = Options::default();
@@ -34,14 +48,25 @@ fn main() {
     let mut db = DB::open("tooldb", opt).unwrap();
 
     match args[1].as_str() {
-        "get" => get(&mut db, &args[2]),
+        "get" => {
+            if args.len() < 3 {
+                panic!("Usage: {} get key", args[0]);
+            }
+            get(&mut db, &args[2]);
+        }
         "put" => {
             if args.len() < 4 {
                 panic!("Usage: {} put key val", args[0]);
             }
             put(&mut db, &args[2], &args[3]);
         }
-        "delete" => delete(&mut db, &args[2]),
+        "delete" => {
+            if args.len() < 3 {
+                panic!("Usage: {} delete key", args[0]);
+            }
+            delete(&mut db, &args[2]);
+        }
+        "iter" => iter(&mut db),
         _ => unimplemented!(),
     }
 }
