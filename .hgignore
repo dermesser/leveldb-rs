@@ -1,6 +1,16 @@
-.*.bk
-.*.orig
-.*.swp
+syntax: glob
+
+*.bk
+*.orig
+*.swp
 Cargo.lock
 kcov-out
 target
+
+# LevelDB test instances
+LOG{,.old}
+LOCK
+CURRENT
+*.ldb
+*.log
+MANIFEST-*
