@@ -191,6 +191,7 @@ mod tests {
         let name = n.as_ref();
         let env = PosixDiskEnv::new();
 
+        // exists, size_of, delete
         assert!(env.open_appendable_file(name).is_ok());
         assert!(env.exists(name).unwrap_or(false));
         assert_eq!(env.size_of(name).unwrap_or(1), 0);
@@ -202,9 +203,18 @@ mod tests {
         assert!(env.delete(name).is_ok());
 
         {
+            // write
             let mut f = env.open_writable_file(name).unwrap();
             let _ = f.write("123xyz".as_bytes());
-            assert_eq!(env.size_of(name).unwrap_or(0), 6);
+            assert_eq!(6, env.size_of(name).unwrap_or(0));
+
+            // rename
+            let newname = Path::new("testfile2.xyz");
+            assert!(env.rename(name, newname).is_ok());
+            assert_eq!(6, env.size_of(newname).unwrap());
+            assert!(!env.exists(name).unwrap());
+            // rename back so that the remaining tests can use the file.
+            assert!(env.rename(newname, name).is_ok());
         }
 
         assert!(env.open_sequential_file(name).is_ok());
