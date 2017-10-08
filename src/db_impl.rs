@@ -354,10 +354,10 @@ impl DB {
     }
 
     /// delete deletes a single entry.
-    pub fn delete(&mut self, k: &[u8], sync: bool) -> Result<()> {
+    pub fn delete(&mut self, k: &[u8]) -> Result<()> {
         let mut wb = WriteBatch::new();
         wb.delete(k);
-        self.write(wb, sync)
+        self.write(wb, false)
     }
 
     /// write writes an entire WriteBatch. sync determines whether the write should be flushed to
@@ -1271,8 +1271,8 @@ mod tests {
         assert!(db.get(b"gaa").is_some());
 
         // Delete one memtable entry and one table entry.
-        db.delete(b"xyy", true).unwrap();
-        db.delete(b"gaa", true).unwrap();
+        db.delete(b"xyy").unwrap();
+        db.delete(b"gaa").unwrap();
 
         assert!(db.get(b"xyy").is_none());
         assert!(db.get(b"gaa").is_none());
@@ -1418,7 +1418,7 @@ mod tests {
             db.put(b"xx2", b"112").unwrap();
             db.put(b"xx3", b"113").unwrap();
             db.put(b"xx4", b"114").unwrap();
-            db.delete(b"xx2", false).unwrap();
+            db.delete(b"xx2").unwrap();
         }
 
         {
