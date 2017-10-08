@@ -121,50 +121,50 @@ impl VersionEdit {
 
         if let Some(ref cmp) = self.comparator {
             // swallow errors, because it's a pure in-memory write
-            buf.write_varint(EditTag::Comparator as u32).is_ok();
+            buf.write_varint(EditTag::Comparator as u32).unwrap();
             // data is prefixed by a varint32 describing the length of the following chunk
-            buf.write_varint(cmp.len()).is_ok();
-            buf.write(cmp.as_bytes()).is_ok();
+            buf.write_varint(cmp.len()).unwrap();
+            buf.write(cmp.as_bytes()).unwrap();
         }
 
         if let Some(lognum) = self.log_number {
-            buf.write_varint(EditTag::LogNumber as u32).is_ok();
-            buf.write_varint(lognum).is_ok();
+            buf.write_varint(EditTag::LogNumber as u32).unwrap();
+            buf.write_varint(lognum).unwrap();
         }
 
         if let Some(nfn) = self.next_file_number {
-            buf.write_varint(EditTag::NextFileNumber as u32).is_ok();
-            buf.write_varint(nfn).is_ok();
+            buf.write_varint(EditTag::NextFileNumber as u32).unwrap();
+            buf.write_varint(nfn).unwrap();
         }
 
         if let Some(ls) = self.last_seq {
-            buf.write_varint(EditTag::LastSequence as u32).is_ok();
-            buf.write_varint(ls).is_ok();
+            buf.write_varint(EditTag::LastSequence as u32).unwrap();
+            buf.write_varint(ls).unwrap();
         }
 
         for cptr in self.compaction_ptrs.iter() {
-            buf.write_varint(EditTag::CompactPointer as u32).is_ok();
-            buf.write_varint(cptr.level).is_ok();
-            buf.write_varint(cptr.key.len()).is_ok();
-            buf.write(cptr.key.as_ref()).is_ok();
+            buf.write_varint(EditTag::CompactPointer as u32).unwrap();
+            buf.write_varint(cptr.level).unwrap();
+            buf.write_varint(cptr.key.len()).unwrap();
+            buf.write(cptr.key.as_ref()).unwrap();
         }
 
         for df in self.deleted.iter() {
-            buf.write_varint(EditTag::DeletedFile as u32).is_ok();
-            buf.write_varint(df.0).is_ok();
-            buf.write_varint(df.1).is_ok();
+            buf.write_varint(EditTag::DeletedFile as u32).unwrap();
+            buf.write_varint(df.0).unwrap();
+            buf.write_varint(df.1).unwrap();
         }
 
         for nf in self.new_files.iter() {
-            buf.write_varint(EditTag::NewFile as u32).is_ok();
-            buf.write_varint(nf.0).is_ok();
-            buf.write_varint(nf.1.num).is_ok();
-            buf.write_varint(nf.1.size).is_ok();
+            buf.write_varint(EditTag::NewFile as u32).unwrap();
+            buf.write_varint(nf.0).unwrap();
+            buf.write_varint(nf.1.num).unwrap();
+            buf.write_varint(nf.1.size).unwrap();
 
-            buf.write_varint(nf.1.smallest.len()).is_ok();
-            buf.write(nf.1.smallest.as_ref()).is_ok();
-            buf.write_varint(nf.1.largest.len()).is_ok();
-            buf.write(nf.1.largest.as_ref()).is_ok();
+            buf.write_varint(nf.1.smallest.len()).unwrap();
+            buf.write(nf.1.smallest.as_ref()).unwrap();
+            buf.write_varint(nf.1.largest.len()).unwrap();
+            buf.write(nf.1.largest.as_ref()).unwrap();
         }
 
         buf
