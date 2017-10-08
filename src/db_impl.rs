@@ -95,7 +95,7 @@ impl DB {
     /// Opens or creates* a new or existing database.
     ///
     /// *depending on the options set (create_if_missing, error_if_exists).
-    fn open(name: &str, opt: Options) -> Result<DB> {
+    pub fn open(name: &str, opt: Options) -> Result<DB> {
         let mut db = DB::new(name, opt);
         let mut ve = VersionEdit::new();
         let save_manifest = db.recover(&mut ve)?;
@@ -964,7 +964,7 @@ pub mod testutil {
     use version::testutil::make_version;
 
     /// build_db creates a database filled with the tables created by make_version().
-    pub fn build_db() -> DB {
+    pub fn build_db() -> (DB, Options) {
         let name = "db";
         let (v, opt) = make_version();
         let mut ve = VersionEdit::new();
@@ -988,7 +988,7 @@ pub mod testutil {
         lw.flush().unwrap();
         set_current_file(&opt.env, name, 10).unwrap();
 
-        DB::open(name, opt).unwrap()
+        (DB::open(name, opt.clone()).unwrap(), opt)
     }
 
     /// set_file_to_compact ensures that the specified table file will be compacted next.
@@ -1213,7 +1213,7 @@ mod tests {
     #[allow(unused_variables)]
     #[test]
     fn test_db_impl_build_db_sanity() {
-        let db = build_db();
+        let db = build_db().0;
         let env = &db.opt.env;
         let name = &db.name;
 
@@ -1222,7 +1222,7 @@ mod tests {
 
     #[test]
     fn test_db_impl_get_from_table_with_snapshot() {
-        let mut db = build_db();
+        let mut db = build_db().0;
 
         assert_eq!(28, db.vset.borrow().last_seq);
 
@@ -1254,11 +1254,15 @@ mod tests {
             assert_eq!("val2".as_bytes(),
                        db.get_at(&ss, "eab".as_bytes()).unwrap().unwrap().as_slice());
         }
+
+        // from table.
+        assert_eq!("val2".as_bytes(),
+                   db.get("cab".as_bytes()).unwrap().as_slice());
     }
 
     #[test]
     fn test_db_impl_delete() {
-        let mut db = build_db();
+        let mut db = build_db().0;
 
         db.put(b"xyy", b"123").unwrap();
         db.put(b"xyz", b"123").unwrap();
@@ -1277,7 +1281,7 @@ mod tests {
 
     #[test]
     fn test_db_impl_compact_single_file() {
-        let mut db = build_db();
+        let mut db = build_db().0;
         set_file_to_compact(&mut db, 4);
         db.maybe_do_compaction().unwrap();
 
@@ -1346,7 +1350,7 @@ mod tests {
 
     #[test]
     fn test_db_impl_compaction() {
-        let mut db = build_db();
+        let mut db = build_db().0;
         let v = db.current();
         v.borrow_mut().compaction_score = Some(2.0);
         v.borrow_mut().compaction_level = Some(1);
@@ -1407,7 +1411,7 @@ mod tests {
     fn test_db_impl_open_close_reopen() {
         let opt;
         {
-            let mut db = build_db();
+            let mut db = build_db().0;
             opt = db.opt.clone();
 
             db.put(b"xx1", b"111").unwrap();

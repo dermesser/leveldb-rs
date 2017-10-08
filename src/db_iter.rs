@@ -276,16 +276,21 @@ mod tests {
     use super::*;
     use types::{current_key_val, Direction};
     use test_util::LdbIteratorIter;
+    use db_impl::DB;
     use db_impl::testutil::*;
+
+    use std::collections::HashMap;
+    use std::collections::HashSet;
+    use std::iter::FromIterator;
 
     #[test]
     fn db_iter_basic_test() {
-        let mut db = build_db();
+        let mut db = build_db().0;
         let mut iter = db.new_iter().unwrap();
 
         // keys and values come from make_version(); they are each the latest entry.
         let keys: &[&[u8]] = &[b"aaa", b"aab", b"aax", b"aba", b"bab", b"bba", b"cab", b"cba"];
-        let vals: &[&[u8]] = &[b"val0", b"val2", b"val1", b"val3", b"val2", b"val3", b"val1",
+        let vals: &[&[u8]] = &[b"val1", b"val2", b"val1", b"val3", b"val2", b"val3", b"val2",
                                b"val3"];
 
         for (k, v) in keys.iter().zip(vals.iter()) {
@@ -296,7 +301,7 @@ mod tests {
 
     #[test]
     fn db_iter_reset() {
-        let mut db = build_db();
+        let mut db = build_db().0;
         let mut iter = db.new_iter().unwrap();
 
         assert!(iter.advance());
@@ -309,12 +314,12 @@ mod tests {
 
     #[test]
     fn db_iter_test_fwd_backwd() {
-        let mut db = build_db();
+        let mut db = build_db().0;
         let mut iter = db.new_iter().unwrap();
 
         // keys and values come from make_version(); they are each the latest entry.
         let keys: &[&[u8]] = &[b"aaa", b"aab", b"aax", b"aba", b"bab", b"bba", b"cab", b"cba"];
-        let vals: &[&[u8]] = &[b"val0", b"val2", b"val1", b"val3", b"val2", b"val3", b"val1",
+        let vals: &[&[u8]] = &[b"val1", b"val2", b"val1", b"val3", b"val2", b"val3", b"val2",
                                b"val3"];
 
         // This specifies the direction that the iterator should move to. Based on this, an index
@@ -353,12 +358,12 @@ mod tests {
 
     #[test]
     fn db_iter_test_seek() {
-        let mut db = build_db();
+        let mut db = build_db().0;
         let mut iter = db.new_iter().unwrap();
 
         // gca is the deleted entry.
         let keys: &[&[u8]] = &[b"aab", b"aaa", b"cab", b"eaa", b"aaa", b"iba", b"fba"];
-        let vals: &[&[u8]] = &[b"val2", b"val0", b"val1", b"val1", b"val0", b"val2", b"val3"];
+        let vals: &[&[u8]] = &[b"val2", b"val1", b"val2", b"val1", b"val1", b"val2", b"val3"];
 
         for (k, v) in keys.iter().zip(vals.iter()) {
             println!("{:?}", String::from_utf8(k.to_vec()).unwrap());
@@ -381,7 +386,7 @@ mod tests {
 
     #[test]
     fn db_iter_deleted_entry_not_returned() {
-        let mut db = build_db();
+        let mut db = build_db().0;
         let mut iter = db.new_iter().unwrap();
         let must_not_appear = b"gca";
 
@@ -392,7 +397,7 @@ mod tests {
 
     #[test]
     fn db_iter_deleted_entry_not_returned_memtable() {
-        let mut db = build_db();
+        let mut db = build_db().0;
 
         db.put(b"xyz", b"123").unwrap();
         db.delete(b"xyz", true).unwrap();
@@ -402,6 +407,53 @@ mod tests {
 
         for (k, _) in LdbIteratorIter::wrap(&mut iter) {
             assert!(k.as_slice() != must_not_appear);
+        }
+    }
+
+    #[test]
+    fn db_iter_repeated_open_close() {
+        let opt;
+        {
+            let (mut db, opt_) = build_db();
+            opt = opt_;
+
+            db.put(b"xx1", b"111").unwrap();
+            db.put(b"xx2", b"112").unwrap();
+            db.put(b"xx3", b"113").unwrap();
+            db.put(b"xx4", b"114").unwrap();
+            db.delete(b"xx2", false).unwrap();
+        }
+
+        {
+            let mut db = DB::open("db", opt.clone()).unwrap();
+            db.put(b"xx4", b"222").unwrap();
+        }
+
+        {
+            let mut db = DB::open("db", opt).unwrap();
+
+            let ss = db.get_snapshot();
+
+            let expected: HashMap<Vec<u8>, Vec<u8>> = HashMap::from_iter(vec![
+                                                  (b"xx1".to_vec(), b"111".to_vec()),
+                                                  (b"xx4".to_vec(), b"222".to_vec()),
+                                                  (b"aaa".to_vec(), b"val1".to_vec()),
+                                                  (b"cab".to_vec(), b"val2".to_vec()),
+            ]
+                .into_iter());
+            let non_existing: HashSet<Vec<u8>> = HashSet::from_iter(vec![
+                                                      b"gca".to_vec(),
+                                                      b"xx2".to_vec(),
+            ]
+                .into_iter());
+
+            let mut iter = db.new_iter_at(ss.clone()).unwrap();
+            for (k, v) in LdbIteratorIter::wrap(&mut iter) {
+                if let Some(ev) = expected.get(&k) {
+                    assert_eq!(ev, &v);
+                }
+                assert!(!non_existing.contains(&k));
+            }
         }
     }
 }

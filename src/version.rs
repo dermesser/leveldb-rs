@@ -596,29 +596,31 @@ pub mod testutil {
 
         // The different levels overlap in a sophisticated manner to be able to test compactions
         // and so on.
+        // The sequence numbers are in "natural order", i.e. highest levels have lowest sequence
+        // numbers.
 
         // Level 0 (overlapping)
         let f1: &[(&[u8], &[u8], ValueType)] =
             &[("aaa".as_bytes(), "val1".as_bytes(), ValueType::TypeValue),
               ("aab".as_bytes(), "val2".as_bytes(), ValueType::TypeValue),
               ("aba".as_bytes(), "val3".as_bytes(), ValueType::TypeValue)];
-        let t1 = write_table(&env, f1, 1, 1);
+        let t1 = write_table(&env, f1, 25, 1);
         let f2: &[(&[u8], &[u8], ValueType)] =
             &[("aax".as_bytes(), "val1".as_bytes(), ValueType::TypeValue),
               ("bab".as_bytes(), "val2".as_bytes(), ValueType::TypeValue),
               ("bba".as_bytes(), "val3".as_bytes(), ValueType::TypeValue)];
-        let t2 = write_table(&env, f2, 4, 2);
+        let t2 = write_table(&env, f2, 22, 2);
         // Level 1
         let f3: &[(&[u8], &[u8], ValueType)] =
             &[("aaa".as_bytes(), "val0".as_bytes(), ValueType::TypeValue),
               ("cab".as_bytes(), "val2".as_bytes(), ValueType::TypeValue),
               ("cba".as_bytes(), "val3".as_bytes(), ValueType::TypeValue)];
-        let t3 = write_table(&env, f3, 7, 3);
+        let t3 = write_table(&env, f3, 19, 3);
         let f4: &[(&[u8], &[u8], ValueType)] =
             &[("daa".as_bytes(), "val1".as_bytes(), ValueType::TypeValue),
               ("dab".as_bytes(), "val2".as_bytes(), ValueType::TypeValue),
               ("dba".as_bytes(), "val3".as_bytes(), ValueType::TypeValue)];
-        let t4 = write_table(&env, f4, 10, 4);
+        let t4 = write_table(&env, f4, 16, 4);
         let f5: &[(&[u8], &[u8], ValueType)] =
             &[("eaa".as_bytes(), "val1".as_bytes(), ValueType::TypeValue),
               ("eab".as_bytes(), "val2".as_bytes(), ValueType::TypeValue),
@@ -629,23 +631,23 @@ pub mod testutil {
             &[("cab".as_bytes(), "val1".as_bytes(), ValueType::TypeValue),
               ("fab".as_bytes(), "val2".as_bytes(), ValueType::TypeValue),
               ("fba".as_bytes(), "val3".as_bytes(), ValueType::TypeValue)];
-        let t6 = write_table(&env, f6, 16, 6);
+        let t6 = write_table(&env, f6, 10, 6);
         let f7: &[(&[u8], &[u8], ValueType)] =
             &[("gaa".as_bytes(), "val1".as_bytes(), ValueType::TypeValue),
               ("gab".as_bytes(), "val2".as_bytes(), ValueType::TypeValue),
               ("gba".as_bytes(), "val3".as_bytes(), ValueType::TypeValue),
               ("gca".as_bytes(), "val4".as_bytes(), ValueType::TypeDeletion),
               ("gda".as_bytes(), "val5".as_bytes(), ValueType::TypeValue)];
-        let t7 = write_table(&env, f7, 21, 7);
+        let t7 = write_table(&env, f7, 5, 7);
         // Level 3 (2 * 2 entries, for iterator behavior).
         let f8: &[(&[u8], &[u8], ValueType)] =
             &[("haa".as_bytes(), "val1".as_bytes(), ValueType::TypeValue),
               ("hba".as_bytes(), "val2".as_bytes(), ValueType::TypeValue)];
-        let t8 = write_table(&env, f8, 23, 8);
+        let t8 = write_table(&env, f8, 3, 8);
         let f9: &[(&[u8], &[u8], ValueType)] =
             &[("iaa".as_bytes(), "val1".as_bytes(), ValueType::TypeValue),
               ("iba".as_bytes(), "val2".as_bytes(), ValueType::TypeValue)];
-        let t9 = write_table(&env, f9, 25, 9);
+        let t9 = write_table(&env, f9, 1, 9);
 
 
         let cache = TableCache::new("db", opts.clone(), 100);
@@ -734,9 +736,9 @@ mod tests {
     fn test_version_get_simple() {
         let v = make_version().0;
         let cases: &[(&[u8], u64, Result<Option<Vec<u8>>>)] =
-            &[("aaa".as_bytes(), 0, Ok(None)),
-              ("aaa".as_bytes(), 1, Ok(Some("val1".as_bytes().to_vec()))),
+            &[("aaa".as_bytes(), 1, Ok(None)),
               ("aaa".as_bytes(), 100, Ok(Some("val1".as_bytes().to_vec()))),
+              ("aaa".as_bytes(), 21, Ok(Some("val0".as_bytes().to_vec()))),
               ("aab".as_bytes(), 0, Ok(None)),
               ("aab".as_bytes(), 100, Ok(Some("val2".as_bytes().to_vec()))),
               ("daa".as_bytes(), 100, Ok(Some("val1".as_bytes().to_vec()))),
