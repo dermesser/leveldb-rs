@@ -103,32 +103,3 @@ impl Options {
         self.env = Rc::new(e);
     }
 }
-
-/// Supplied to DB read operations.
-/// Deprecated: Will soon be removed to reduce complexity.
-pub struct ReadOptions {
-    pub verify_checksums: bool,
-    pub fill_cache: bool,
-    pub snapshot: Option<SequenceNumber>,
-}
-
-impl Default for ReadOptions {
-    fn default() -> Self {
-        ReadOptions {
-            verify_checksums: true,
-            fill_cache: true,
-            snapshot: None,
-        }
-    }
-}
-
-/// Supplied to write operations
-pub struct WriteOptions {
-    pub sync: bool,
-}
-
-impl Default for WriteOptions {
-    fn default() -> Self {
-        WriteOptions { sync: false }
-    }
-}
