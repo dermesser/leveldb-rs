@@ -1,4 +1,5 @@
-use block::{BlockBuilder, BlockContents};
+use block::BlockContents;
+use block_builder::BlockBuilder;
 use blockhandle::BlockHandle;
 use cmp::InternalKeyCmp;
 use error::Result;

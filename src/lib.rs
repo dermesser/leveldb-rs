@@ -11,6 +11,7 @@ extern crate rand;
 extern crate time_test;
 
 mod block;
+mod block_builder;
 mod blockhandle;
 mod cache;
 mod cmp;
