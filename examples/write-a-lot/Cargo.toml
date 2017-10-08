@@ -1,0 +1,8 @@
+[package]
+name = "write-a-lot"
+version = "0.1.0"
+authors = ["Lewin Bormann <lewin@lewin-bormann.info>"]
+
+[dependencies]
+leveldb_rs = { path = "../../" }
+rand = "0.3"

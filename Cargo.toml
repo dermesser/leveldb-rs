@@ -12,3 +12,6 @@ rand = "0.3"
 
 [dev-dependencies]
 time-test = "0.2"
+
+[workspace]
+members = ["examples/write-a-lot", "examples/leveldb-tool"]
