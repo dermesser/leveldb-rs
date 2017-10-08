@@ -247,6 +247,12 @@ mod tests {
     }
 
     #[test]
+    fn test_merging_zero() {
+        let mut miter = MergingIter::new(Rc::new(Box::new(DefaultCmp)), vec![]);
+        assert_eq!(0, LdbIteratorIter::wrap(&mut miter).count());
+    }
+
+    #[test]
     fn test_merging_behavior() {
         let val = "def".as_bytes();
         let iter = TestLdbIter::new(vec![(b("aba"), val), (b("abc"), val)]);
