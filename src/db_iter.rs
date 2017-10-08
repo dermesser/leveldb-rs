@@ -424,6 +424,7 @@ mod tests {
             db.delete(b"xx2").unwrap();
         }
 
+
         {
             let mut db = DB::open("db", opt.clone()).unwrap();
             db.put(b"xx4", b"222").unwrap();
@@ -433,6 +434,8 @@ mod tests {
             let mut db = DB::open("db", opt).unwrap();
 
             let ss = db.get_snapshot();
+            // xx5 should not be visible.
+            db.put(b"xx5", b"223").unwrap();
 
             let expected: HashMap<Vec<u8>, Vec<u8>> = HashMap::from_iter(vec![
                                                   (b"xx1".to_vec(), b"111".to_vec()),
@@ -444,6 +447,7 @@ mod tests {
             let non_existing: HashSet<Vec<u8>> = HashSet::from_iter(vec![
                                                       b"gca".to_vec(),
                                                       b"xx2".to_vec(),
+                                                      b"xx5".to_vec(),
             ]
                 .into_iter());
 
