@@ -667,6 +667,11 @@ impl DB {
     }
 
     fn do_compaction_work(&mut self, cs: &mut CompactionState) -> Result<()> {
+        {
+            let current = self.vset.borrow().current();
+            assert!(current.borrow().num_level_files(cs.compaction.level()) > 0);
+            assert!(cs.builder.is_none());
+        }
         let start_ts = self.opt.env.micros();
         log!(self.opt.log,
              "Compacting {} files at L{} and {} files at L{}",
@@ -674,8 +679,6 @@ impl DB {
              cs.compaction.level(),
              cs.compaction.num_inputs(1),
              cs.compaction.level() + 1);
-        assert!(self.vset.borrow().num_level_files(cs.compaction.level()) > 0);
-        assert!(cs.builder.is_none());
 
         let mut input = self.vset.borrow().make_input_iterator(&cs.compaction);
         input.seek_to_first();

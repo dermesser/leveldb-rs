@@ -210,18 +210,6 @@ impl VersionSet {
         self.current.as_ref().unwrap().clone()
     }
 
-    fn num_level_bytes(&self, l: usize) -> usize {
-        assert!(l < NUM_LEVELS);
-        assert!(self.current.is_some());
-        total_size(self.current.as_ref().unwrap().borrow().files[l].iter())
-    }
-
-    pub fn num_level_files(&self, l: usize) -> usize {
-        assert!(l < NUM_LEVELS);
-        assert!(self.current.is_some());
-        self.current.as_ref().unwrap().borrow().files[l].len()
-    }
-
     pub fn add_version(&mut self, v: Version) {
         let sv = share(v);
         self.current = Some(sv.clone());
@@ -1040,14 +1028,17 @@ mod tests {
         // live_files()
         assert_eq!(9, vs.live_files().len());
         assert!(vs.live_files().contains(&3));
+
+        let v = vs.current();
+        let v = v.borrow();
         // num_level_bytes()
-        assert_eq!(434, vs.num_level_bytes(0));
-        assert_eq!(651, vs.num_level_bytes(1));
-        assert_eq!(468, vs.num_level_bytes(2));
+        assert_eq!(434, v.num_level_bytes(0));
+        assert_eq!(651, v.num_level_bytes(1));
+        assert_eq!(468, v.num_level_bytes(2));
         // num_level_files()
-        assert_eq!(2, vs.num_level_files(0));
-        assert_eq!(3, vs.num_level_files(1));
-        assert_eq!(2, vs.num_level_files(2));
+        assert_eq!(2, v.num_level_files(0));
+        assert_eq!(3, v.num_level_files(1));
+        assert_eq!(2, v.num_level_files(2));
         // new_file_number()
         assert_eq!(2, vs.new_file_number());
         assert_eq!(3, vs.new_file_number());

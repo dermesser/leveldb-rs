@@ -44,6 +44,17 @@ impl Version {
         }
     }
 
+    pub fn num_level_bytes(&self, l: usize) -> usize {
+        assert!(l < NUM_LEVELS);
+        total_size(self.files[l].iter())
+    }
+
+    pub fn num_level_files(&self, l: usize) -> usize {
+        assert!(l < NUM_LEVELS);
+        self.files[l].len()
+    }
+
+
     /// get returns the value for the specified key using the persistent tables contained in this
     /// Version.
     #[allow(unused_assignments)]
