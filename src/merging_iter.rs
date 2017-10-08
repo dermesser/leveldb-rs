@@ -99,7 +99,10 @@ impl MergingIter {
     }
 
     fn find(&mut self, direction: SL) {
-        assert!(self.iters.len() > 0);
+        if self.iters.len() == 0 {
+            // Iterator stays invalid.
+            return;
+        }
 
         let ord;
 
