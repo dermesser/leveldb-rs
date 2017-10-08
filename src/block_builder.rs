@@ -13,6 +13,7 @@ pub struct BlockBuilder {
     restarts: Vec<u32>,
 
     last_key: Vec<u8>,
+    restart_counter: usize,
     counter: usize,
 }
 
@@ -26,6 +27,7 @@ impl BlockBuilder {
             opt: o,
             restarts: restarts,
             last_key: Vec::new(),
+            restart_counter: 0,
             counter: 0,
         }
     }
@@ -46,17 +48,18 @@ impl BlockBuilder {
         self.buffer.clear();
         self.restarts.clear();
         self.last_key.clear();
+        self.restart_counter = 0;
         self.counter = 0;
     }
 
     pub fn add(&mut self, key: &[u8], val: &[u8]) {
-        assert!(self.counter <= self.opt.block_restart_interval);
+        assert!(self.restart_counter <= self.opt.block_restart_interval);
         assert!(self.buffer.is_empty() ||
                 self.opt.cmp.cmp(self.last_key.as_slice(), key) == Ordering::Less);
 
         let mut shared = 0;
 
-        if self.counter < self.opt.block_restart_interval {
+        if self.restart_counter < self.opt.block_restart_interval {
             let smallest = if self.last_key.len() < key.len() {
                 self.last_key.len()
             } else {
@@ -69,7 +72,7 @@ impl BlockBuilder {
         } else {
             self.restarts.push(self.buffer.len() as u32);
             self.last_key.resize(0, 0);
-            self.counter = 0;
+            self.restart_counter = 0;
         }
 
         let non_shared = key.len() - shared;
@@ -84,6 +87,7 @@ impl BlockBuilder {
         self.last_key.resize(shared, 0);
         self.last_key.extend_from_slice(&key[shared..]);
 
+        self.restart_counter += 1;
         self.counter += 1;
     }
 
@@ -121,18 +125,39 @@ mod tests {
     fn test_block_builder_sanity() {
         let mut o = options::for_test();
         o.block_restart_interval = 3;
-
         let mut builder = BlockBuilder::new(o);
+        let d = get_data();
 
-        for &(k, v) in get_data().iter() {
+        for &(k, v) in d.iter() {
             builder.add(k, v);
-            assert!(builder.counter <= 3);
+            assert!(builder.restart_counter <= 3);
             assert_eq!(builder.last_key(), k);
         }
 
         assert_eq!(149, builder.size_estimate());
+        assert_eq!(d.len(), builder.entries());
+
         let block = builder.finish();
         assert_eq!(block.len(), 149);
+    }
+
+    #[test]
+    fn test_block_builder_reset() {
+        let mut o = options::for_test();
+        o.block_restart_interval = 3;
+        let mut builder = BlockBuilder::new(o);
+        let d = get_data();
+
+        for &(k, v) in d.iter() {
+            builder.add(k, v);
+            assert!(builder.restart_counter <= 3);
+            assert_eq!(builder.last_key(), k);
+        }
+
+        assert_eq!(d.len(), builder.entries());
+        builder.reset();
+        assert_eq!(0, builder.entries());
+        assert_eq!(4, builder.size_estimate());
     }
 
     #[test]
@@ -147,8 +172,6 @@ mod tests {
             builder.add(k, v);
             assert_eq!(k, builder.last_key());
         }
-        assert_eq!(d.len(), builder.entries());
     }
-
     // Additional test coverage is provided by tests in block.rs.
 }
