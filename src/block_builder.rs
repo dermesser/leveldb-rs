@@ -3,8 +3,7 @@ use std::cmp::Ordering;
 use block::BlockContents;
 use options::Options;
 
-use integer_encoding::FixedInt;
-use integer_encoding::VarInt;
+use integer_encoding::{FixedIntWriter, VarIntWriter};
 
 /// BlockBuilder contains functionality for building a block consisting of consecutive key-value
 /// entries.
@@ -75,15 +74,9 @@ impl BlockBuilder {
 
         let non_shared = key.len() - shared;
 
-        let mut buf = [0 as u8; 4];
-
-        let mut sz = shared.encode_var(&mut buf[..]);
-        self.buffer.extend_from_slice(&buf[0..sz]);
-        sz = non_shared.encode_var(&mut buf[..]);
-        self.buffer.extend_from_slice(&buf[0..sz]);
-        sz = val.len().encode_var(&mut buf[..]);
-        self.buffer.extend_from_slice(&buf[0..sz]);
-
+        self.buffer.write_varint(shared).expect("write to buffer failed");
+        self.buffer.write_varint(non_shared).expect("write to buffer failed");
+        self.buffer.write_varint(val.len()).expect("write to buffer failed");
         self.buffer.extend_from_slice(&key[shared..]);
         self.buffer.extend_from_slice(val);
 
@@ -95,17 +88,15 @@ impl BlockBuilder {
     }
 
     pub fn finish(mut self) -> BlockContents {
-        // 1. Append RESTARTS
-        let mut i = self.buffer.len();
-        self.buffer.resize(i + self.restarts.len() * 4 + 4, 0);
+        self.buffer.reserve(self.restarts.len() * 4 + 4);
 
+        // 1. Append RESTARTS
         for r in self.restarts.iter() {
-            r.encode_fixed(&mut self.buffer[i..i + 4]);
-            i += 4;
+            self.buffer.write_fixedint(*r as u32).expect("write to buffer failed");
         }
 
         // 2. Append N_RESTARTS
-        (self.restarts.len() as u32).encode_fixed(&mut self.buffer[i..i + 4]);
+        self.buffer.write_fixedint(self.restarts.len() as u32).expect("write to buffer failed");
 
         // done
         self.buffer
