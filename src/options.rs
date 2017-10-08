@@ -73,7 +73,7 @@ impl Default for Options {
             block_cache: share(Cache::new(BLOCK_CACHE_CAPACITY / BLOCK_MAX_SIZE)),
             block_size: BLOCK_MAX_SIZE,
             block_restart_interval: 16,
-            reuse_logs: false,
+            reuse_logs: true,
             reuse_manifest: true,
             compression_type: CompressionType::CompressionNone,
             filter_policy: Rc::new(Box::new(filter::BloomPolicy::new(DEFAULT_BITS_PER_KEY))),
