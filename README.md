@@ -1,11 +1,18 @@
 # leveldb-rs
 
-A fully compatible implementation of LevelDB in Rust.
+**Goal:** A fully compatible implementation of LevelDB in Rust.
+
+The implementation is very close to the original; often, you can see the same
+algorithm translated 1:1, and class (struct) and method names are similar or
+the same.
 
 ## Status
 
-In development; most of the infrastructure exists, but the actual database logic
-has not yet been implemented.
+* User-facing methods exist: Read/Write/Delete; snapshots; iteration
+* Compaction is supported, but no manual ones.
+* Fully synchronous: Efficiency gains by using non-atomic types, but writes may
+  occasionally block during a compaction.
+* Compatibility: Not yet assessed.
 
 ## Goals
 
