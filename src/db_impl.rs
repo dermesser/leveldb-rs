@@ -554,6 +554,40 @@ impl DB {
         }
     }
 
+    pub fn compact_range(&mut self, from: &[u8], to: &[u8]) -> Result<()> {
+        let mut max_level = 1;
+        {
+            let v = self.vset.borrow().current();
+            let v = v.borrow();
+            for l in 1..NUM_LEVELS {
+                if v.overlap_in_level(l, from, to) {
+                    max_level = l;
+                }
+            }
+        }
+
+        // Compact memtable.
+        self.make_room_for_write(true)?;
+
+        let mut ifrom = LookupKey::new(from, MAX_SEQUENCE_NUMBER).internal_key().to_vec();
+        let iend = LookupKey::new_full(to, 0, ValueType::TypeDeletion);
+
+        for l in 0..max_level + 1 {
+            loop {
+                let c_ = self.vset.borrow_mut().compact_range(l, &ifrom, iend.internal_key());
+                if let Some(c) = c_ {
+                    // Update ifrom to the largest key of the last file in this compaction.
+                    let ix = c.num_inputs(0) - 1;
+                    ifrom = c.input(0, ix).largest.clone();
+                    self.start_compaction(c)?;
+                } else {
+                    break;
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// start_compaction dispatches the different kinds of compactions depending on the current
     /// state of the database.
     fn start_compaction(&mut self, mut compaction: Compaction) -> Result<()> {
@@ -1162,6 +1196,39 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_db_impl_compact_range() {
+        let (mut db, opt) = build_db();
+        let env = &opt.env;
+
+        println!("children before: {:?}",
+                 env.children(Path::new("db/")).unwrap());
+        db.compact_range(b"aaa", b"dba").unwrap();
+        println!("children before: {:?}",
+                 env.children(Path::new("db/")).unwrap());
+        assert!(opt.env.exists(Path::new("db/000007.ldb")).unwrap());
+        assert!(opt.env.exists(Path::new("db/000008.ldb")).unwrap());
+        assert!(opt.env.exists(Path::new("db/000009.ldb")).unwrap());
+        assert!(opt.env.exists(Path::new("db/000015.ldb")).unwrap());
+
+        assert!(!opt.env.exists(Path::new("db/000001.ldb")).unwrap());
+        assert!(!opt.env.exists(Path::new("db/000002.ldb")).unwrap());
+        assert!(!opt.env.exists(Path::new("db/000004.ldb")).unwrap());
+        assert!(!opt.env.exists(Path::new("db/000005.ldb")).unwrap());
+        assert!(!opt.env.exists(Path::new("db/000006.ldb")).unwrap());
+        assert!(!opt.env.exists(Path::new("db/000014.ldb")).unwrap());
+
+        assert_eq!(250, opt.env.size_of(Path::new("db/000007.ldb")).unwrap());
+        assert_eq!(200, opt.env.size_of(Path::new("db/000008.ldb")).unwrap());
+        assert_eq!(200, opt.env.size_of(Path::new("db/000009.ldb")).unwrap());
+        assert_eq!(435, opt.env.size_of(Path::new("db/000015.ldb")).unwrap());
+
+        assert_eq!(b"val1".to_vec(), db.get(b"aaa").unwrap());
+        assert_eq!(b"val2".to_vec(), db.get(b"cab").unwrap());
+        assert_eq!(b"val3".to_vec(), db.get(b"aba").unwrap());
+        assert_eq!(b"val3".to_vec(), db.get(b"fab").unwrap());
+    }
+
     #[allow(unused_variables)]
     #[test]
     fn test_db_impl_locking() {
@@ -1339,7 +1406,7 @@ mod tests {
         db.mem = build_memtable();
 
         // Trigger memtable compaction.
-        db.make_room_for_write().unwrap();
+        db.make_room_for_write(true).unwrap();
         assert_eq!(0, db.mem.len());
         assert!(db.opt.env.exists(Path::new("db/000002.log")).unwrap());
         assert!(db.opt.env.exists(Path::new("db/000003.ldb")).unwrap());
