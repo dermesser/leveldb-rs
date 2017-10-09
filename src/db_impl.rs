@@ -536,27 +536,23 @@ impl DB {
 
     /// maybe_do_compaction starts a blocking compaction if it makes sense.
     fn maybe_do_compaction(&mut self) -> Result<()> {
-        if self.imm.is_none() && !self.vset.borrow().needs_compaction() {
-            return Ok(());
+        if self.imm.is_some() {
+            self.compact_memtable()
+        } else if self.vset.borrow().needs_compaction() {
+            let c = self.vset.borrow_mut().pick_compaction();
+            if let Some(c) = c {
+                self.start_compaction(c)
+            } else {
+                Ok(())
+            }
+        } else {
+            Ok(())
         }
-        self.start_compaction()
     }
 
     /// start_compaction dispatches the different kinds of compactions depending on the current
     /// state of the database.
-    fn start_compaction(&mut self) -> Result<()> {
-        // TODO (maybe): Support manual compactions.
-        if self.imm.is_some() {
-            return self.compact_memtable();
-        }
-
-
-        let compaction = self.vset.borrow_mut().pick_compaction();
-        if compaction.is_none() {
-            return Ok(());
-        }
-        let mut compaction = compaction.unwrap();
-
+    fn start_compaction(&mut self, mut compaction: Compaction) -> Result<()> {
         if compaction.is_trivial_move() {
             assert_eq!(1, compaction.num_inputs(0));
             let f = compaction.input(0, 0);
@@ -1356,7 +1352,7 @@ mod tests {
         v.borrow_mut().compaction_score = Some(2.0);
         v.borrow_mut().compaction_level = Some(1);
 
-        db.start_compaction().unwrap();
+        db.maybe_do_compaction().unwrap();
 
         assert!(!db.opt.env.exists(Path::new("db/000003.ldb")).unwrap());
         assert!(db.opt.env.exists(Path::new("db/000013.ldb")).unwrap());
@@ -1380,7 +1376,7 @@ mod tests {
         db.vset.borrow_mut().add_version(v);
         db.vset.borrow_mut().next_file_num = 10;
 
-        db.start_compaction().unwrap();
+        db.maybe_do_compaction().unwrap();
 
         assert!(opt.env.exists(Path::new("db/000006.ldb")).unwrap());
         assert!(!opt.env.exists(Path::new("db/000010.ldb")).unwrap());
