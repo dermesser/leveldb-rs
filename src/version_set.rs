@@ -211,8 +211,7 @@ impl VersionSet {
     }
 
     pub fn add_version(&mut self, v: Version) {
-        let sv = share(v);
-        self.current = Some(sv.clone());
+        self.current = Some(share(v));
     }
 
     pub fn new_file_number(&mut self) -> FileNum {
@@ -309,11 +308,11 @@ impl VersionSet {
         Some(c)
     }
 
-    fn compact_range<'a, 'b>(&mut self,
-                             level: usize,
-                             from: InternalKey<'a>,
-                             to: InternalKey<'b>)
-                             -> Option<Compaction> {
+    pub fn compact_range<'a, 'b>(&mut self,
+                                 level: usize,
+                                 from: InternalKey<'a>,
+                                 to: InternalKey<'b>)
+                                 -> Option<Compaction> {
         assert!(self.current.is_some());
         let mut inputs =
             self.current.as_ref().unwrap().borrow().overlapping_inputs(level, from, to);
