@@ -26,7 +26,7 @@ use version::Version;
 use write_batch::WriteBatch;
 
 use std::cmp::Ordering;
-use std::io::{self, Write};
+use std::io::{self, BufWriter, Write};
 use std::mem;
 use std::ops::{DerefMut, Drop};
 use std::path::Path;
@@ -45,7 +45,7 @@ pub struct DB {
     mem: MemTable,
     imm: Option<MemTable>,
 
-    log: Option<LogWriter<Box<Write>>>,
+    log: Option<LogWriter<BufWriter<Box<Write>>>>,
     log_num: Option<FileNum>,
     cache: Shared<TableCache>,
     vset: Shared<VersionSet>,
@@ -106,7 +106,7 @@ impl DB {
             let logfile =
                 db.opt.env.open_writable_file(Path::new(&log_file_name(&db.name, lognum)))?;
             ve.set_log_num(lognum);
-            db.log = Some(LogWriter::new(logfile));
+            db.log = Some(LogWriter::new(BufWriter::new(logfile)));
             db.log_num = Some(lognum);
         }
 
@@ -257,7 +257,7 @@ impl DB {
             log!(self.opt.log, "reusing log file {}", filename);
             let oldsize = self.opt.env.size_of(Path::new(&filename))?;
             let oldfile = self.opt.env.open_appendable_file(Path::new(&filename))?;
-            let lw = LogWriter::new_with_off(oldfile, oldsize);
+            let lw = LogWriter::new_with_off(BufWriter::new(oldfile), oldsize);
             self.log = Some(lw);
             self.log_num = Some(log_num);
             self.mem = mem;
@@ -523,7 +523,7 @@ impl DB {
                 self.vset.borrow_mut().reuse_file_number(logn);
                 Err(logf.err().unwrap())
             } else {
-                self.log = Some(LogWriter::new(logf.unwrap()));
+                self.log = Some(LogWriter::new(BufWriter::new(logf.unwrap())));
                 self.log_num = Some(logn);
 
                 let mut imm = MemTable::new(self.opt.cmp.clone());
@@ -739,7 +739,7 @@ impl DB {
 
                 let fname = table_file_name(&self.name, fnum);
                 let f = self.opt.env.open_writable_file(Path::new(&fname))?;
-                let f = Box::new(io::BufWriter::new(f));
+                let f = Box::new(BufWriter::new(f));
                 cs.builder = Some(TableBuilder::new(self.opt.clone(), f));
                 cs.outputs.push(fmd);
             }
@@ -897,7 +897,7 @@ pub fn build_table<I: LdbIterator>(dbname: &str,
     // TODO: Replace with catch {} when available.
     let r = (|| -> Result<()> {
         let f = opt.env.open_writable_file(Path::new(&filename))?;
-        let f = io::BufWriter::new(f);
+        let f = BufWriter::new(f);
         let mut builder = TableBuilder::new(opt.clone(), f);
         while from.advance() {
             assert!(from.current(&mut kbuf, &mut vbuf));

@@ -32,5 +32,5 @@ fn main() {
     let opt = Options::default();
     let mut db = DB::open("test1", opt).unwrap();
 
-    fill_db(&mut db, 16384).unwrap();
+    fill_db(&mut db, 32768).unwrap();
 }
