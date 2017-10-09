@@ -364,6 +364,9 @@ impl DB {
     /// disk.
     pub fn write(&mut self, batch: WriteBatch, sync: bool) -> Result<()> {
         assert!(self.log.is_some());
+
+        self.make_room_for_write(false)?;
+
         let entries = batch.count() as u64;
         let log = self.log.as_mut().unwrap();
         let next = self.vset.borrow().last_seq + 1;
@@ -510,10 +513,11 @@ impl DB {
 
 impl DB {
     // COMPACTIONS //
+
     /// make_room_for_write checks if the memtable has become too large, and triggers a compaction
     /// if it's the case.
-    fn make_room_for_write(&mut self) -> Result<()> {
-        if self.mem.approx_mem_usage() < self.opt.write_buffer_size {
+    fn make_room_for_write(&mut self, force: bool) -> Result<()> {
+        if !force && self.mem.approx_mem_usage() < self.opt.write_buffer_size {
             Ok(())
         } else {
             // Create new memtable.
