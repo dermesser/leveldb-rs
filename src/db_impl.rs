@@ -1299,6 +1299,7 @@ mod tests {
         let old_ss = db.get_snapshot();
         // seq = 30
         db.put("xyz".as_bytes(), "123".as_bytes()).unwrap();
+        db.flush().unwrap();
         assert!(db.get_at(&old_ss, "xyy".as_bytes()).unwrap().is_some());
         assert!(db.get_at(&old_ss, "xyz".as_bytes()).unwrap().is_none());
 
