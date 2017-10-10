@@ -561,7 +561,7 @@ impl DB {
         {
             let v = self.vset.borrow().current();
             let v = v.borrow();
-            for l in 1..NUM_LEVELS {
+            for l in 1..NUM_LEVELS-1 {
                 if v.overlap_in_level(l, from, to) {
                     max_level = l;
                 }
