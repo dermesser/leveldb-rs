@@ -519,6 +519,8 @@ impl DB {
     fn make_room_for_write(&mut self, force: bool) -> Result<()> {
         if !force && self.mem.approx_mem_usage() < self.opt.write_buffer_size {
             Ok(())
+        } else if self.mem.len() == 0 {
+            Ok(())
         } else {
             // Create new memtable.
             let logn = self.vset.borrow_mut().new_file_number();
@@ -1204,29 +1206,59 @@ mod tests {
         println!("children before: {:?}",
                  env.children(Path::new("db/")).unwrap());
         db.compact_range(b"aaa", b"dba").unwrap();
-        println!("children before: {:?}",
+        println!("children after: {:?}",
                  env.children(Path::new("db/")).unwrap());
-        assert!(opt.env.exists(Path::new("db/000007.ldb")).unwrap());
-        assert!(opt.env.exists(Path::new("db/000008.ldb")).unwrap());
-        assert!(opt.env.exists(Path::new("db/000009.ldb")).unwrap());
-        assert!(opt.env.exists(Path::new("db/000015.ldb")).unwrap());
+
+        assert_eq!(250, opt.env.size_of(Path::new("db/000007.ldb")).unwrap());
+        assert_eq!(200, opt.env.size_of(Path::new("db/000008.ldb")).unwrap());
+        assert_eq!(200, opt.env.size_of(Path::new("db/000009.ldb")).unwrap());
+        assert_eq!(435, opt.env.size_of(Path::new("db/000014.ldb")).unwrap());
 
         assert!(!opt.env.exists(Path::new("db/000001.ldb")).unwrap());
         assert!(!opt.env.exists(Path::new("db/000002.ldb")).unwrap());
         assert!(!opt.env.exists(Path::new("db/000004.ldb")).unwrap());
         assert!(!opt.env.exists(Path::new("db/000005.ldb")).unwrap());
         assert!(!opt.env.exists(Path::new("db/000006.ldb")).unwrap());
-        assert!(!opt.env.exists(Path::new("db/000014.ldb")).unwrap());
-
-        assert_eq!(250, opt.env.size_of(Path::new("db/000007.ldb")).unwrap());
-        assert_eq!(200, opt.env.size_of(Path::new("db/000008.ldb")).unwrap());
-        assert_eq!(200, opt.env.size_of(Path::new("db/000009.ldb")).unwrap());
-        assert_eq!(435, opt.env.size_of(Path::new("db/000015.ldb")).unwrap());
+        assert!(!opt.env.exists(Path::new("db/000013.ldb")).unwrap());
 
         assert_eq!(b"val1".to_vec(), db.get(b"aaa").unwrap());
         assert_eq!(b"val2".to_vec(), db.get(b"cab").unwrap());
         assert_eq!(b"val3".to_vec(), db.get(b"aba").unwrap());
         assert_eq!(b"val3".to_vec(), db.get(b"fab").unwrap());
+    }
+
+    #[test]
+    fn test_db_impl_compact_range_memtable() {
+        let (mut db, opt) = build_db();
+        let env = &opt.env;
+
+        db.put(b"xxx", b"123").unwrap();
+
+        println!("children before: {:?}",
+                 env.children(Path::new("db/")).unwrap());
+        db.compact_range(b"aaa", b"dba").unwrap();
+        println!("children after: {:?}",
+                 env.children(Path::new("db/")).unwrap());
+
+        assert_eq!(250, opt.env.size_of(Path::new("db/000007.ldb")).unwrap());
+        assert_eq!(200, opt.env.size_of(Path::new("db/000008.ldb")).unwrap());
+        assert_eq!(200, opt.env.size_of(Path::new("db/000009.ldb")).unwrap());
+        assert_eq!(182, opt.env.size_of(Path::new("db/000014.ldb")).unwrap());
+        assert_eq!(435, opt.env.size_of(Path::new("db/000016.ldb")).unwrap());
+
+        assert!(!opt.env.exists(Path::new("db/000001.ldb")).unwrap());
+        assert!(!opt.env.exists(Path::new("db/000002.ldb")).unwrap());
+        assert!(!opt.env.exists(Path::new("db/000003.ldb")).unwrap());
+        assert!(!opt.env.exists(Path::new("db/000004.ldb")).unwrap());
+        assert!(!opt.env.exists(Path::new("db/000005.ldb")).unwrap());
+        assert!(!opt.env.exists(Path::new("db/000006.ldb")).unwrap());
+        assert!(!opt.env.exists(Path::new("db/000015.ldb")).unwrap());
+
+        assert_eq!(b"val1".to_vec(), db.get(b"aaa").unwrap());
+        assert_eq!(b"val2".to_vec(), db.get(b"cab").unwrap());
+        assert_eq!(b"val3".to_vec(), db.get(b"aba").unwrap());
+        assert_eq!(b"val3".to_vec(), db.get(b"fab").unwrap());
+        assert_eq!(b"123".to_vec(), db.get(b"xxx").unwrap());
     }
 
     #[allow(unused_variables)]
