@@ -15,7 +15,7 @@ use std::rc::Rc;
 
 use crc::crc32;
 use crc::Hasher32;
-use integer_encoding::FixedInt;
+use integer_encoding::{FixedInt, FixedIntWriter};
 
 pub const FOOTER_LENGTH: usize = 40;
 pub const FULL_FOOTER_LENGTH: usize = FOOTER_LENGTH + 8;
@@ -76,7 +76,7 @@ impl Footer {
 /// DATA BLOCKs, META BLOCKs, INDEX BLOCK and METAINDEX BLOCK are built using the code in
 /// the `block` module.
 ///
-/// The FOOTER consists of a BlockHandle wthat points to the metaindex block, another pointing to
+/// The FOOTER consists of a BlockHandle that points to the metaindex block, another pointing to
 /// the index block, padding to fill up to 40 B and at the end the 8B magic number
 /// 0xdb4775248b80fb57.
 
@@ -200,16 +200,14 @@ impl<Dst: Write> TableBuilder<Dst> {
         // compression is still unimplemented
         assert_eq!(t, CompressionType::CompressionNone);
 
-        let mut buf = [0 as u8; TABLE_BLOCK_CKSUM_LEN];
         let mut digest = crc32::Digest::new(crc32::CASTAGNOLI);
 
         digest.write(&block);
         digest.write(&[self.opt.compression_type as u8; TABLE_BLOCK_COMPRESS_LEN]);
-        mask_crc(digest.sum32()).encode_fixed(&mut buf);
 
         self.dst.write(&block)?;
         self.dst.write(&[t as u8; TABLE_BLOCK_COMPRESS_LEN])?;
-        self.dst.write(&buf)?;
+        self.dst.write_fixedint(mask_crc(digest.sum32()))?;
 
         let handle = BlockHandle::new(self.offset, block.len());
         self.offset += block.len() + TABLE_BLOCK_COMPRESS_LEN + TABLE_BLOCK_CKSUM_LEN;
