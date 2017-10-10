@@ -6,6 +6,7 @@ use error::Result;
 use filter::{InternalFilterPolicy, NoFilterPolicy};
 use filter_block::FilterBlockBuilder;
 use key_types::InternalKey;
+use log::mask_crc;
 use options::{CompressionType, Options};
 
 use std::cmp::Ordering;
@@ -204,7 +205,7 @@ impl<Dst: Write> TableBuilder<Dst> {
 
         digest.write(&block);
         digest.write(&[self.opt.compression_type as u8; TABLE_BLOCK_COMPRESS_LEN]);
-        digest.sum32().encode_fixed(&mut buf);
+        mask_crc(digest.sum32()).encode_fixed(&mut buf);
 
         self.dst.write(&block)?;
         self.dst.write(&[t as u8; TABLE_BLOCK_COMPRESS_LEN])?;

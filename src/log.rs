@@ -202,11 +202,11 @@ impl<R: Read> LogReader<R> {
 
 const MASK_DELTA: u32 = 0xa282ead8;
 
-fn mask_crc(c: u32) -> u32 {
+pub fn mask_crc(c: u32) -> u32 {
     (c.wrapping_shr(15) | c.wrapping_shl(17)).wrapping_add(MASK_DELTA)
 }
 
-fn unmask_crc(mc: u32) -> u32 {
+pub fn unmask_crc(mc: u32) -> u32 {
     let rot = mc.wrapping_sub(MASK_DELTA);
     (rot.wrapping_shr(17) | rot.wrapping_shl(15))
 }
@@ -221,6 +221,12 @@ mod tests {
         let crc = crc32::checksum_castagnoli("abcde".as_bytes());
         assert_eq!(crc, unmask_crc(mask_crc(crc)));
         assert!(crc != mask_crc(crc));
+    }
+
+    #[test]
+    fn test_crc_sanity() {
+        assert_eq!(0x8a9136aa, crc32::checksum_castagnoli(&[0 as u8; 32]));
+        assert_eq!(0x62a8ab43, crc32::checksum_castagnoli(&[0xff as u8; 32]));
     }
 
     #[test]

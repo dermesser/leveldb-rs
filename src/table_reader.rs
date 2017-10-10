@@ -7,6 +7,7 @@ use error::{err, StatusCode, Result};
 use filter;
 use filter_block::FilterBlockReader;
 use key_types::InternalKey;
+use log::unmask_crc;
 use options::{self, CompressionType, Options};
 use table_builder::{self, Footer};
 use types::{current_key_val, LdbIterator};
@@ -50,9 +51,10 @@ impl TableBlock {
                                     &BlockHandle::new(location.offset() + location.size() +
                                                       table_builder::TABLE_BLOCK_COMPRESS_LEN,
                                                       table_builder::TABLE_BLOCK_CKSUM_LEN)));
+
         Ok(TableBlock {
             block: Block::new(opt, buf),
-            checksum: u32::decode_fixed(&cksum),
+            checksum: unmask_crc(u32::decode_fixed(&cksum)),
             compression: options::int_to_compressiontype(compress[0] as u32)
                 .unwrap_or(CompressionType::CompressionNone),
         })
@@ -63,7 +65,6 @@ impl TableBlock {
         let mut digest = crc32::Digest::new(crc32::CASTAGNOLI);
         digest.write(&self.block.contents());
         digest.write(&[self.compression as u8; 1]);
-
         digest.sum32() == self.checksum
     }
 }
