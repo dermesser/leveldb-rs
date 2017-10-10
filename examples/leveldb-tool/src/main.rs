@@ -3,6 +3,7 @@ extern crate leveldb_rs;
 use leveldb_rs::{DB, LdbIterator, Options};
 
 use std::env::args;
+use std::io::{self, Write};
 use std::iter::FromIterator;
 
 fn get(db: &mut DB, k: &str) {
@@ -24,15 +25,14 @@ fn delete(db: &mut DB, k: &str) {
 
 fn iter(db: &mut DB) {
     let mut it = db.new_iter().unwrap();
-    while let Some((k, v)) = it.next() {
-        match (String::from_utf8(k), String::from_utf8(v)) {
-            (Ok(sk), Ok(sv)) => println!("{} => {}", sk, sv),
-            (Err(utf8e), Ok(sv)) => println!("{:?} => {}", utf8e.into_bytes(), sv),
-            (Ok(sk), Err(utf8e)) => println!("{} => {:?}", sk, utf8e.into_bytes()),
-            (Err(utf81), Err(utf82)) => {
-                println!("{:?} => {:?}", utf81.into_bytes(), utf82.into_bytes())
-            }
-        }
+    let (mut k, mut v) = (vec![], vec![]);
+    let mut out = io::BufWriter::new(io::stdout());
+    while it.advance() {
+        it.current(&mut k, &mut v);
+        out.write_all(&k).unwrap();
+        out.write_all(b" => ").unwrap();
+        out.write_all(&v).unwrap();
+        out.write_all(b"\n").unwrap();
     }
 }
 
