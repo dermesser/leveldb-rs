@@ -9,10 +9,14 @@ the same.
 ## Status
 
 * User-facing methods exist: Read/Write/Delete; snapshots; iteration
-* Compaction is supported, but no manual ones.
+* Compaction is supported, including manual ones.
 * Fully synchronous: Efficiency gains by using non-atomic types, but writes may
-  occasionally block during a compaction.
-* Compatibility: Not yet assessed.
+  occasionally block during a compaction. In --release mode, an average compaction
+  takes 0.2-0.5 seconds.
+* Compatibility with the original: Compression is not implemented so far; this works
+  as long as compression is disabled in the original.
+* Performance is usually on par with the original, except in cases where the
+  original implementation makes use of multithreading (e.g., background compactions).
 
 ## Goals
 
