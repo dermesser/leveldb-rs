@@ -27,6 +27,8 @@ pub struct Compaction {
     cmp: Rc<Box<Cmp>>,
     icmp: InternalKeyCmp,
 
+    manual: bool,
+
     // "parent" inputs from level and level+1.
     inputs: [Vec<FileMetaHandle>; 2],
     grandparent_ix: usize,
@@ -47,6 +49,7 @@ impl Compaction {
             level_ixs: Default::default(),
             cmp: opt.cmp.clone(),
             icmp: InternalKeyCmp(opt.cmp.clone()),
+            manual: false,
 
             inputs: Default::default(),
             grandparent_ix: 0,
@@ -119,7 +122,16 @@ impl Compaction {
     }
 
     pub fn is_trivial_move(&self) -> bool {
-        let inputs_size = total_size(self.grandparents.as_ref().unwrap().iter());
+        if self.manual {
+            return false;
+        }
+
+        let inputs_size;
+        if let Some(gp) = self.grandparents.as_ref() {
+            inputs_size = total_size(gp.iter());
+        } else {
+            inputs_size = 0;
+        }
         self.num_inputs(0) == 1 && self.num_inputs(1) == 0 && inputs_size < 10 * self.max_file_size
     }
 
@@ -333,6 +345,7 @@ impl VersionSet {
 
         let mut c = Compaction::new(&self.opt, level, self.current.clone());
         c.inputs[0] = inputs;
+        c.manual = true;
         self.setup_other_inputs(&mut c);
         Some(c)
     }

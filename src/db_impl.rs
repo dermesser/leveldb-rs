@@ -561,7 +561,7 @@ impl DB {
         {
             let v = self.vset.borrow().current();
             let v = v.borrow();
-            for l in 1..NUM_LEVELS-1 {
+            for l in 1..NUM_LEVELS - 1 {
                 if v.overlap_in_level(l, from, to) {
                     max_level = l;
                 }
@@ -1212,7 +1212,7 @@ mod tests {
         assert_eq!(250, opt.env.size_of(Path::new("db/000007.ldb")).unwrap());
         assert_eq!(200, opt.env.size_of(Path::new("db/000008.ldb")).unwrap());
         assert_eq!(200, opt.env.size_of(Path::new("db/000009.ldb")).unwrap());
-        assert_eq!(435, opt.env.size_of(Path::new("db/000014.ldb")).unwrap());
+        assert_eq!(435, opt.env.size_of(Path::new("db/000015.ldb")).unwrap());
 
         assert!(!opt.env.exists(Path::new("db/000001.ldb")).unwrap());
         assert!(!opt.env.exists(Path::new("db/000002.ldb")).unwrap());
@@ -1220,6 +1220,7 @@ mod tests {
         assert!(!opt.env.exists(Path::new("db/000005.ldb")).unwrap());
         assert!(!opt.env.exists(Path::new("db/000006.ldb")).unwrap());
         assert!(!opt.env.exists(Path::new("db/000013.ldb")).unwrap());
+        assert!(!opt.env.exists(Path::new("db/000014.ldb")).unwrap());
 
         assert_eq!(b"val1".to_vec(), db.get(b"aaa").unwrap());
         assert_eq!(b"val2".to_vec(), db.get(b"cab").unwrap());
@@ -1244,7 +1245,7 @@ mod tests {
         assert_eq!(200, opt.env.size_of(Path::new("db/000008.ldb")).unwrap());
         assert_eq!(200, opt.env.size_of(Path::new("db/000009.ldb")).unwrap());
         assert_eq!(182, opt.env.size_of(Path::new("db/000014.ldb")).unwrap());
-        assert_eq!(435, opt.env.size_of(Path::new("db/000016.ldb")).unwrap());
+        assert_eq!(435, opt.env.size_of(Path::new("db/000017.ldb")).unwrap());
 
         assert!(!opt.env.exists(Path::new("db/000001.ldb")).unwrap());
         assert!(!opt.env.exists(Path::new("db/000002.ldb")).unwrap());
@@ -1253,6 +1254,7 @@ mod tests {
         assert!(!opt.env.exists(Path::new("db/000005.ldb")).unwrap());
         assert!(!opt.env.exists(Path::new("db/000006.ldb")).unwrap());
         assert!(!opt.env.exists(Path::new("db/000015.ldb")).unwrap());
+        assert!(!opt.env.exists(Path::new("db/000016.ldb")).unwrap());
 
         assert_eq!(b"val1".to_vec(), db.get(b"aaa").unwrap());
         assert_eq!(b"val2".to_vec(), db.get(b"cab").unwrap());
