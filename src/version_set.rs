@@ -136,7 +136,10 @@ impl Compaction {
     }
 
     pub fn should_stop_before<'a>(&mut self, k: InternalKey<'a>) -> bool {
-        assert!(self.grandparents.is_some());
+        if self.grandparents.is_none() {
+            self.seen_key = true;
+            return false;
+        }
         let grandparents = self.grandparents.as_ref().unwrap();
         while self.grandparent_ix < grandparents.len() &&
               self.icmp.cmp(k, &grandparents[self.grandparent_ix].borrow().largest) ==
@@ -1165,7 +1168,9 @@ mod tests {
             // is_trivial_move
             let from = LookupKey::new("fab".as_bytes(), 1000);
             let to = LookupKey::new("fba".as_bytes(), 1010);
-            let c = vs.compact_range(2, from.internal_key(), to.internal_key()).unwrap();
+            let mut c = vs.compact_range(2, from.internal_key(), to.internal_key()).unwrap();
+            // pretend it's not manual
+            c.manual = false;
             assert!(c.is_trivial_move());
 
             // should_stop_before
