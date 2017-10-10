@@ -169,7 +169,8 @@ impl DB {
         for file in &filenames {
             if let Ok((num, typ)) = parse_file_name(&file) {
                 expected.remove(&num);
-                if typ == FileType::Log && num >= self.vset.borrow().log_num {
+                if typ == FileType::Log &&
+                   (num >= self.vset.borrow().log_num || num == self.vset.borrow().prev_log_num) {
                     log_files.push(num);
                 }
             }

@@ -21,7 +21,8 @@ enum EditTag {
     LastSequence = 4,
     CompactPointer = 5,
     DeletedFile = 6,
-    NewFile = 7, // sic!
+    NewFile = 7,
+    PrevLogNumber = 9, // sic!
 }
 
 fn tag_to_enum(t: u32) -> Option<EditTag> {
@@ -33,6 +34,7 @@ fn tag_to_enum(t: u32) -> Option<EditTag> {
         5 => Some(EditTag::CompactPointer),
         6 => Some(EditTag::DeletedFile),
         7 => Some(EditTag::NewFile),
+        9 => Some(EditTag::PrevLogNumber),
         _ => None,
     }
 }
@@ -59,6 +61,7 @@ fn read_length_prefixed<R: Read>(reader: &mut R) -> Result<Vec<u8>> {
 pub struct VersionEdit {
     comparator: Option<String>,
     pub log_number: Option<FileNum>,
+    pub prev_log_number: Option<FileNum>,
     pub next_file_number: Option<FileNum>,
     pub last_seq: Option<SequenceNumber>,
 
@@ -72,6 +75,7 @@ impl VersionEdit {
         VersionEdit {
             comparator: None,
             log_number: None,
+            prev_log_number: None,
             next_file_number: None,
             last_seq: None,
             compaction_ptrs: Vec::with_capacity(8),
@@ -98,6 +102,10 @@ impl VersionEdit {
 
     pub fn set_log_num(&mut self, num: u64) {
         self.log_number = Some(num)
+    }
+
+    pub fn set_prev_log_num(&mut self, num: u64) {
+        self.prev_log_number = Some(num);
     }
 
     pub fn set_last_seq(&mut self, num: u64) {
@@ -130,6 +138,11 @@ impl VersionEdit {
         if let Some(lognum) = self.log_number {
             buf.write_varint(EditTag::LogNumber as u32).unwrap();
             buf.write_varint(lognum).unwrap();
+        }
+
+        if let Some(prevlognum) = self.prev_log_number {
+            buf.write_varint(EditTag::PrevLogNumber as u32).unwrap();
+            buf.write_varint(prevlognum).unwrap();
         }
 
         if let Some(nfn) = self.next_file_number {
@@ -191,6 +204,14 @@ impl VersionEdit {
                             ve.log_number = Some(ln);
                         } else {
                             return err(StatusCode::IOError, "Couldn't read lognumber");
+                        }
+                    }
+
+                    EditTag::PrevLogNumber => {
+                        if let Ok(ln) = reader.read_varint() {
+                            ve.prev_log_number = Some(ln);
+                        } else {
+                            return err(StatusCode::IOError, "Couldn't read prevlognumber");
                         }
                     }
 
@@ -262,7 +283,8 @@ impl VersionEdit {
                     }
                 }
             } else {
-                return err(StatusCode::Corruption, "Invalid tag number");
+                return err(StatusCode::Corruption,
+                           &format!("Invalid tag number {}", tag));
             }
         }
 
