@@ -300,7 +300,7 @@ impl VersionSet {
             }
 
             if c.num_inputs(0) == 0 {
-                // Add first file in level.
+                // Add first file in level. This will also reset the compaction pointers.
                 c.add_input(0, current.files[level][0].clone());
             }
         } else if let Some(ref ftc) = current.file_to_compact {
