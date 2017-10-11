@@ -153,9 +153,7 @@ impl LdbIterator for MergingIter {
     }
     fn valid(&self) -> bool {
         if let Some(ix) = self.current {
-            // TODO: second clause is unnecessary, because first asserts that at least one iterator
-            // is valid.
-            self.iters[ix].valid() && self.iters.iter().any(|it| it.valid())
+            self.iters[ix].valid()
         } else {
             false
         }
