@@ -49,6 +49,10 @@ impl MergingIter {
     /// call was next() or prev(). This basically sets all iterators to one
     /// entry after (Forward) or one entry before (Reverse) the current() entry.
     fn update_direction(&mut self, d: Direction) {
+        if self.direction == d {
+            return;
+        }
+
         let mut keybuf = vec![];
         let mut valbuf = vec![];
 
