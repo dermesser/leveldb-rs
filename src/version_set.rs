@@ -620,6 +620,12 @@ impl VersionSet {
 
     /// reuse_manifest checks whether the current manifest can be reused.
     fn reuse_manifest(&mut self, current_manifest_path: &str, current_manifest_base: &str) -> bool {
+        // Note: The original has only one option, reuse_logs; reuse_logs has to be set in order to
+        // reuse manifests.
+        // However, there's not much that stops us from reusing manifests without reusing logs or
+        // vice versa. One issue exists though: If no write operations are done, empty log files
+        // will accumulate every time a DB is opened, until at least one write happens (otherwise,
+        // the logs won't be compacted and deleted).
         if !self.opt.reuse_manifest {
             return false;
         }
