@@ -6,6 +6,9 @@ The implementation is very close to the original; often, you can see the same
 algorithm translated 1:1, and class (struct) and method names are similar or
 the same.
 
+**NOTE: Do not use this for production purposes unless you thoroughly evaluated
+it first, and are reasonably certain that no data loss occurs.**
+
 ## Status
 
 * User-facing methods exist: Read/Write/Delete; snapshots; iteration
@@ -15,8 +18,11 @@ the same.
   takes 0.2-0.5 seconds.
 * Compatibility with the original: Compression is not implemented so far; this works
   as long as compression is disabled in the original.
-* Performance is usually on par with the original, except in cases where the
-  original implementation makes use of multithreading (e.g., background compactions).
+* Performance is decent; while usually not par with the original, due to multi-threading
+  in the original and language-inherent overhead (we are doing things the right way),
+  it will be enough for most use cases.
+* Safe: While using many shared pointers, the implementation is generally safe. Many
+  places use asserts though, so you may see a crash -- in which case you should file a bug.
 
 ## Goals
 

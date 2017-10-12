@@ -2,7 +2,12 @@
 name = "leveldb_rs"
 version = "0.1.0"
 authors = ["Lewin Bormann <lbo@spheniscida.de>"]
-publish = false
+description = "A compatible re-implementation of LevelDB in Rust"
+repository = "https://bitbucket.org/dermesser/leveldb-rs"
+readme = "README.md"
+keywords = ["LevelDB", "key/value", "database", "SSTable", "Google"]
+license = "MIT"
+publish = true
 
 [dependencies]
 crc = "1.2"
