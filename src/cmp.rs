@@ -10,20 +10,20 @@ type WrappedCmp = Rc<Box<Cmp>>;
 /// top of an inner comparator)
 pub trait Cmp {
     /// Compare to byte strings, bytewise.
-    fn cmp(&self, &[u8], &[u8]) -> Ordering;
+    fn cmp(&self, a: &[u8], b: &[u8]) -> Ordering;
 
     /// Return the shortest byte string that compares "Greater" to the first argument and "Less" to
     /// the second one.
-    fn find_shortest_sep(&self, &[u8], &[u8]) -> Vec<u8>;
+    fn find_shortest_sep(&self, from: &[u8], to: &[u8]) -> Vec<u8>;
     /// Return the shortest byte string that compares "Greater" to the argument.
-    fn find_short_succ(&self, &[u8]) -> Vec<u8>;
+    fn find_short_succ(&self, key: &[u8]) -> Vec<u8>;
 
     /// A unique identifier for a comparator. A comparator wrapper (like InternalKeyCmp) may
     /// return the id of its inner comparator.
     fn id(&self) -> &'static str;
 }
 
-/// Lexical comparator.
+/// The default byte-wise comparator.
 #[derive(Clone)]
 pub struct DefaultCmp;
 

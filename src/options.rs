@@ -35,8 +35,10 @@ pub fn int_to_compressiontype(i: u32) -> Option<CompressionType> {
     }
 }
 
-/// [not all member types implemented yet]
+/// Options contains general parameters for a LevelDB instance. Most of the names are
+/// self-explanatory; the defaults are defined in the `Default` implementation.
 ///
+/// Note: Compression is not yet implemented.
 #[derive(Clone)]
 pub struct Options {
     pub cmp: Rc<Box<Cmp>>,
@@ -98,7 +100,8 @@ impl Options {
         self.cmp = Rc::new(c);
     }
 
-    /// Set the environment to use. The default is PosixDiskEnv.
+    /// Set the environment to use. The default is `PosixDiskEnv`; `MemEnv` provides a fully
+    /// in-memory environment.
     pub fn set_env(&mut self, e: Box<Env>) {
         self.env = Rc::new(e);
     }

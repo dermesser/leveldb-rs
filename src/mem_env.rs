@@ -258,7 +258,8 @@ impl MemFS {
     }
 }
 
-/// MemEnv is an in-memory environment that can be used for both testing and ephemeral databases.
+/// MemEnv is an in-memory environment that can be used for testing or ephemeral databases. The
+/// performance will be better than what a disk environment delivers.
 pub struct MemEnv(MemFS);
 
 impl MemEnv {

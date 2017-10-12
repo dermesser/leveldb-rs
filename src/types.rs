@@ -39,29 +39,30 @@ pub struct Range<'a> {
 ///
 /// test_util::test_iterator_properties() verifies that all properties hold.
 pub trait LdbIterator {
-    /// advance advances the position of the iterator by one element (which can be retrieved using
+    /// Advances the position of the iterator by one element (which can be retrieved using
     /// current(). If no more elements are available, advance() returns false, and the iterator
-    /// becomes invalid (i.e. like reset() has been called).
+    /// becomes invalid (i.e. as if reset() had been called).
     fn advance(&mut self) -> bool;
-    /// Return the current item (i.e. the item most recently returned by get_next())
+    /// Return the current item (i.e. the item most recently returned by `next()`).
     fn current(&self, key: &mut Vec<u8>, val: &mut Vec<u8>) -> bool;
     /// Seek the iterator to `key` or the next bigger key. If the seek is invalid (past last
-    /// element), the iterator is reset() and not valid.
-    /// After a seek to an existing key, current() returns that entry.
+    /// element, or before first element), the iterator is `reset()` and not valid.
     fn seek(&mut self, key: &[u8]);
-    /// Resets the iterator to be `!valid()` again (before first element)
+    /// Resets the iterator to be `!valid()`, i.e. positioned before the first element.
     fn reset(&mut self);
     /// Returns true if the iterator is not positioned before the first or after the last element,
-    /// i.e. if current() would return an entry.
+    /// i.e. if `current()` would succeed.
     fn valid(&self) -> bool;
-    /// Go to the previous item; if the iterator has reached the "before-first" item, prev()
-    /// returns false, and the iterator is invalid. This is inefficient for most iterators.
+    /// Go to the previous item; if the iterator is moved beyond the first element, `prev()`
+    /// returns false and it will be `!valid()`. This is inefficient for most iterator
+    /// implementations.
     fn prev(&mut self) -> bool;
 
     // default implementations.
 
-    /// next is like Iterator::next(). It's implemented here because "only traits defined in the
-    /// current crate can be implemented for a type parameter" (says rustc).
+    /// next is like Iterator::next(). It's implemented here because Rust disallows implementing a
+    /// foreign trait for any type, thus we can't do `impl<T: LdbIterator> Iterator<Item=Vec<u8>> for T
+    /// {}`.
     fn next(&mut self) -> Option<(Vec<u8>, Vec<u8>)> {
         if !self.advance() {
             return None;
@@ -73,6 +74,7 @@ pub trait LdbIterator {
             None
         }
     }
+
     /// seek_to_first seeks to the first element.
     fn seek_to_first(&mut self) {
         self.reset();

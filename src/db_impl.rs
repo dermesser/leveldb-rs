@@ -489,7 +489,8 @@ impl DB {
 impl DB {
     // SNAPSHOTS //
 
-    /// Returns a snapshot at the current state. The snapshot is released automatically on Drop.
+    /// Returns a snapshot at the current state. It can be used to retrieve entries from the
+    /// database as they were at an earlier point in time.
     pub fn get_snapshot(&mut self) -> Snapshot {
         self.snaps.new_snapshot(self.vset.borrow().last_seq)
     }
@@ -558,6 +559,11 @@ impl DB {
         }
     }
 
+    /// compact_range triggers an immediate compaction on the specified key range. Repeatedly
+    /// calling this without actually adding new keys is not useful.
+    ///
+    /// Compactions in general will cause the database to find entries more quickly, and take up
+    /// less space on disk.
     pub fn compact_range(&mut self, from: &[u8], to: &[u8]) -> Result<()> {
         let mut max_level = 1;
         {

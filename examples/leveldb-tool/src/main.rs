@@ -49,7 +49,8 @@ fn main() {
     }
 
     let mut opt = Options::default();
-    opt.reuse_logs = true;
+    opt.reuse_logs = false;
+    opt.reuse_manifest = false;
     let mut db = DB::open("tooldb", opt).unwrap();
 
     match args[1].as_str() {

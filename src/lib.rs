@@ -44,7 +44,12 @@ mod write_batch;
 mod db_impl;
 mod db_iter;
 
+pub use cmp::{Cmp, DefaultCmp};
 pub use db_impl::DB;
 pub use db_iter::DBIterator;
+pub use env::Env;
+pub use filter::{BloomPolicy, FilterPolicy};
+pub use infolog::Logger;
+pub use mem_env::MemEnv;
 pub use options::Options;
 pub use types::LdbIterator;
