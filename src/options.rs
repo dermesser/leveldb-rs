@@ -97,20 +97,3 @@ pub fn for_test() -> Options {
     o.log = Some(share(infolog::stderr()));
     o
 }
-
-impl Options {
-    /// Set the comparator to use in all operations and structures that need to compare keys.
-    ///
-    /// DO NOT set the comparator after having written any record with a different comparator.
-    /// If the comparator used differs from the one used when writing a database that is being
-    /// opened, the library is free to panic.
-    pub fn set_comparator(&mut self, c: Box<Cmp>) {
-        self.cmp = Rc::new(c);
-    }
-
-    /// Set the environment to use. The default is `PosixDiskEnv`; `MemEnv` provides a fully
-    /// in-memory environment.
-    pub fn set_env(&mut self, e: Box<Env>) {
-        self.env = Rc::new(e);
-    }
-}

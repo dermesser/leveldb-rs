@@ -5,6 +5,7 @@ use std::io;
 use std::result;
 use std::sync;
 
+/// StatusCode describes various failure modes of database operations.
 #[derive(Clone, Debug, PartialEq)]
 #[allow(dead_code)]
 pub enum StatusCode {
@@ -22,6 +23,8 @@ pub enum StatusCode {
     Unknown,
 }
 
+/// Status encapsulates a `StatusCode` and an error message. It can be displayed, and also
+/// implements `Error`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Status {
     pub code: StatusCode,

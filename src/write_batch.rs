@@ -16,7 +16,6 @@ const HEADER_SIZE: usize = 12;
 /// [tag: 1, keylen: ~var, key: keylen, vallen: ~var, val: vallen]
 pub struct WriteBatch {
     entries: Vec<u8>,
-    sync: bool,
 }
 
 impl WriteBatch {
@@ -24,29 +23,16 @@ impl WriteBatch {
         let mut v = Vec::with_capacity(128);
         v.resize(HEADER_SIZE, 0);
 
-        WriteBatch {
-            entries: v,
-            sync: false,
-        }
+        WriteBatch { entries: v }
     }
 
-    /// set_sync allows for forcing a flush for this batch.
-    pub fn set_sync(&mut self, sync: bool) {
-        self.sync = sync;
-    }
-
+    /// Initializes a WriteBatch with a serialized WriteBatch.
     pub fn set_contents(&mut self, from: &[u8]) {
         self.entries.clear();
         self.entries.extend_from_slice(from);
     }
 
-    fn from(buf: Vec<u8>) -> WriteBatch {
-        WriteBatch {
-            entries: buf,
-            sync: false,
-        }
-    }
-
+    /// Adds an entry to a WriteBatch, to be added to the database.
     #[allow(unused_assignments)]
     pub fn put(&mut self, k: &[u8], v: &[u8]) {
         self.entries.write(&[ValueType::TypeValue as u8]).unwrap();
@@ -59,6 +45,7 @@ impl WriteBatch {
         self.set_count(c + 1);
     }
 
+    /// Marks an entry to be deleted from the database.
     #[allow(unused_assignments)]
     pub fn delete(&mut self, k: &[u8]) {
         self.entries.write(&[ValueType::TypeDeletion as u8]).unwrap();
@@ -69,23 +56,25 @@ impl WriteBatch {
         self.set_count(c + 1);
     }
 
+    /// Clear the contents of a WriteBatch.
     pub fn clear(&mut self) {
         self.entries.clear()
     }
 
-    pub fn byte_size(&self) -> usize {
+    fn byte_size(&self) -> usize {
         self.entries.len()
     }
 
-    pub fn set_count(&mut self, c: u32) {
+    fn set_count(&mut self, c: u32) {
         c.encode_fixed(&mut self.entries[COUNT_OFFSET..COUNT_OFFSET + 4]);
     }
 
+    /// Returns how many operations are in a batch.
     pub fn count(&self) -> u32 {
         u32::decode_fixed(&self.entries[COUNT_OFFSET..COUNT_OFFSET + 4])
     }
 
-    pub fn set_sequence(&mut self, s: SequenceNumber) {
+    fn set_sequence(&mut self, s: SequenceNumber) {
         s.encode_fixed(&mut self.entries[SEQNUM_OFFSET..SEQNUM_OFFSET + 8]);
     }
 
