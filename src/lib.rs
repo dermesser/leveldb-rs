@@ -1,3 +1,26 @@
+//! rusty-leveldb is a reimplementation of LevelDB in pure rust. It depends only on a few crates,
+//! and is very close to the original, implementation-wise. The external API is relatively small
+//! and should be easy to use.
+//!
+//! ```
+//! use rusty_leveldb::{DB, DBIterator, LdbIterator, Options};
+//!
+//! let opt = rusty_leveldb::in_memory();
+//! let mut db = DB::open("mydatabase", opt).unwrap();
+//!
+//! db.put(b"Hello", b"World").unwrap();
+//! assert_eq!(b"World", db.get(b"Hello").unwrap().as_slice());
+//!
+//! let mut iter = db.new_iter().unwrap();
+//! // Note: For efficiency reasons, it's recommended to use advance() and current() instead of
+//! // next().
+//! assert_eq!((b"Hello".to_vec(), b"World".to_vec()), iter.next().unwrap());
+//!
+//! db.delete(b"Hello").unwrap();
+//! db.flush().unwrap();
+//! ```
+//!
+
 #![allow(dead_code)]
 #![allow(unused_imports)]
 
@@ -47,9 +70,8 @@ mod db_iter;
 pub use cmp::{Cmp, DefaultCmp};
 pub use db_impl::DB;
 pub use db_iter::DBIterator;
-pub use env::Env;
 pub use filter::{BloomPolicy, FilterPolicy};
 pub use infolog::Logger;
-pub use mem_env::MemEnv;
-pub use options::Options;
+pub use options::{in_memory, Options};
 pub use types::LdbIterator;
+pub use write_batch::WriteBatch;
