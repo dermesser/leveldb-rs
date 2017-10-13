@@ -61,8 +61,8 @@ pub trait LdbIterator {
     // default implementations.
 
     /// next is like Iterator::next(). It's implemented here because Rust disallows implementing a
-    /// foreign trait for any type, thus we can't do `impl<T: LdbIterator> Iterator<Item=Vec<u8>> for T
-    /// {}`.
+    /// foreign trait for any type, thus we can't do `impl<T: LdbIterator> Iterator<Item=Vec<u8>>
+    /// for T {}`.
     fn next(&mut self) -> Option<(Vec<u8>, Vec<u8>)> {
         if !self.advance() {
             return None;
