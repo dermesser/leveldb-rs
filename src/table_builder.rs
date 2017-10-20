@@ -16,6 +16,7 @@ use std::rc::Rc;
 use crc::crc32;
 use crc::Hasher32;
 use integer_encoding::{FixedInt, FixedIntWriter};
+use snap::Encoder;
 
 pub const FOOTER_LENGTH: usize = 40;
 pub const FULL_FOOTER_LENGTH: usize = FOOTER_LENGTH + 8;
@@ -196,21 +197,24 @@ impl<Dst: Write> TableBuilder<Dst> {
     }
 
     /// Calculates the checksum, writes the block to disk and updates the offset.
-    fn write_block(&mut self, block: BlockContents, t: CompressionType) -> Result<BlockHandle> {
-        // compression is still unimplemented
-        assert_eq!(t, CompressionType::CompressionNone);
+    fn write_block(&mut self, block: BlockContents, ctype: CompressionType) -> Result<BlockHandle> {
+        let mut data = block;
+        if ctype == CompressionType::CompressionSnappy {
+            let mut encoder = Encoder::new();
+            data = encoder.compress_vec(&data)?;
+        }
 
         let mut digest = crc32::Digest::new(crc32::CASTAGNOLI);
 
-        digest.write(&block);
-        digest.write(&[self.opt.compression_type as u8; TABLE_BLOCK_COMPRESS_LEN]);
+        digest.write(&data);
+        digest.write(&[ctype as u8; TABLE_BLOCK_COMPRESS_LEN]);
 
-        self.dst.write(&block)?;
-        self.dst.write(&[t as u8; TABLE_BLOCK_COMPRESS_LEN])?;
+        self.dst.write(&data)?;
+        self.dst.write(&[ctype as u8; TABLE_BLOCK_COMPRESS_LEN])?;
         self.dst.write_fixedint(mask_crc(digest.sum32()))?;
 
-        let handle = BlockHandle::new(self.offset, block.len());
-        self.offset += block.len() + TABLE_BLOCK_COMPRESS_LEN + TABLE_BLOCK_CKSUM_LEN;
+        let handle = BlockHandle::new(self.offset, data.len());
+        self.offset += data.len() + TABLE_BLOCK_COMPRESS_LEN + TABLE_BLOCK_CKSUM_LEN;
 
         Ok(handle)
     }
@@ -264,7 +268,7 @@ impl<Dst: Write> TableBuilder<Dst> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Footer, TableBuilder};
+    use super::*;
     use blockhandle::BlockHandle;
     use options;
 
@@ -287,6 +291,7 @@ mod tests {
         let mut d = Vec::with_capacity(512);
         let mut opt = options::for_test();
         opt.block_restart_interval = 3;
+        opt.compression_type = CompressionType::CompressionSnappy;
         let mut b = TableBuilder::new_raw(opt, &mut d);
 
         let data = vec![("abc", "def"), ("abe", "dee"), ("bcd", "asa"), ("dcc", "a00")];
@@ -303,7 +308,7 @@ mod tests {
         assert!(b.filter_block.is_some());
 
         let actual = b.finish().unwrap();
-        assert_eq!(233, actual);
+        assert_eq!(223, actual);
     }
 
     #[test]
