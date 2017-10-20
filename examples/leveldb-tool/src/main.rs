@@ -1,6 +1,6 @@
-extern crate leveldb_rs;
+extern crate rusty_leveldb;
 
-use leveldb_rs::{DB, LdbIterator, Options};
+use rusty_leveldb::{DB, LdbIterator, Options};
 
 use std::env::args;
 use std::io::{self, Write};

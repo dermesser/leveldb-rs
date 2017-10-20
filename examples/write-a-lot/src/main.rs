@@ -1,8 +1,9 @@
-extern crate leveldb_rs;
+extern crate rusty_leveldb;
 extern crate rand;
 
-use leveldb_rs::DB;
-use leveldb_rs::Options;
+use rusty_leveldb::CompressionType;
+use rusty_leveldb::DB;
+use rusty_leveldb::Options;
 use rand::Rng;
 
 use std::error::Error;
@@ -29,7 +30,8 @@ fn fill_db(db: &mut DB, entries: usize) -> Result<(), Box<Error>> {
 }
 
 fn main() {
-    let opt = Options::default();
+    let mut opt = Options::default();
+    opt.compression_type = CompressionType::CompressionNone;
     let mut db = DB::open("test1", opt).unwrap();
 
     fill_db(&mut db, 32768).unwrap();

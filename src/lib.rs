@@ -76,6 +76,6 @@ pub use env::Env;
 pub use error::{Result, Status, StatusCode};
 pub use filter::{BloomPolicy, FilterPolicy};
 pub use mem_env::MemEnv;
-pub use options::{in_memory, Options};
+pub use options::{in_memory, CompressionType, Options};
 pub use types::LdbIterator;
 pub use write_batch::WriteBatch;
