@@ -179,15 +179,14 @@ impl<Dst: Write> TableBuilder<Dst> {
         self.prev_block_last_key = Vec::from(block.last_key());
         let contents = block.finish();
 
-        let handle = BlockHandle::new(self.offset, contents.len());
+        let ctype = self.opt.compression_type;
+        let handle = self.write_block(contents, ctype)?;
+
         let mut handle_enc = [0 as u8; 16];
         let enc_len = handle.encode_to(&mut handle_enc);
 
         self.index_block.as_mut().unwrap().add(&sep, &handle_enc[0..enc_len]);
         self.data_block = Some(BlockBuilder::new(self.opt.clone()));
-
-        let ctype = self.opt.compression_type;
-        self.write_block(contents, ctype)?;
 
         if let Some(ref mut fblock) = self.filter_block {
             fblock.start_block(self.offset);

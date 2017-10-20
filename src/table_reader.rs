@@ -422,6 +422,7 @@ mod tests {
         let mut opt = options::for_test();
         opt.block_restart_interval = 2;
         opt.block_size = 32;
+        opt.compression_type = CompressionType::CompressionSnappy;
 
         {
             // Uses the standard comparator in opt.
@@ -432,11 +433,9 @@ mod tests {
             }
 
             b.finish().unwrap();
-
         }
 
         let size = d.len();
-
         (d, size)
     }
 
@@ -485,7 +484,7 @@ mod tests {
         let table = Table::new_raw(opt, wrap_buffer(src), size).unwrap();
         let mut iter = table.iter();
 
-        let expected_offsets = vec![0, 0, 0, 42, 42, 42, 86];
+        let expected_offsets = vec![0, 0, 0, 44, 44, 44, 89];
         let mut i = 0;
         for (k, _) in LdbIteratorIter::wrap(&mut iter) {
             assert_eq!(expected_offsets[i], table.approx_offset_of(&k));
@@ -493,7 +492,7 @@ mod tests {
         }
 
         // Key-past-last returns offset of metaindex block.
-        assert_eq!(132, table.approx_offset_of("{aa".as_bytes()));
+        assert_eq!(137, table.approx_offset_of("{aa".as_bytes()));
     }
 
     #[test]
