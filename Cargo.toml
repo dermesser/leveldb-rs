@@ -14,6 +14,7 @@ crc = "1.2"
 integer-encoding = "1.0"
 libc = "0.2"
 rand = "0.3"
+snap = "0.2"
 
 [dev-dependencies]
 time-test = "0.2"

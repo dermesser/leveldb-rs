@@ -28,6 +28,7 @@ extern crate crc;
 extern crate integer_encoding;
 extern crate libc;
 extern crate rand;
+extern crate snap;
 
 #[cfg(test)]
 #[macro_use]
