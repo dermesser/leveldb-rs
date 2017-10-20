@@ -5,6 +5,8 @@ use std::io;
 use std::result;
 use std::sync;
 
+use snap;
+
 /// StatusCode describes various failure modes of database operations.
 #[derive(Clone, Debug, PartialEq)]
 #[allow(dead_code)]
@@ -13,6 +15,7 @@ pub enum StatusCode {
 
     AlreadyExists,
     Corruption,
+    CompressionError,
     IOError,
     InvalidArgument,
     InvalidData,
@@ -92,5 +95,14 @@ impl From<io::Error> for Status {
 impl<T> From<sync::PoisonError<T>> for Status {
     fn from(_: sync::PoisonError<T>) -> Status {
         Status::new(StatusCode::LockError, "lock poisoned")
+    }
+}
+
+impl From<snap::Error> for Status {
+    fn from(e: snap::Error) -> Status {
+        Status {
+            code: StatusCode::CompressionError,
+            err: e.description().to_string(),
+        }
     }
 }
