@@ -31,7 +31,7 @@ fn fill_db(db: &mut DB, entries: usize) -> Result<(), Box<Error>> {
 
 fn main() {
     let mut opt = Options::default();
-    opt.compression_type = CompressionType::CompressionNone;
+    opt.compression_type = CompressionType::CompressionSnappy;
     let mut db = DB::open("test1", opt).unwrap();
 
     fill_db(&mut db, 32768).unwrap();
