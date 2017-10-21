@@ -22,7 +22,6 @@
 //!
 
 #![allow(dead_code)]
-#![allow(unused_imports)]
 
 extern crate crc;
 extern crate integer_encoding;
@@ -55,6 +54,7 @@ mod merging_iter;
 mod options;
 mod skipmap;
 mod snapshot;
+mod table_block;
 mod table_builder;
 mod table_cache;
 mod table_reader;

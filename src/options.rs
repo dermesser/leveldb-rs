@@ -1,3 +1,5 @@
+
+use block::Block;
 use cache::Cache;
 use cmp::{Cmp, DefaultCmp};
 use disk_env;
@@ -5,7 +7,6 @@ use env::Env;
 use filter;
 use infolog::{self, Logger};
 use mem_env::MemEnv;
-use table_reader::TableBlock;
 use types::{share, SequenceNumber, Shared};
 
 use std::default::Default;
@@ -50,7 +51,7 @@ pub struct Options {
     pub write_buffer_size: usize,
     pub max_open_files: usize,
     pub max_file_size: usize,
-    pub block_cache: Shared<Cache<TableBlock>>,
+    pub block_cache: Shared<Cache<Block>>,
     pub block_size: usize,
     pub block_restart_interval: usize,
     pub compression_type: CompressionType,
