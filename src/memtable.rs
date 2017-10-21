@@ -1,10 +1,8 @@
 use key_types::{LookupKey, UserKey};
 use cmp::{Cmp, MemtableKeyCmp};
-use error::{err, StatusCode, Result};
 use key_types::{parse_internal_key, parse_memtable_key, build_memtable_key, ValueType};
 use types::{current_key_val, LdbIterator, SequenceNumber};
 use skipmap::{SkipMap, SkipMapIter};
-use options::Options;
 
 use std::rc::Rc;
 

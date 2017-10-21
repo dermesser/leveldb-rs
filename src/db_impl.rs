@@ -7,7 +7,7 @@ use db_iter::DBIterator;
 
 use cmp::{Cmp, InternalKeyCmp};
 use env::{Env, FileLock};
-use error::{err, Status, StatusCode, Result};
+use error::{err, StatusCode, Result};
 use filter::{BoxedFilterPolicy, InternalFilterPolicy};
 use infolog::Logger;
 use log::{LogReader, LogWriter};
@@ -28,7 +28,7 @@ use write_batch::WriteBatch;
 use std::cmp::Ordering;
 use std::io::{self, BufWriter, Write};
 use std::mem;
-use std::ops::{DerefMut, Drop};
+use std::ops::Drop;
 use std::path::Path;
 use std::rc::Rc;
 

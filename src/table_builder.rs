@@ -15,7 +15,7 @@ use std::rc::Rc;
 
 use crc::crc32;
 use crc::Hasher32;
-use integer_encoding::{FixedInt, FixedIntWriter};
+use integer_encoding::FixedIntWriter;
 use snap::Encoder;
 
 pub const FOOTER_LENGTH: usize = 40;

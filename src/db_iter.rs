@@ -1,6 +1,6 @@
 
 use cmp::Cmp;
-use key_types::{parse_internal_key, truncate_to_userkey, InternalKey, LookupKey, ValueType};
+use key_types::{parse_internal_key, truncate_to_userkey, LookupKey, ValueType};
 use merging_iter::MergingIter;
 use snapshot::Snapshot;
 use types::{Direction, LdbIterator, Shared};

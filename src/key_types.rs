@@ -1,4 +1,3 @@
-use options::CompressionType;
 use types::SequenceNumber;
 
 use std::io::Write;

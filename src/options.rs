@@ -7,12 +7,10 @@ use env::Env;
 use filter;
 use infolog::{self, Logger};
 use mem_env::MemEnv;
-use types::{share, SequenceNumber, Shared};
+use types::{share, Shared};
 
 use std::default::Default;
-use std::io;
 use std::rc::Rc;
-use std::sync::Mutex;
 
 const KB: usize = 1 << 10;
 const MB: usize = KB * KB;

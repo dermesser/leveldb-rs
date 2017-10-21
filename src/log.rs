@@ -5,7 +5,7 @@
 
 use error::{err, StatusCode, Result};
 
-use std::io::{Error, ErrorKind, Read, Write};
+use std::io::{Read, Write};
 
 use crc::crc32;
 use crc::Hasher32;

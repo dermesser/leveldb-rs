@@ -2,7 +2,7 @@
 use cmp::{Cmp, InternalKeyCmp};
 use env::Env;
 use error::{err, Status, StatusCode, Result};
-use key_types::{parse_internal_key, InternalKey, LookupKey, UserKey};
+use key_types::{parse_internal_key, InternalKey, UserKey};
 use log::{LogWriter, LogReader};
 use merging_iter::MergingIter;
 use options::Options;
@@ -15,7 +15,6 @@ use version_edit::VersionEdit;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::io::Write;
-use std::ops::Deref;
 use std::path::Path;
 use std::rc::Rc;
 

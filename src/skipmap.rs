@@ -1,6 +1,5 @@
 
 use cmp::{Cmp, MemtableKeyCmp};
-use options::Options;
 use types::LdbIterator;
 use rand::{Rng, SeedableRng, StdRng};
 

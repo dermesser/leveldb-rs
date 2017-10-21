@@ -4,7 +4,6 @@ use error::{err, Result, StatusCode};
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::str::FromStr;
 
 pub const NUM_LEVELS: usize = 7;
 

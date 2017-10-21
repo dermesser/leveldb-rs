@@ -1,14 +1,13 @@
 use block::{Block, BlockIter};
 use blockhandle::BlockHandle;
 use cache;
-use cmp::{Cmp, InternalKeyCmp};
+use cmp::InternalKeyCmp;
 use env::RandomAccess;
 use error::Result;
 use filter;
 use filter_block::FilterBlockReader;
 use key_types::InternalKey;
-use log::unmask_crc;
-use options::{self, CompressionType, Options};
+use options::Options;
 use table_block;
 use table_builder::{self, Footer};
 use types::{current_key_val, LdbIterator};
@@ -16,8 +15,7 @@ use types::{current_key_val, LdbIterator};
 use std::cmp::Ordering;
 use std::rc::Rc;
 
-use crc::crc32::{self, Hasher32};
-use integer_encoding::{FixedInt, FixedIntWriter};
+use integer_encoding::FixedIntWriter;
 
 /// Reads the table footer.
 fn read_footer(f: &RandomAccess, size: usize) -> Result<Footer> {
