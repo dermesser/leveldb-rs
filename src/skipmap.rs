@@ -193,13 +193,16 @@ impl InnerSkipMap {
         assert!(!key.is_empty());
 
         // Keeping track of skip entries that will need to be updated
+        let mut prevs: [Option<*mut Node>; MAX_HEIGHT] = [None; MAX_HEIGHT];
         let new_height = self.random_height();
-        let mut prevs: Vec<Option<*mut Node>> = Vec::with_capacity(new_height);
+        let mut prevs = &mut prevs[0..new_height];
 
         let mut level = MAX_HEIGHT - 1;
         let mut current = self.head.as_mut() as *mut Node;
-        // Initialize all prevs entries with *head
-        prevs.resize(new_height, Some(current));
+        // Set previous node for all levels to current node.
+        for i in 0..prevs.len() {
+            prevs[i] = Some(current);
+        }
 
         // Find the node after which we want to insert the new node; this is the node with the key
         // immediately smaller than the key to be inserted.
