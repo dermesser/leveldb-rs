@@ -1003,10 +1003,6 @@ fn open_info_log<E: Env + ?Sized>(env: &E, db: &str) -> Logger {
 pub mod testutil {
     use super::*;
 
-    use options;
-    use key_types::LookupKey;
-    use mem_env::MemEnv;
-    use test_util::LdbIteratorIter;
     use version::testutil::make_version;
 
     /// build_db creates a database filled with the tables created by make_version().
@@ -1062,8 +1058,9 @@ pub mod testutil {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::testutil::*;
+    use super::testutil::{build_db, set_file_to_compact};
 
+    use error::Status;
     use options;
     use key_types::LookupKey;
     use mem_env::MemEnv;

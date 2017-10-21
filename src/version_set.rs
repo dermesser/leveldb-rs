@@ -904,7 +904,7 @@ fn get_range<'a, C: Cmp, I: Iterator<Item = &'a FileMetaHandle>>(c: &C,
 mod tests {
     use super::*;
     use cmp::DefaultCmp;
-    use mem_env::MemEnv;
+    use key_types::LookupKey;
     use test_util::LdbIteratorIter;
     use types::FileMetaData;
     use version::testutil::make_version;

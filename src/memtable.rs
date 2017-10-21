@@ -150,7 +150,6 @@ mod tests {
     use super::*;
     use key_types::*;
     use test_util::{test_iterator_properties, LdbIteratorIter};
-    use types::*;
     use options;
 
     #[test]

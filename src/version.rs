@@ -535,7 +535,6 @@ pub mod testutil {
     use cmp::DefaultCmp;
     use env::Env;
     use key_types::ValueType;
-    use mem_env::MemEnv;
     use options::{self, Options};
     use table_builder::TableBuilder;
     use table_cache::table_file_name;
@@ -664,19 +663,11 @@ mod tests {
     use super::*;
     use super::testutil::*;
 
-    use std::default::Default;
-    use std::path::Path;
-
     use cmp::DefaultCmp;
-    use env::Env;
     use error::Result;
-    use mem_env::MemEnv;
     use merging_iter::MergingIter;
     use options;
-    use table_builder::TableBuilder;
-    use table_cache::{table_file_name, TableCache};
     use test_util::{test_iterator_properties, LdbIteratorIter};
-    use types::share;
 
     #[test]
     fn test_version_concat_iter() {

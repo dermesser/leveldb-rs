@@ -342,7 +342,7 @@ impl LdbIterator for TableIterator {
 #[cfg(test)]
 mod tests {
     use filter::BloomPolicy;
-    use options;
+    use options::{self, CompressionType};
     use table_builder::TableBuilder;
     use test_util::{test_iterator_properties, LdbIteratorIter};
     use types::{current_key_val, LdbIterator};

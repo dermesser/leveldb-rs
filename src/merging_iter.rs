@@ -197,7 +197,6 @@ mod tests {
     use super::*;
 
     use cmp::DefaultCmp;
-    use options::Options;
     use test_util::{test_iterator_properties, LdbIteratorIter, TestLdbIter};
     use types::{current_key_val, LdbIterator};
     use skipmap::tests;
