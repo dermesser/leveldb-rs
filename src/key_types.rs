@@ -1,5 +1,8 @@
+
+use cmp::Cmp;
 use types::SequenceNumber;
 
+use std::cmp::Ordering;
 use std::io::Write;
 
 use integer_encoding::{FixedInt, VarInt, VarIntWriter, FixedIntWriter};
@@ -90,6 +93,20 @@ pub fn parse_tag(tag: u64) -> (ValueType, u64) {
         0 => (ValueType::TypeDeletion, seq),
         1 => (ValueType::TypeValue, seq),
         _ => (ValueType::TypeValue, seq),
+    }
+}
+
+/// cmp_internal_key efficiently compares to keys in InternalKey format.
+pub fn cmp_internal_key<'a, 'b>(ucmp: &Cmp, a: InternalKey<'a>, b: InternalKey<'b>) -> Ordering {
+    match ucmp.cmp(&a[0..a.len() - 8], &b[0..b.len() - 8]) {
+        Ordering::Less => Ordering::Less,
+        Ordering::Greater => Ordering::Greater,
+        Ordering::Equal => {
+            let seqa = parse_tag(FixedInt::decode_fixed(&a[a.len() - 8..])).1;
+            let seqb = parse_tag(FixedInt::decode_fixed(&b[b.len() - 8..])).1;
+            // reverse comparison!
+            seqb.cmp(&seqa)
+        }
     }
 }
 

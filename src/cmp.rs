@@ -88,15 +88,7 @@ pub struct InternalKeyCmp(pub Rc<Box<Cmp>>);
 
 impl Cmp for InternalKeyCmp {
     fn cmp(&self, a: &[u8], b: &[u8]) -> Ordering {
-        let (_, seqa, keya) = key_types::parse_internal_key(a);
-        let (_, seqb, keyb) = key_types::parse_internal_key(b);
-
-        match self.0.cmp(keya, keyb) {
-            Ordering::Less => Ordering::Less,
-            Ordering::Greater => Ordering::Greater,
-            // reverse comparison!
-            Ordering::Equal => seqb.cmp(&seqa),
-        }
+        key_types::cmp_internal_key(self.0.as_ref().as_ref(), a, b)
     }
 
     fn id(&self) -> &'static str {
