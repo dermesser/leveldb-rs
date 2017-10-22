@@ -62,7 +62,7 @@ impl MergingIter {
                         self.direction = Direction::Forward;
                         for i in 0..self.iters.len() {
                             if i != current {
-                                self.iters[i].seek(&keybuf);
+                                self.iters[i].seek(&key);
                                 // This doesn't work if two iterators are returning the exact same
                                 // keys. However, in reality, two entries will always have differing
                                 // sequence numbers.
