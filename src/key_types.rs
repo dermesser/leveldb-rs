@@ -96,20 +96,6 @@ pub fn parse_tag(tag: u64) -> (ValueType, u64) {
     }
 }
 
-/// cmp_internal_key efficiently compares to keys in InternalKey format.
-pub fn cmp_internal_key<'a, 'b>(ucmp: &Cmp, a: InternalKey<'a>, b: InternalKey<'b>) -> Ordering {
-    match ucmp.cmp(&a[0..a.len() - 8], &b[0..b.len() - 8]) {
-        Ordering::Less => Ordering::Less,
-        Ordering::Greater => Ordering::Greater,
-        Ordering::Equal => {
-            let seqa = parse_tag(FixedInt::decode_fixed(&a[a.len() - 8..])).1;
-            let seqb = parse_tag(FixedInt::decode_fixed(&b[b.len() - 8..])).1;
-            // reverse comparison!
-            seqb.cmp(&seqa)
-        }
-    }
-}
-
 /// A memtable key is a bytestring containing (keylen, key, tag, vallen, val). This function
 /// builds such a key. It's called key because the underlying Map implementation will only be
 /// concerned with keys; the value field is not used (instead, the value is encoded in the key,
@@ -144,24 +130,41 @@ pub fn build_memtable_key(key: &[u8], value: &[u8], t: ValueType, seq: SequenceN
 /// meaningless.
 pub fn parse_memtable_key<'a>(mkey: MemtableKey<'a>) -> (usize, usize, u64, usize, usize) {
     let (keylen, mut i): (usize, usize) = VarInt::decode_var(&mkey);
-
     let keyoff = i;
     i += keylen - 8;
 
     if mkey.len() > i {
         let tag = FixedInt::decode_fixed(&mkey[i..i + 8]);
         i += 8;
-
         let (vallen, j): (usize, usize) = VarInt::decode_var(&mkey[i..]);
-
         i += j;
-
         let valoff = i;
-
         return (keylen - 8, keyoff, tag, vallen, valoff);
     } else {
         return (keylen - 8, keyoff, 0, 0, 0);
     }
+}
+
+/// cmp_memtable_key efficiently compares two memtable keys by only parsing what's actually needed.
+pub fn cmp_memtable_key<'a, 'b>(ucmp: &Cmp, a: MemtableKey<'a>, b: MemtableKey<'b>) -> Ordering {
+        let (alen, aoff): (usize, usize) = VarInt::decode_var(&a);
+        let (blen, boff): (usize, usize) = VarInt::decode_var(&b);
+        let userkey_a = &a[aoff..aoff + alen - 8];
+        let userkey_b = &b[boff..boff + blen - 8];
+
+        match ucmp.cmp(userkey_a, userkey_b) {
+            Ordering::Less => Ordering::Less,
+            Ordering::Greater => Ordering::Greater,
+            Ordering::Equal => {
+                let atag = FixedInt::decode_fixed(&a[aoff+alen-8..aoff+alen]);
+                let btag = FixedInt::decode_fixed(&b[boff+blen-8..boff+blen]);
+                let (_, aseq) = parse_tag(atag);
+                let (_, bseq) = parse_tag(btag);
+
+                // reverse!
+                bseq.cmp(&aseq)
+            }
+        }
 }
 
 /// Parse a key in InternalKey format.
@@ -172,6 +175,21 @@ pub fn parse_internal_key<'a>(ikey: InternalKey<'a>) -> (ValueType, SequenceNumb
     assert!(ikey.len() >= 8);
     let (typ, seq) = parse_tag(FixedInt::decode_fixed(&ikey[ikey.len() - 8..]));
     return (typ, seq, &ikey[0..ikey.len() - 8]);
+}
+
+/// cmp_internal_key efficiently compares keys in InternalKey format by only parsing the parts that
+/// are actually needed for a comparison.
+pub fn cmp_internal_key<'a, 'b>(ucmp: &Cmp, a: InternalKey<'a>, b: InternalKey<'b>) -> Ordering {
+    match ucmp.cmp(&a[0..a.len() - 8], &b[0..b.len() - 8]) {
+        Ordering::Less => Ordering::Less,
+        Ordering::Greater => Ordering::Greater,
+        Ordering::Equal => {
+            let seqa = parse_tag(FixedInt::decode_fixed(&a[a.len() - 8..])).1;
+            let seqb = parse_tag(FixedInt::decode_fixed(&b[b.len() - 8..])).1;
+            // reverse comparison!
+            seqb.cmp(&seqa)
+        }
+    }
 }
 
 /// truncate_to_userkey performs an in-place conversion from InternalKey to UserKey format.
