@@ -147,24 +147,24 @@ pub fn parse_memtable_key<'a>(mkey: MemtableKey<'a>) -> (usize, usize, u64, usiz
 
 /// cmp_memtable_key efficiently compares two memtable keys by only parsing what's actually needed.
 pub fn cmp_memtable_key<'a, 'b>(ucmp: &Cmp, a: MemtableKey<'a>, b: MemtableKey<'b>) -> Ordering {
-        let (alen, aoff): (usize, usize) = VarInt::decode_var(&a);
-        let (blen, boff): (usize, usize) = VarInt::decode_var(&b);
-        let userkey_a = &a[aoff..aoff + alen - 8];
-        let userkey_b = &b[boff..boff + blen - 8];
+    let (alen, aoff): (usize, usize) = VarInt::decode_var(&a);
+    let (blen, boff): (usize, usize) = VarInt::decode_var(&b);
+    let userkey_a = &a[aoff..aoff + alen - 8];
+    let userkey_b = &b[boff..boff + blen - 8];
 
-        match ucmp.cmp(userkey_a, userkey_b) {
-            Ordering::Less => Ordering::Less,
-            Ordering::Greater => Ordering::Greater,
-            Ordering::Equal => {
-                let atag = FixedInt::decode_fixed(&a[aoff+alen-8..aoff+alen]);
-                let btag = FixedInt::decode_fixed(&b[boff+blen-8..boff+blen]);
-                let (_, aseq) = parse_tag(atag);
-                let (_, bseq) = parse_tag(btag);
+    match ucmp.cmp(userkey_a, userkey_b) {
+        Ordering::Less => Ordering::Less,
+        Ordering::Greater => Ordering::Greater,
+        Ordering::Equal => {
+            let atag = FixedInt::decode_fixed(&a[aoff + alen - 8..aoff + alen]);
+            let btag = FixedInt::decode_fixed(&b[boff + blen - 8..boff + blen]);
+            let (_, aseq) = parse_tag(atag);
+            let (_, bseq) = parse_tag(btag);
 
-                // reverse!
-                bseq.cmp(&aseq)
-            }
+            // reverse!
+            bseq.cmp(&aseq)
         }
+    }
 }
 
 /// Parse a key in InternalKey format.

@@ -950,7 +950,6 @@ pub fn build_table<I: LdbIterator>(dbname: &str,
         let mut builder = TableBuilder::new(opt.clone(), f);
         while from.advance() {
             assert!(from.current(&mut kbuf, &mut vbuf));
-            i += 1;
             if firstkey.is_none() {
                 firstkey = Some(kbuf.clone());
             }

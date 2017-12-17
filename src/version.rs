@@ -92,7 +92,7 @@ impl Version {
                         return Ok(Some((v, stats)));
                     } else if typ == ValueType::TypeDeletion {
                         // Skip looking once we have found a deletion.
-                        return Ok(None)
+                        return Ok(None);
                     }
                 }
             }

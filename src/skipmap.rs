@@ -195,7 +195,7 @@ impl InnerSkipMap {
         // Keeping track of skip entries that will need to be updated
         let mut prevs: [Option<*mut Node>; MAX_HEIGHT] = [None; MAX_HEIGHT];
         let new_height = self.random_height();
-        let mut prevs = &mut prevs[0..new_height];
+        let prevs = &mut prevs[0..new_height];
 
         let mut level = MAX_HEIGHT - 1;
         let mut current = self.head.as_mut() as *mut Node;
