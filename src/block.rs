@@ -282,7 +282,7 @@ impl LdbIterator for BlockIter {
     }
 
     fn valid(&self) -> bool {
-        !self.key.is_empty() && self.val_offset > 0 && self.val_offset < self.restarts_off
+        !self.key.is_empty() && self.val_offset > 0 && self.val_offset <= self.restarts_off
     }
 
     fn current(&self, key: &mut Vec<u8>, val: &mut Vec<u8>) -> bool {
