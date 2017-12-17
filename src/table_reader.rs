@@ -326,8 +326,7 @@ impl LdbIterator for TableIterator {
     // This iterator is special in that it's valid even before the first call to advance(). It
     // behaves correctly, though.
     fn valid(&self) -> bool {
-        self.current_block.is_some() &&
-        (self.current_block.as_ref().unwrap().valid() || self.index_block.valid())
+        self.current_block.is_some() && (self.current_block.as_ref().unwrap().valid())
     }
 
     fn current(&self, key: &mut Vec<u8>, val: &mut Vec<u8>) -> bool {
