@@ -1011,7 +1011,9 @@ pub mod testutil {
     /// build_db creates a database filled with the tables created by make_version().
     pub fn build_db() -> (DB, Options) {
         let name = "db";
-        let (v, opt) = make_version();
+        let (v, mut opt) = make_version();
+        opt.reuse_logs = false;
+        opt.reuse_manifest = false;
         let mut ve = VersionEdit::new();
         ve.set_comparator_name(opt.cmp.id());
         ve.set_log_num(0);
@@ -1526,16 +1528,23 @@ mod tests {
         {
             let mut db = build_db().0;
             opt = db.opt.clone();
-
             db.put(b"xx1", b"111").unwrap();
             db.put(b"xx2", b"112").unwrap();
             db.put(b"xx3", b"113").unwrap();
             db.put(b"xx4", b"114").unwrap();
+            db.put(b"xx5", b"115").unwrap();
             db.delete(b"xx2").unwrap();
         }
 
         {
             let mut db = DB::open("db", opt.clone()).unwrap();
+            db.delete(b"xx5").unwrap();
+        }
+
+        {
+            let mut db = DB::open("db", opt.clone()).unwrap();
+
+            assert_eq!(None, db.get(b"xx5"));
 
             let ss = db.get_snapshot();
             db.put(b"xx4", b"222").unwrap();
@@ -1543,6 +1552,7 @@ mod tests {
 
             assert_eq!(Some(b"113".to_vec()), db.get_at(&ss, b"xx3").unwrap());
             assert_eq!(None, db.get_at(&ss, b"xx2").unwrap());
+            assert_eq!(None, db.get_at(&ss, b"xx5").unwrap());
 
             assert_eq!(Some(b"114".to_vec()), db.get_at(&ss, b"xx4").unwrap());
             assert_eq!(Some(b"222".to_vec()), db.get_at(&ss2, b"xx4").unwrap());
