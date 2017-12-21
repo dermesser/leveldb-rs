@@ -1069,7 +1069,7 @@ mod tests {
         let v = vs.current();
         let v = v.borrow();
         // num_level_bytes()
-        assert_eq!(434, v.num_level_bytes(0));
+        assert_eq!(483, v.num_level_bytes(0));
         assert_eq!(651, v.num_level_bytes(1));
         assert_eq!(468, v.num_level_bytes(2));
         // num_level_files()
@@ -1144,11 +1144,11 @@ mod tests {
                        vs.approximate_offset(&v,
                                              LookupKey::new("aaa".as_bytes(), 9000)
                                                  .internal_key()));
-            assert_eq!(216,
+            assert_eq!(232,
                        vs.approximate_offset(&v,
                                              LookupKey::new("bab".as_bytes(), 9000)
                                                  .internal_key()));
-            assert_eq!(1085,
+            assert_eq!(1134,
                        vs.approximate_offset(&v,
                                              LookupKey::new("fab".as_bytes(), 9000)
                                                  .internal_key()));
@@ -1173,7 +1173,7 @@ mod tests {
             assert_eq!(1, c.inputs[1].len());
             assert_eq!(1, c.grandparents.as_ref().unwrap().len());
             iterator_properties(vs.make_input_iterator(&c),
-                                9,
+                                12,
                                 Rc::new(Box::new(vs.cmp.clone())));
 
             // Expand input range on higher level.

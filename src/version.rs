@@ -601,16 +601,19 @@ pub mod testutil {
         // numbers.
 
         // Level 0 (overlapping)
+        let f2: &[(&[u8], &[u8], ValueType)] =
+            &[("aac".as_bytes(), "val1".as_bytes(), ValueType::TypeDeletion),
+              ("aax".as_bytes(), "val2".as_bytes(), ValueType::TypeValue),
+              ("aba".as_bytes(), "val3".as_bytes(), ValueType::TypeValue),
+              ("bab".as_bytes(), "val4".as_bytes(), ValueType::TypeValue),
+              ("bba".as_bytes(), "val5".as_bytes(), ValueType::TypeValue)];
+        let t2 = write_table(&env, f2, 26, 2);
         let f1: &[(&[u8], &[u8], ValueType)] =
             &[("aaa".as_bytes(), "val1".as_bytes(), ValueType::TypeValue),
               ("aab".as_bytes(), "val2".as_bytes(), ValueType::TypeValue),
-              ("aba".as_bytes(), "val3".as_bytes(), ValueType::TypeValue)];
-        let t1 = write_table(&env, f1, 25, 1);
-        let f2: &[(&[u8], &[u8], ValueType)] =
-            &[("aax".as_bytes(), "val1".as_bytes(), ValueType::TypeValue),
-              ("bab".as_bytes(), "val2".as_bytes(), ValueType::TypeValue),
-              ("bba".as_bytes(), "val3".as_bytes(), ValueType::TypeValue)];
-        let t2 = write_table(&env, f2, 22, 2);
+              ("aac".as_bytes(), "val3".as_bytes(), ValueType::TypeValue),
+              ("aba".as_bytes(), "val4".as_bytes(), ValueType::TypeValue)];
+        let t1 = write_table(&env, f1, 22, 1);
         // Level 1
         let f3: &[(&[u8], &[u8], ValueType)] =
             &[("aaa".as_bytes(), "val0".as_bytes(), ValueType::TypeValue),
@@ -705,7 +708,7 @@ mod tests {
         opt.cmp = Rc::new(Box::new(InternalKeyCmp(Rc::new(Box::new(DefaultCmp)))));
 
         let mut miter = MergingIter::new(opt.cmp.clone(), iters);
-        assert_eq!(LdbIteratorIter::wrap(&mut miter).count(), 27);
+        assert_eq!(LdbIteratorIter::wrap(&mut miter).count(), 30);
 
         // Check that all elements are in order.
         let init = LookupKey::new("000".as_bytes(), MAX_SEQUENCE_NUMBER);
@@ -719,7 +722,7 @@ mod tests {
     #[test]
     fn test_version_summary() {
         let v = make_version().0;
-        let expected = "level 0: 2 files, 434 bytes ([(1, 216), (2, 218)]); level 1: 3 files, 651 \
+        let expected = "level 0: 2 files, 483 bytes ([(1, 232), (2, 251)]); level 1: 3 files, 651 \
                         bytes ([(3, 218), (4, 216), (5, 217)]); level 2: 2 files, 468 bytes ([(6, \
                         218), (7, 250)]); level 3: 2 files, 400 bytes ([(8, 200), (9, 200)]); ";
         assert_eq!(expected, &v.level_summary());

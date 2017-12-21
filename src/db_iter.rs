@@ -229,7 +229,6 @@ impl LdbIterator for DBIterator {
                 self.iter.current(&mut self.keybuf, &mut self.savedval);
                 truncate_to_userkey(&mut self.keybuf);
                 if self.cmp.cmp(&self.keybuf, &self.savedkey) == Ordering::Less {
-                    println!("breaking with {:?} / {:?}", self.keybuf, self.savedval);
                     break;
                 }
             }
@@ -296,7 +295,7 @@ mod tests {
 
         // keys and values come from make_version(); they are each the latest entry.
         let keys: &[&[u8]] = &[b"aaa", b"aab", b"aax", b"aba", b"bab", b"bba", b"cab", b"cba"];
-        let vals: &[&[u8]] = &[b"val1", b"val2", b"val1", b"val3", b"val2", b"val3", b"val2",
+        let vals: &[&[u8]] = &[b"val1", b"val2", b"val2", b"val3", b"val4", b"val5", b"val2",
                                b"val3"];
 
         for (k, v) in keys.iter().zip(vals.iter()) {
@@ -325,7 +324,7 @@ mod tests {
 
         // keys and values come from make_version(); they are each the latest entry.
         let keys: &[&[u8]] = &[b"aaa", b"aab", b"aax", b"aba", b"bab", b"bba", b"cab", b"cba"];
-        let vals: &[&[u8]] = &[b"val1", b"val2", b"val1", b"val3", b"val2", b"val3", b"val2",
+        let vals: &[&[u8]] = &[b"val1", b"val2", b"val2", b"val3", b"val4", b"val5", b"val2",
                                b"val3"];
 
         // This specifies the direction that the iterator should move to. Based on this, an index
