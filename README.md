@@ -6,8 +6,8 @@ The implementation is very close to the original; often, you can see the same
 algorithm translated 1:1, and class (struct) and method names are similar or
 the same.
 
-**NOTE: Do not use this for production purposes unless you thoroughly evaluated
-it first, and are reasonably certain that no data loss occurs.**
+**NOTE: I do not endorse using this library for any data that you care about.**
+I do care, however, about bug reports.
 
 ## Status
 
