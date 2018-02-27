@@ -111,7 +111,7 @@ impl BloomPolicy {
             let mut i = 0;
 
             for b in data[ix..].iter() {
-                h += (*b as u32) << (8 * i);
+                h = h.overflowing_add((*b as u32) << (8 * i)).0;
                 i += 1;
             }
 
