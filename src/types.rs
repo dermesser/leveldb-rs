@@ -4,6 +4,7 @@ use error::{err, Result, StatusCode};
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::path::Path;
 
 pub const NUM_LEVELS: usize = 7;
 
@@ -139,7 +140,8 @@ pub enum FileType {
     InfoLog,
 }
 
-pub fn parse_file_name(f: &str) -> Result<(FileNum, FileType)> {
+pub fn parse_file_name<P: AsRef<Path>>(ff: P) -> Result<(FileNum, FileType)> {
+    let f = ff.as_ref().to_str().unwrap();
     if f == "CURRENT" {
         return Ok((0, FileType::Current));
     } else if f == "LOCK" {

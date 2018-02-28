@@ -11,12 +11,13 @@ use types::FileNum;
 
 use integer_encoding::FixedIntWriter;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::convert::AsRef;
 
-pub fn table_file_name(name: &str, num: FileNum) -> String {
+pub fn table_file_name<P: AsRef<Path>>(name: P, num: FileNum) -> PathBuf {
     assert!(num > 0);
-    format!("{}/{:06}.ldb", name, num)
+    name.as_ref().join(format!("{:06}.ldb", num))
 }
 
 fn filenum_to_key(num: FileNum) -> cache::CacheKey {
@@ -26,7 +27,7 @@ fn filenum_to_key(num: FileNum) -> cache::CacheKey {
 }
 
 pub struct TableCache {
-    dbname: String,
+    dbname: PathBuf,
     cache: Cache<Table>,
     opts: Options,
 }
@@ -35,9 +36,9 @@ impl TableCache {
     /// Create a new TableCache for the database named `db`, caching up to `entries` tables.
     ///
     /// opt.cmp should be the user-supplied comparator.
-    pub fn new(db: &str, opt: Options, entries: usize) -> TableCache {
+    pub fn new<P: AsRef<Path>>(db: P, opt: Options, entries: usize) -> TableCache {
         TableCache {
-            dbname: String::from(db),
+            dbname: db.as_ref().to_owned(),
             cache: Cache::new(entries),
             opts: opt,
         }
@@ -95,8 +96,8 @@ mod tests {
 
     #[test]
     fn test_table_file_name() {
-        assert_eq!("abc/000122.ldb", table_file_name("abc", 122));
-        assert_eq!("abc/1234567.ldb", table_file_name("abc", 1234567));
+        assert_eq!(Path::new("abc/000122.ldb"), table_file_name("abc", 122));
+        assert_eq!(Path::new("abc/1234567.ldb"), table_file_name("abc", 1234567));
     }
 
     fn make_key(a: u8, b: u8, c: u8) -> cache::CacheKey {
@@ -128,7 +129,7 @@ mod tests {
         // parsed/iterated by the table reader.
         let mut opt = options::for_test();
         opt.env = Rc::new(Box::new(MemEnv::new()));
-        let dbname = "testdb1";
+        let dbname = Path::new("testdb1");
         let tablename = table_file_name(dbname, 123);
         let tblpath = Path::new(&tablename);
 

@@ -6,7 +6,7 @@ use error::Result;
 use std::io::prelude::*;
 use std::fs::File;
 use std::os::unix::fs::FileExt;
-use std::path::Path;
+use std::path::{Path,PathBuf};
 
 pub trait RandomAccess {
     fn read_at(&self, off: usize, dst: &mut [u8]) -> Result<usize>;
@@ -29,7 +29,7 @@ pub trait Env {
     fn open_appendable_file(&self, &Path) -> Result<Box<Write>>;
 
     fn exists(&self, &Path) -> Result<bool>;
-    fn children(&self, &Path) -> Result<Vec<String>>;
+    fn children(&self, &Path) -> Result<Vec<PathBuf>>;
     fn size_of(&self, &Path) -> Result<usize>;
 
     fn delete(&self, &Path) -> Result<()>;
