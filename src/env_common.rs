@@ -1,7 +1,6 @@
 use std::thread;
 use std::time;
 
-
 pub fn micros() -> u64 {
     loop {
         let now = time::SystemTime::now().duration_since(time::UNIX_EPOCH);

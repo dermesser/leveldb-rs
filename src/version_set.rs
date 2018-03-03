@@ -1,21 +1,20 @@
-
 use cmp::{Cmp, InternalKeyCmp};
 use env::Env;
-use error::{err, Status, StatusCode, Result};
+use error::{err, Result, Status, StatusCode};
 use key_types::{parse_internal_key, InternalKey, UserKey};
-use log::{LogWriter, LogReader};
+use log::{LogReader, LogWriter};
 use merging_iter::MergingIter;
 use options::Options;
 use table_cache::TableCache;
-use types::{parse_file_name, share, NUM_LEVELS, FileMetaData, FileNum, FileType, LdbIterator,
-            Shared};
+use types::{parse_file_name, share, FileMetaData, FileNum, FileType, LdbIterator, Shared,
+            NUM_LEVELS};
 use version::{new_version_iter, total_size, FileMetaHandle, Version};
 use version_edit::VersionEdit;
 
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::io::Write;
-use std::path::{Path,PathBuf};
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use std::os::unix::ffi::OsStrExt;
@@ -142,9 +141,11 @@ impl Compaction {
             return false;
         }
         let grandparents = self.grandparents.as_ref().unwrap();
-        while self.grandparent_ix < grandparents.len() &&
-              self.icmp.cmp(k, &grandparents[self.grandparent_ix].borrow().largest) ==
-              Ordering::Greater {
+        while self.grandparent_ix < grandparents.len()
+            && self.icmp
+                .cmp(k, &grandparents[self.grandparent_ix].borrow().largest)
+                == Ordering::Greater
+        {
             if self.seen_key {
                 self.overlapped_bytes += grandparents[self.grandparent_ix].borrow().size;
             }
@@ -292,9 +293,11 @@ impl VersionSet {
             assert!(level < NUM_LEVELS - 1);
 
             for f in &current.files[level] {
-                if self.compaction_ptrs[level].is_empty() ||
-                   self.cmp.cmp(&f.borrow().largest, &self.compaction_ptrs[level]) ==
-                   Ordering::Greater {
+                if self.compaction_ptrs[level].is_empty()
+                    || self.cmp
+                        .cmp(&f.borrow().largest, &self.compaction_ptrs[level])
+                        == Ordering::Greater
+                {
                     c.add_input(0, f.clone());
                     break;
                 }
@@ -326,14 +329,18 @@ impl VersionSet {
         Some(c)
     }
 
-    pub fn compact_range<'a, 'b>(&mut self,
-                                 level: usize,
-                                 from: InternalKey<'a>,
-                                 to: InternalKey<'b>)
-                                 -> Option<Compaction> {
+    pub fn compact_range<'a, 'b>(
+        &mut self,
+        level: usize,
+        from: InternalKey<'a>,
+        to: InternalKey<'b>,
+    ) -> Option<Compaction> {
         assert!(self.current.is_some());
-        let mut inputs =
-            self.current.as_ref().unwrap().borrow().overlapping_inputs(level, from, to);
+        let mut inputs = self.current.as_ref().unwrap().borrow().overlapping_inputs(
+            level,
+            from,
+            to,
+        );
         if inputs.is_empty() {
             return None;
         }
@@ -367,9 +374,12 @@ impl VersionSet {
         // Set up level+1 inputs.
         compaction.inputs[1] = current.overlapping_inputs(level + 1, &smallest, &largest);
 
-        let (mut allstart, mut alllimit) =
-            get_range(&self.cmp,
-                      compaction.inputs[0].iter().chain(compaction.inputs[1].iter()));
+        let (mut allstart, mut alllimit) = get_range(
+            &self.cmp,
+            compaction.inputs[0]
+                .iter()
+                .chain(compaction.inputs[1].iter()),
+        );
 
         // Check if we can add more inputs in the current level without having to compact more
         // inputs from level+1.
@@ -378,30 +388,36 @@ impl VersionSet {
             let inputs1_size = total_size(compaction.inputs[1].iter());
             let expanded0_size = total_size(expanded0.iter());
             // ...if we picked up more files in the current level, and the total size is acceptable
-            if expanded0.len() > compaction.num_inputs(0) &&
-               (inputs1_size + expanded0_size) < 25 * self.opt.max_file_size {
+            if expanded0.len() > compaction.num_inputs(0)
+                && (inputs1_size + expanded0_size) < 25 * self.opt.max_file_size
+            {
                 let (new_start, new_limit) = get_range(&self.cmp, expanded0.iter());
                 let expanded1 = current.overlapping_inputs(level + 1, &new_start, &new_limit);
                 if expanded1.len() == compaction.num_inputs(1) {
-                    log!(self.opt.log,
-                         "Expanding inputs@{} {}+{} ({}+{} bytes) to {}+{} ({}+{} bytes)",
-                         level,
-                         compaction.inputs[0].len(),
-                         compaction.inputs[1].len(),
-                         total_size(compaction.inputs[0].iter()),
-                         total_size(compaction.inputs[1].iter()),
-                         expanded0.len(),
-                         expanded1.len(),
-                         total_size(expanded0.iter()),
-                         total_size(expanded1.iter()));
+                    log!(
+                        self.opt.log,
+                        "Expanding inputs@{} {}+{} ({}+{} bytes) to {}+{} ({}+{} bytes)",
+                        level,
+                        compaction.inputs[0].len(),
+                        compaction.inputs[1].len(),
+                        total_size(compaction.inputs[0].iter()),
+                        total_size(compaction.inputs[1].iter()),
+                        expanded0.len(),
+                        expanded1.len(),
+                        total_size(expanded0.iter()),
+                        total_size(expanded1.iter())
+                    );
 
                     smallest = new_start;
                     largest = new_limit;
                     compaction.inputs[0] = expanded0;
                     compaction.inputs[1] = expanded1;
-                    let (newallstart, newalllimit) =
-                        get_range(&self.cmp,
-                                  compaction.inputs[0].iter().chain(compaction.inputs[1].iter()));
+                    let (newallstart, newalllimit) = get_range(
+                        &self.cmp,
+                        compaction.inputs[0]
+                            .iter()
+                            .chain(compaction.inputs[1].iter()),
+                    );
                     allstart = newallstart;
                     alllimit = newalllimit;
                 }
@@ -411,19 +427,21 @@ impl VersionSet {
         // Set the list of grandparent (l+2) inputs to the files overlapped by the current overall
         // range.
         if level + 2 < NUM_LEVELS {
-            let grandparents = self.current
-                .as_ref()
-                .unwrap()
-                .borrow()
-                .overlapping_inputs(level + 2, &allstart, &alllimit);
+            let grandparents = self.current.as_ref().unwrap().borrow().overlapping_inputs(
+                level + 2,
+                &allstart,
+                &alllimit,
+            );
             compaction.grandparents = Some(grandparents);
         }
 
-        log!(self.opt.log,
-             "Compacting @{} {:?} .. {:?}",
-             level,
-             smallest,
-             largest);
+        log!(
+            self.opt.log,
+            "Compacting @{} {:?} .. {:?}",
+            level,
+            smallest,
+            largest
+        );
 
         compaction.edit().set_compact_pointer(level, &largest);
         self.compaction_ptrs[level] = largest;
@@ -451,7 +469,10 @@ impl VersionSet {
                 edit.add_file(level, f.borrow().clone());
             }
         }
-        self.descriptor_log.as_mut().unwrap().add_record(&edit.encode())
+        self.descriptor_log
+            .as_mut()
+            .unwrap()
+            .add_record(&edit.encode())
     }
 
     /// log_and_apply merges the given edit with the current state and generates a new version. It
@@ -482,8 +503,9 @@ impl VersionSet {
         if self.descriptor_log.is_none() {
             let descname = manifest_file_name(&self.dbname, self.manifest_num);
             edit.set_next_file(self.next_file_num);
-            self.descriptor_log =
-                Some(LogWriter::new(self.opt.env.open_writable_file(Path::new(&descname))?));
+            self.descriptor_log = Some(LogWriter::new(self.opt
+                .env
+                .open_writable_file(Path::new(&descname))?));
             self.write_snapshot()?;
         }
 
@@ -545,9 +567,11 @@ impl VersionSet {
         let mut builder = Builder::new();
         {
             let mut descfile = self.opt.env.open_sequential_file(Path::new(&descfilename))?;
-            let mut logreader = LogReader::new(&mut descfile,
-                                               // checksum=
-                                               true);
+            let mut logreader = LogReader::new(
+                &mut descfile,
+                // checksum=
+                true,
+            );
 
             let mut log_number = None;
             let mut prev_log_number = None;
@@ -579,20 +603,26 @@ impl VersionSet {
                 self.log_num = ln;
                 self.mark_file_number_used(ln);
             } else {
-                return err(StatusCode::Corruption,
-                           "no meta-lognumber entry in descriptor");
+                return err(
+                    StatusCode::Corruption,
+                    "no meta-lognumber entry in descriptor",
+                );
             }
             if let Some(nfn) = next_file_number {
                 self.next_file_num = nfn + 1;
             } else {
-                return err(StatusCode::Corruption,
-                           "no meta-next-file entry in descriptor");
+                return err(
+                    StatusCode::Corruption,
+                    "no meta-next-file entry in descriptor",
+                );
             }
             if let Some(ls) = last_seq {
                 self.last_seq = ls;
             } else {
-                return err(StatusCode::Corruption,
-                           "no last-sequence entry in descriptor");
+                return err(
+                    StatusCode::Corruption,
+                    "no last-sequence entry in descriptor",
+                );
             }
             if let Some(pln) = prev_log_number {
                 self.prev_log_num = pln;
@@ -607,21 +637,27 @@ impl VersionSet {
         self.finalize(&mut v);
         self.add_version(v);
         self.manifest_num = self.next_file_num - 1;
-        log!(self.opt.log,
-             "Recovered manifest with next_file={} manifest_num={} log_num={} prev_log_num={} \
-              last_seq={}",
-             self.next_file_num,
-             self.manifest_num,
-             self.log_num,
-             self.prev_log_num,
-             self.last_seq);
+        log!(
+            self.opt.log,
+            "Recovered manifest with next_file={} manifest_num={} log_num={} prev_log_num={} \
+             last_seq={}",
+            self.next_file_num,
+            self.manifest_num,
+            self.log_num,
+            self.prev_log_num,
+            self.last_seq
+        );
 
         // A new manifest needs to be written only if we don't reuse the existing one.
         Ok(!self.reuse_manifest(&descfilename, &current))
     }
 
     /// reuse_manifest checks whether the current manifest can be reused.
-    fn reuse_manifest(&mut self, current_manifest_path: &Path, current_manifest_base: &Path) -> bool {
+    fn reuse_manifest(
+        &mut self,
+        current_manifest_path: &Path,
+        current_manifest_base: &Path,
+    ) -> bool {
         // Note: The original has only one option, reuse_logs; reuse_logs has to be set in order to
         // reuse manifests.
         // However, there's not much that stops us from reusing manifests without reusing logs or
@@ -645,7 +681,9 @@ impl VersionSet {
             }
 
             assert!(self.descriptor_log.is_none());
-            let s = self.opt.env.open_appendable_file(Path::new(current_manifest_path));
+            let s = self.opt
+                .env
+                .open_appendable_file(Path::new(current_manifest_path));
             if let Ok(f) = s {
                 log!(self.opt.log, "reusing manifest {:?}", current_manifest_path);
                 self.descriptor_log = Some(LogWriter::new(f));
@@ -674,17 +712,21 @@ impl VersionSet {
                     if let Ok(tbl) = s {
                         iters.push(Box::new(tbl.iter()));
                     } else {
-                        log!(self.opt.log,
-                             "error opening table {}: {}",
-                             f.borrow().num,
-                             s.err().unwrap());
+                        log!(
+                            self.opt.log,
+                            "error opening table {}: {}",
+                            f.borrow().num,
+                            s.err().unwrap()
+                        );
                     }
                 }
             } else {
                 // Create concatenating iterator higher levels.
-                iters.push(Box::new(new_version_iter(c.inputs[i].clone(),
-                                                     self.cache.clone(),
-                                                     self.opt.cmp.clone())));
+                iters.push(Box::new(new_version_iter(
+                    c.inputs[i].clone(),
+                    self.cache.clone(),
+                    self.opt.cmp.clone(),
+                )));
             }
         }
         assert!(iters.len() <= cap);
@@ -733,11 +775,13 @@ impl Builder {
 
     /// maybe_add_file adds a file f at level to version v, if it's not already marked as deleted
     /// in this edit. It also asserts that the ordering of files is preserved.
-    fn maybe_add_file(&mut self,
-                      cmp: &InternalKeyCmp,
-                      v: &mut Version,
-                      level: usize,
-                      f: FileMetaHandle) {
+    fn maybe_add_file(
+        &mut self,
+        cmp: &InternalKeyCmp,
+        v: &mut Version,
+        level: usize,
+        f: FileMetaHandle,
+    ) {
         // Only add file if it's not already deleted.
         if self.deleted[level].iter().any(|d| *d == f.borrow().num) {
             return;
@@ -746,9 +790,13 @@ impl Builder {
             let files = &v.files[level];
             if level > 0 && !files.is_empty() {
                 // File must be after last file in level.
-                assert_eq!(cmp.cmp(&files[files.len() - 1].borrow().largest,
-                                   &f.borrow().smallest),
-                           Ordering::Less);
+                assert_eq!(
+                    cmp.cmp(
+                        &files[files.len() - 1].borrow().largest,
+                        &f.borrow().smallest
+                    ),
+                    Ordering::Less
+                );
             }
         }
         v.files[level].push(f);
@@ -768,9 +816,9 @@ impl Builder {
 
             let iadded = added.into_iter();
             let ibasefiles = basefiles.into_iter();
-            let merged = merge_iters(iadded,
-                                     ibasefiles,
-                                     |a, b| cmp.cmp(&a.borrow().smallest, &b.borrow().smallest));
+            let merged = merge_iters(iadded, ibasefiles, |a, b| {
+                cmp.cmp(&a.borrow().smallest, &b.borrow().smallest)
+            });
             for m in merged {
                 self.maybe_add_file(cmp, v, level, m);
             }
@@ -780,8 +828,10 @@ impl Builder {
                 continue;
             }
             for i in 1..v.files[level].len() {
-                let (prev_end, this_begin) = (&v.files[level][i - 1].borrow().largest,
-                                              &v.files[level][i].borrow().smallest);
+                let (prev_end, this_begin) = (
+                    &v.files[level][i - 1].borrow().largest,
+                    &v.files[level][i].borrow().smallest,
+                );
                 assert!(cmp.cmp(prev_end, this_begin) < Ordering::Equal);
             }
         }
@@ -797,7 +847,10 @@ pub fn manifest_file_name<P: AsRef<Path>>(dbname: P, file_num: FileNum) -> PathB
 }
 
 fn temp_file_name<P: AsRef<Path>>(dbname: P, file_num: FileNum) -> PathBuf {
-    dbname.as_ref().join(format!("{:06}.dbtmp", file_num)).to_owned()
+    dbname
+        .as_ref()
+        .join(format!("{:06}.dbtmp", file_num))
+        .to_owned()
 }
 
 fn current_file_name<P: AsRef<Path>>(dbname: P) -> PathBuf {
@@ -809,13 +862,19 @@ pub fn read_current_file(env: &Box<Env>, dbname: &Path) -> Result<String> {
     let mut f = env.open_sequential_file(Path::new(&current_file_name(dbname)))?;
     f.read_to_string(&mut current)?;
     if current.is_empty() || !current.ends_with('\n') {
-        return err(StatusCode::Corruption,
-                   "current file is empty or has no newline");
+        return err(
+            StatusCode::Corruption,
+            "current file is empty or has no newline",
+        );
     }
     Ok(current)
 }
 
-pub fn set_current_file<P: AsRef<Path>>(env: &Box<Env>, dbname: P, manifest_file_num: FileNum) -> Result<()> {
+pub fn set_current_file<P: AsRef<Path>>(
+    env: &Box<Env>,
+    dbname: P,
+    manifest_file_num: FileNum,
+) -> Result<()> {
     let dbname = dbname.as_ref();
     let manifest_base = manifest_name(manifest_file_num);
     let tempfile = temp_file_name(dbname, manifest_file_num);
@@ -839,14 +898,16 @@ fn sort_files_by_smallest<C: Cmp>(cmp: &C, files: &mut Vec<FileMetaHandle>) {
 }
 
 /// merge_iters merges and collects the items from two sorted iterators.
-fn merge_iters<Item,
-               C: Fn(&Item, &Item) -> Ordering,
-               I: Iterator<Item = Item>,
-               J: Iterator<Item = Item>>
-    (mut iter_a: I,
-     mut iter_b: J,
-     cmp: C)
-     -> Vec<Item> {
+fn merge_iters<
+    Item,
+    C: Fn(&Item, &Item) -> Ordering,
+    I: Iterator<Item = Item>,
+    J: Iterator<Item = Item>,
+>(
+    mut iter_a: I,
+    mut iter_b: J,
+    cmp: C,
+) -> Vec<Item> {
     let mut a = iter_a.next();
     let mut b = iter_b.next();
     let mut out = vec![];
@@ -881,9 +942,10 @@ fn merge_iters<Item,
 
 /// get_range returns the indices of the files within files that have the smallest lower bound
 /// respectively the largest upper bound.
-fn get_range<'a, C: Cmp, I: Iterator<Item = &'a FileMetaHandle>>(c: &C,
-                                                                 files: I)
-                                                                 -> (Vec<u8>, Vec<u8>) {
+fn get_range<'a, C: Cmp, I: Iterator<Item = &'a FileMetaHandle>>(
+    c: &C,
+    files: I,
+) -> (Vec<u8>, Vec<u8>) {
     let mut smallest = None;
     let mut largest = None;
     for f in files {
@@ -941,9 +1003,10 @@ mod tests {
     fn test_version_set_merge_iters() {
         let v1 = vec![2, 4, 6, 8, 10];
         let v2 = vec![1, 3, 5, 7];
-        assert_eq!(vec![1, 2, 3, 4, 5, 6, 7, 8, 10],
-                   merge_iters(v1.into_iter(), v2.into_iter(), |a, b| a.cmp(&b)));
-
+        assert_eq!(
+            vec![1, 2, 3, 4, 5, 6, 7, 8, 10],
+            merge_iters(v1.into_iter(), v2.into_iter(), |a, b| a.cmp(&b))
+        );
     }
 
     #[test]
@@ -955,8 +1018,10 @@ mod tests {
     fn test_version_set_get_range() {
         let cmp = DefaultCmp;
         let fs = example_files();
-        assert_eq!(("a".as_bytes().to_vec(), "z".as_bytes().to_vec()),
-                   get_range(&cmp, fs.iter()));
+        assert_eq!(
+            ("a".as_bytes().to_vec(), "z".as_bytes().to_vec()),
+            get_range(&cmp, fs.iter())
+        );
     }
 
     #[test]
@@ -967,8 +1032,12 @@ mod tests {
         let mut fmd = FileMetaData::default();
         fmd.num = 21;
         fmd.size = 123;
-        fmd.smallest = LookupKey::new("klm".as_bytes(), 777).internal_key().to_vec();
-        fmd.largest = LookupKey::new("kop".as_bytes(), 700).internal_key().to_vec();
+        fmd.smallest = LookupKey::new("klm".as_bytes(), 777)
+            .internal_key()
+            .to_vec();
+        fmd.largest = LookupKey::new("kop".as_bytes(), 700)
+            .internal_key()
+            .to_vec();
 
         let mut ve = VersionEdit::new();
         ve.add_file(1, fmd);
@@ -981,13 +1050,17 @@ mod tests {
         let mut ptrs: [Vec<u8>; NUM_LEVELS] = Default::default();
         b.apply(&ve, &mut ptrs);
 
-        assert_eq!(&[120 as u8, 120, 120, 1, 123, 0, 0, 0, 0, 0, 0],
-                   ptrs[2].as_slice());
+        assert_eq!(
+            &[120 as u8, 120, 120, 1, 123, 0, 0, 0, 0, 0, 0],
+            ptrs[2].as_slice()
+        );
         assert_eq!(2, b.deleted[0][0]);
         assert_eq!(1, b.added[1].len());
 
-        let mut v2 = Version::new(share(TableCache::new("db", opt.clone(), 100)),
-                                  opt.cmp.clone());
+        let mut v2 = Version::new(
+            share(TableCache::new("db", opt.clone(), 100)),
+            opt.cmp.clone(),
+        );
         b.save_to(&InternalKeyCmp(opt.cmp.clone()), &v, &mut v2);
         // Second file in L0 was removed.
         assert_eq!(1, v2.files[0].len());
@@ -999,9 +1072,11 @@ mod tests {
     #[test]
     fn test_version_set_log_and_apply() {
         let (_, opt) = make_version();
-        let mut vs = VersionSet::new("db",
-                                     opt.clone(),
-                                     share(TableCache::new("db", opt.clone(), 100)));
+        let mut vs = VersionSet::new(
+            "db",
+            opt.clone(),
+            share(TableCache::new("db", opt.clone(), 100)),
+        );
 
         assert_eq!(2, vs.new_file_number());
         // Simulate NewDB
@@ -1039,8 +1114,12 @@ mod tests {
             let mut fmd = FileMetaData::default();
             fmd.num = 21;
             fmd.size = 123;
-            fmd.smallest = LookupKey::new("abc".as_bytes(), 777).internal_key().to_vec();
-            fmd.largest = LookupKey::new("def".as_bytes(), 700).internal_key().to_vec();
+            fmd.smallest = LookupKey::new("abc".as_bytes(), 777)
+                .internal_key()
+                .to_vec();
+            fmd.largest = LookupKey::new("def".as_bytes(), 700)
+                .internal_key()
+                .to_vec();
             ve.add_file(1, fmd);
             vs.log_and_apply(ve).unwrap();
 
@@ -1144,18 +1223,18 @@ mod tests {
         {
             // approximate_offset()
             let v = vs.current();
-            assert_eq!(0,
-                       vs.approximate_offset(&v,
-                                             LookupKey::new("aaa".as_bytes(), 9000)
-                                                 .internal_key()));
-            assert_eq!(232,
-                       vs.approximate_offset(&v,
-                                             LookupKey::new("bab".as_bytes(), 9000)
-                                                 .internal_key()));
-            assert_eq!(1134,
-                       vs.approximate_offset(&v,
-                                             LookupKey::new("fab".as_bytes(), 9000)
-                                                 .internal_key()));
+            assert_eq!(
+                0,
+                vs.approximate_offset(&v, LookupKey::new("aaa".as_bytes(), 9000).internal_key())
+            );
+            assert_eq!(
+                232,
+                vs.approximate_offset(&v, LookupKey::new("bab".as_bytes(), 9000).internal_key())
+            );
+            assert_eq!(
+                1134,
+                vs.approximate_offset(&v, LookupKey::new("fab".as_bytes(), 9000).internal_key())
+            );
         }
         // The following tests reuse the same version set and verify that various compactions work
         // like they should.
@@ -1164,7 +1243,8 @@ mod tests {
             // compact level 0 with a partial range.
             let from = LookupKey::new("000".as_bytes(), 1000);
             let to = LookupKey::new("ab".as_bytes(), 1010);
-            let c = vs.compact_range(0, from.internal_key(), to.internal_key()).unwrap();
+            let c = vs.compact_range(0, from.internal_key(), to.internal_key())
+                .unwrap();
             assert_eq!(2, c.inputs[0].len());
             assert_eq!(1, c.inputs[1].len());
             assert_eq!(1, c.grandparents.unwrap().len());
@@ -1172,29 +1252,36 @@ mod tests {
             // compact level 0, but entire range of keys in version.
             let from = LookupKey::new("000".as_bytes(), 1000);
             let to = LookupKey::new("zzz".as_bytes(), 1010);
-            let c = vs.compact_range(0, from.internal_key(), to.internal_key()).unwrap();
+            let c = vs.compact_range(0, from.internal_key(), to.internal_key())
+                .unwrap();
             assert_eq!(2, c.inputs[0].len());
             assert_eq!(1, c.inputs[1].len());
             assert_eq!(1, c.grandparents.as_ref().unwrap().len());
-            iterator_properties(vs.make_input_iterator(&c),
-                                12,
-                                Rc::new(Box::new(vs.cmp.clone())));
+            iterator_properties(
+                vs.make_input_iterator(&c),
+                12,
+                Rc::new(Box::new(vs.cmp.clone())),
+            );
 
             // Expand input range on higher level.
             let from = LookupKey::new("dab".as_bytes(), 1000);
             let to = LookupKey::new("eab".as_bytes(), 1010);
-            let c = vs.compact_range(1, from.internal_key(), to.internal_key()).unwrap();
+            let c = vs.compact_range(1, from.internal_key(), to.internal_key())
+                .unwrap();
             assert_eq!(3, c.inputs[0].len());
             assert_eq!(1, c.inputs[1].len());
             assert_eq!(0, c.grandparents.as_ref().unwrap().len());
-            iterator_properties(vs.make_input_iterator(&c),
-                                12,
-                                Rc::new(Box::new(vs.cmp.clone())));
+            iterator_properties(
+                vs.make_input_iterator(&c),
+                12,
+                Rc::new(Box::new(vs.cmp.clone())),
+            );
 
             // is_trivial_move
             let from = LookupKey::new("fab".as_bytes(), 1000);
             let to = LookupKey::new("fba".as_bytes(), 1010);
-            let mut c = vs.compact_range(2, from.internal_key(), to.internal_key()).unwrap();
+            let mut c = vs.compact_range(2, from.internal_key(), to.internal_key())
+                .unwrap();
             // pretend it's not manual
             c.manual = false;
             assert!(c.is_trivial_move());
@@ -1203,7 +1290,8 @@ mod tests {
             let from = LookupKey::new("000".as_bytes(), 1000);
             let to = LookupKey::new("zzz".as_bytes(), 1010);
             let mid = LookupKey::new("abc".as_bytes(), 1010);
-            let mut c = vs.compact_range(0, from.internal_key(), to.internal_key()).unwrap();
+            let mut c = vs.compact_range(0, from.internal_key(), to.internal_key())
+                .unwrap();
             assert!(!c.should_stop_before(from.internal_key()));
             assert!(!c.should_stop_before(mid.internal_key()));
             assert!(!c.should_stop_before(to.internal_key()));
@@ -1211,14 +1299,16 @@ mod tests {
             // is_base_level_for
             let from = LookupKey::new("000".as_bytes(), 1000);
             let to = LookupKey::new("zzz".as_bytes(), 1010);
-            let mut c = vs.compact_range(0, from.internal_key(), to.internal_key()).unwrap();
+            let mut c = vs.compact_range(0, from.internal_key(), to.internal_key())
+                .unwrap();
             assert!(c.is_base_level_for("aaa".as_bytes()));
             assert!(!c.is_base_level_for("hac".as_bytes()));
 
             // input/add_input_deletions
             let from = LookupKey::new("000".as_bytes(), 1000);
             let to = LookupKey::new("zzz".as_bytes(), 1010);
-            let mut c = vs.compact_range(0, from.internal_key(), to.internal_key()).unwrap();
+            let mut c = vs.compact_range(0, from.internal_key(), to.internal_key())
+                .unwrap();
             for inp in &[(0, 0, 1), (0, 1, 2), (1, 0, 3)] {
                 let f = &c.inputs[inp.0][inp.1];
                 assert_eq!(inp.2, f.borrow().num);

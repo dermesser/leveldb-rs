@@ -1,7 +1,7 @@
 use key_types::ValueType;
 use memtable::MemTable;
 use types::SequenceNumber;
-use integer_encoding::{VarInt, VarIntWriter, FixedInt};
+use integer_encoding::{FixedInt, VarInt, VarIntWriter};
 
 use std::io::Write;
 
@@ -48,7 +48,9 @@ impl WriteBatch {
     /// Marks an entry to be deleted from the database.
     #[allow(unused_assignments)]
     pub fn delete(&mut self, k: &[u8]) {
-        self.entries.write(&[ValueType::TypeDeletion as u8]).unwrap();
+        self.entries
+            .write(&[ValueType::TypeDeletion as u8])
+            .unwrap();
         self.entries.write_varint(k.len()).unwrap();
         self.entries.write(k).unwrap();
 
@@ -126,7 +128,6 @@ impl<'a> Iterator for WriteBatchIter<'a> {
         let k = &self.batch.entries[self.ix..self.ix + klen];
         self.ix += klen;
 
-
         if tag == ValueType::TypeValue as u8 {
             let (vlen, m) = usize::decode_var(&self.batch.entries[self.ix..]);
             self.ix += m;
@@ -148,11 +149,13 @@ mod tests {
     #[test]
     fn test_write_batch() {
         let mut b = WriteBatch::new();
-        let entries = vec![("abc".as_bytes(), "def".as_bytes()),
-                           ("123".as_bytes(), "456".as_bytes()),
-                           ("xxx".as_bytes(), "yyy".as_bytes()),
-                           ("zzz".as_bytes(), "".as_bytes()),
-                           ("010".as_bytes(), "".as_bytes())];
+        let entries = vec![
+            ("abc".as_bytes(), "def".as_bytes()),
+            ("123".as_bytes(), "456".as_bytes()),
+            ("xxx".as_bytes(), "yyy".as_bytes()),
+            ("zzz".as_bytes(), "".as_bytes()),
+            ("010".as_bytes(), "".as_bytes()),
+        ];
 
         for &(k, v) in entries.iter() {
             if !v.is_empty() {

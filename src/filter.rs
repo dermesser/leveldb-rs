@@ -1,4 +1,3 @@
-
 use std::rc::Rc;
 
 use integer_encoding::FixedInt;
@@ -243,11 +242,13 @@ mod tests {
         let mut concat = vec![];
         let mut offs = vec![];
 
-        for d in ["abc123def456".as_bytes(),
-                  "xxx111xxx222".as_bytes(),
-                  "ab00cd00ab".as_bytes(),
-                  "908070605040302010".as_bytes()]
-            .iter() {
+        for d in [
+            "abc123def456".as_bytes(),
+            "xxx111xxx222".as_bytes(),
+            "ab00cd00ab".as_bytes(),
+            "908070605040302010".as_bytes(),
+        ].iter()
+        {
             offs.push(concat.len());
             concat.extend_from_slice(d);
         }
@@ -266,7 +267,9 @@ mod tests {
 
     /// Creates a filter using the keys from input_data() but converted to InternalKey format.
     fn create_internalkey_filter() -> Vec<u8> {
-        let fpol = Rc::new(Box::new(InternalFilterPolicy::new(BloomPolicy::new(_BITS_PER_KEY))));
+        let fpol = Rc::new(Box::new(InternalFilterPolicy::new(BloomPolicy::new(
+            _BITS_PER_KEY,
+        ))));
         let (data, offs) = input_data();
         let (mut intdata, mut intoffs) = (vec![], vec![]);
 

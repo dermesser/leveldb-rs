@@ -1,5 +1,5 @@
-extern crate rusty_leveldb;
 extern crate rand;
+extern crate rusty_leveldb;
 
 use rusty_leveldb::CompressionType;
 use rusty_leveldb::DB;

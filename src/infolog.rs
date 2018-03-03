@@ -1,4 +1,3 @@
-
 use std::io::{self, Write};
 
 pub struct Logger(pub Box<Write>);

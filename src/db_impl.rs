@@ -7,7 +7,7 @@ use db_iter::DBIterator;
 
 use cmp::{Cmp, InternalKeyCmp};
 use env::{Env, FileLock};
-use error::{err, StatusCode, Result};
+use error::{err, Result, StatusCode};
 use filter::{BoxedFilterPolicy, InternalFilterPolicy};
 use infolog::Logger;
 use log::{LogReader, LogWriter};
@@ -18,8 +18,8 @@ use options::Options;
 use snapshot::{Snapshot, SnapshotList};
 use table_builder::TableBuilder;
 use table_cache::{table_file_name, TableCache};
-use types::{parse_file_name, share, FileMetaData, FileNum, FileType, LdbIterator,
-            MAX_SEQUENCE_NUMBER, NUM_LEVELS, SequenceNumber, Shared};
+use types::{parse_file_name, share, FileMetaData, FileNum, FileType, LdbIterator, SequenceNumber,
+            Shared, MAX_SEQUENCE_NUMBER, NUM_LEVELS};
 use version_edit::VersionEdit;
 use version_set::{manifest_file_name, read_current_file, set_current_file, Compaction, VersionSet};
 use version::Version;
@@ -108,8 +108,9 @@ impl DB {
         // Create log file if an old one is not being reused.
         if db.log.is_none() {
             let lognum = db.vset.borrow_mut().new_file_number();
-            let logfile =
-                db.opt.env.open_writable_file(Path::new(&log_file_name(&db.name, lognum)))?;
+            let logfile = db.opt
+                .env
+                .open_writable_file(Path::new(&log_file_name(&db.name, lognum)))?;
             ve.set_log_num(lognum);
             db.log = Some(LogWriter::new(BufWriter::new(logfile)));
             db.log_num = Some(lognum);
@@ -157,8 +158,10 @@ impl DB {
             if e.code == StatusCode::NotFound && self.opt.create_if_missing {
                 self.initialize_db()?;
             } else {
-                return err(StatusCode::InvalidArgument,
-                           "database does not exist and create_if_missing is false");
+                return err(
+                    StatusCode::InvalidArgument,
+                    "database does not exist and create_if_missing is false",
+                );
             }
         }
 
@@ -175,8 +178,9 @@ impl DB {
         for file in &filenames {
             if let Ok((num, typ)) = parse_file_name(&file) {
                 expected.remove(&num);
-                if typ == FileType::Log &&
-                   (num >= self.vset.borrow().log_num || num == self.vset.borrow().prev_log_num) {
+                if typ == FileType::Log
+                    && (num >= self.vset.borrow().log_num || num == self.vset.borrow().prev_log_num)
+                {
                     log_files.push(num);
                 }
             }
@@ -209,19 +213,22 @@ impl DB {
     /// recover_log_file reads a single log file into a memtable, writing new L0 tables if
     /// necessary. If is_last is true, it checks whether the log file can be reused, and sets up
     /// the database's logging handles appropriately if that's the case.
-    fn recover_log_file(&mut self,
-                        log_num: FileNum,
-                        is_last: bool,
-                        ve: &mut VersionEdit)
-                        -> Result<(bool, SequenceNumber)> {
+    fn recover_log_file(
+        &mut self,
+        log_num: FileNum,
+        is_last: bool,
+        ve: &mut VersionEdit,
+    ) -> Result<(bool, SequenceNumber)> {
         let filename = log_file_name(&self.name, log_num);
         let logfile = self.opt.env.open_sequential_file(Path::new(&filename))?;
         // Use the user-supplied comparator; it will be wrapped inside a MemtableKeyCmp.
         let cmp: Rc<Box<Cmp>> = self.opt.cmp.clone();
 
-        let mut logreader = LogReader::new(logfile,
-                                           // checksum=
-                                           true);
+        let mut logreader = LogReader::new(
+            logfile,
+            // checksum=
+            true,
+        );
         log!(self.opt.log, "Recovering log file {:?}", filename);
         let mut scratch = vec![];
         let mut mem = MemTable::new(cmp.clone());
@@ -236,9 +243,11 @@ impl DB {
                 break;
             }
             if len < 12 {
-                log!(self.opt.log,
-                     "corruption in log file {:06}: record shorter than 12B",
-                     log_num);
+                log!(
+                    self.opt.log,
+                    "corruption in log file {:06}: record shorter than 12B",
+                    log_num
+                );
                 continue;
             }
 
@@ -315,9 +324,7 @@ impl DB {
                     self.cache.borrow_mut().evict(num).is_ok();
                 }
                 log!(self.opt.log, "Deleting file type={:?} num={}", typ, num);
-                if let Err(e) = self.opt
-                    .env
-                    .delete(&self.name.join(&name)) {
+                if let Err(e) = self.opt.env.delete(&self.name.join(&name)) {
                     log!(self.opt.log, "Deleting file num={} failed: {}", num, e);
                 }
             }
@@ -333,10 +340,10 @@ impl DB {
                 self.lock = Some(lockfile);
                 Ok(())
             }
-            Err(ref e) if e.code == StatusCode::LockError => {
-                err(StatusCode::LockError,
-                    "database lock is held by another instance")
-            }
+            Err(ref e) if e.code == StatusCode::LockError => err(
+                StatusCode::LockError,
+                "database lock is held by another instance",
+            ),
             Err(e) => Err(e),
         }
     }
@@ -466,10 +473,12 @@ impl DB {
 
     /// new_iter_at returns a DBIterator at the supplied snapshot.
     pub fn new_iter_at(&mut self, ss: Snapshot) -> Result<DBIterator> {
-        Ok(DBIterator::new(self.opt.cmp.clone(),
-                           self.vset.clone(),
-                           self.merge_iterators()?,
-                           ss))
+        Ok(DBIterator::new(
+            self.opt.cmp.clone(),
+            self.vset.clone(),
+            self.merge_iterators()?,
+            ss,
+        ))
     }
 
     /// merge_iterators produces a MergingIter merging the entries in the memtable, the immutable
@@ -535,7 +544,9 @@ impl DB {
         } else {
             // Create new memtable.
             let logn = self.vset.borrow_mut().new_file_number();
-            let logf = self.opt.env.open_writable_file(Path::new(&log_file_name(&self.name, logn)));
+            let logf = self.opt
+                .env
+                .open_writable_file(Path::new(&log_file_name(&self.name, logn)));
             if logf.is_err() {
                 self.vset.borrow_mut().reuse_file_number(logn);
                 Err(logf.err().unwrap())
@@ -587,12 +598,16 @@ impl DB {
         // Compact memtable.
         self.make_room_for_write(true)?;
 
-        let mut ifrom = LookupKey::new(from, MAX_SEQUENCE_NUMBER).internal_key().to_vec();
+        let mut ifrom = LookupKey::new(from, MAX_SEQUENCE_NUMBER)
+            .internal_key()
+            .to_vec();
         let iend = LookupKey::new_full(to, 0, ValueType::TypeDeletion);
 
         for l in 0..max_level + 1 {
             loop {
-                let c_ = self.vset.borrow_mut().compact_range(l, &ifrom, iend.internal_key());
+                let c_ = self.vset
+                    .borrow_mut()
+                    .compact_range(l, &ifrom, iend.internal_key());
                 if let Some(c) = c_ {
                     // Update ifrom to the largest key of the last file in this compaction.
                     let ix = c.num_inputs(0) - 1;
@@ -624,15 +639,19 @@ impl DB {
                 log!(self.opt.log, "trivial move failed: {}", e);
                 Err(e)
             } else {
-                log!(self.opt.log,
-                     "Moved num={} bytes={} from L{} to L{}",
-                     num,
-                     size,
-                     level,
-                     level + 1);
-                log!(self.opt.log,
-                     "Summary: {}",
-                     self.vset.borrow().current_summary());
+                log!(
+                    self.opt.log,
+                    "Moved num={} bytes={} from L{} to L{}",
+                    num,
+                    size,
+                    level,
+                    level + 1
+                );
+                log!(
+                    self.opt.log,
+                    "Summary: {}",
+                    self.vset.borrow().current_summary()
+                );
                 Ok(())
             }
         } else {
@@ -647,9 +666,11 @@ impl DB {
                 log!(self.opt.log, "Compaction work failed: {}", e);
             }
             self.install_compaction_results(state)?;
-            log!(self.opt.log,
-                 "Compaction finished: {}",
-                 self.vset.borrow().current_summary());
+            log!(
+                self.opt.log,
+                "Compaction finished: {}",
+                self.vset.borrow().current_summary()
+            );
 
             self.delete_obsolete_files()
         }
@@ -675,11 +696,12 @@ impl DB {
     }
 
     /// write_l0_table writes the given memtable to a table file.
-    fn write_l0_table(&mut self,
-                      memt: &MemTable,
-                      ve: &mut VersionEdit,
-                      base: Option<&Version>)
-                      -> Result<()> {
+    fn write_l0_table(
+        &mut self,
+        memt: &MemTable,
+        ve: &mut VersionEdit,
+        base: Option<&Version>,
+    ) -> Result<()> {
         let start_ts = self.opt.env.micros();
         let num = self.vset.borrow_mut().new_file_number();
         log!(self.opt.log, "Start write of L0 table {:06}", num);
@@ -694,11 +716,16 @@ impl DB {
 
         let cache_result = self.cache.borrow_mut().get_table(num);
         if let Err(e) = cache_result {
-            log!(self.opt.log,
-                 "L0 table {:06} not returned by cache: {}",
-                 num,
-                 e);
-            self.opt.env.delete(Path::new(&table_file_name(&self.name, num))).is_ok();
+            log!(
+                self.opt.log,
+                "L0 table {:06} not returned by cache: {}",
+                num,
+                e
+            );
+            self.opt
+                .env
+                .delete(Path::new(&table_file_name(&self.name, num)))
+                .is_ok();
             return Err(e);
         }
 
@@ -708,8 +735,10 @@ impl DB {
 
         let mut level = 0;
         if let Some(b) = base {
-            level = b.pick_memtable_output_level(parse_internal_key(&fmd.smallest).2,
-                                                 parse_internal_key(&fmd.largest).2);
+            level = b.pick_memtable_output_level(
+                parse_internal_key(&fmd.smallest).2,
+                parse_internal_key(&fmd.largest).2,
+            );
         }
 
         self.add_stats(level, stats);
@@ -725,12 +754,14 @@ impl DB {
             assert!(cs.builder.is_none());
         }
         let start_ts = self.opt.env.micros();
-        log!(self.opt.log,
-             "Compacting {} files at L{} and {} files at L{}",
-             cs.compaction.num_inputs(0),
-             cs.compaction.level(),
-             cs.compaction.num_inputs(1),
-             cs.compaction.level() + 1);
+        log!(
+            self.opt.log,
+            "Compacting {} files at L{} and {} files at L{}",
+            cs.compaction.num_inputs(0),
+            cs.compaction.level(),
+            cs.compaction.num_inputs(1),
+            cs.compaction.level() + 1
+        );
 
         let mut input = self.vset.borrow().make_input_iterator(&cs.compaction);
         input.seek_to_first();
@@ -775,8 +806,9 @@ impl DB {
             }
             // Entry is deletion; no older version is observable by any snapshot; and all entries
             // in compacted levels with smaller sequence numbers will
-            if ktyp == ValueType::TypeDeletion && seq <= cs.smallest_seq &&
-               cs.compaction.is_base_level_for(ukey) {
+            if ktyp == ValueType::TypeDeletion && seq <= cs.smallest_seq
+                && cs.compaction.is_base_level_for(ukey)
+            {
                 last_seq_for_key = seq;
                 input.advance();
                 continue;
@@ -825,10 +857,11 @@ impl DB {
         Ok(())
     }
 
-    fn finish_compaction_output(&mut self,
-                                cs: &mut CompactionState,
-                                largest: Vec<u8>)
-                                -> Result<()> {
+    fn finish_compaction_output(
+        &mut self,
+        cs: &mut CompactionState,
+        largest: Vec<u8>,
+    ) -> Result<()> {
         assert!(cs.builder.is_some());
         let output_num = cs.current_output().num;
         assert!(output_num > 0);
@@ -852,29 +885,35 @@ impl DB {
                 log!(self.opt.log, "New table can't be read: {}", e);
                 return Err(e);
             }
-            log!(self.opt.log,
-                 "New table num={}: keys={} size={}",
-                 output_num,
-                 entries,
-                 bytes);
+            log!(
+                self.opt.log,
+                "New table num={}: keys={} size={}",
+                output_num,
+                entries,
+                bytes
+            );
         }
         Ok(())
     }
 
     fn install_compaction_results(&mut self, mut cs: CompactionState) -> Result<()> {
-        log!(self.opt.log,
-             "Compacted {} L{} files + {} L{} files => {}B",
-             cs.compaction.num_inputs(0),
-             cs.compaction.level(),
-             cs.compaction.num_inputs(1),
-             cs.compaction.level() + 1,
-             cs.total_bytes);
+        log!(
+            self.opt.log,
+            "Compacted {} L{} files + {} L{} files => {}B",
+            cs.compaction.num_inputs(0),
+            cs.compaction.level(),
+            cs.compaction.num_inputs(1),
+            cs.compaction.level() + 1,
+            cs.total_bytes
+        );
         cs.compaction.add_input_deletions();
         let level = cs.compaction.level();
         for output in &cs.outputs {
             cs.compaction.edit().add_file(level + 1, output.clone());
         }
-        self.vset.borrow_mut().log_and_apply(cs.compaction.into_edit())
+        self.vset
+            .borrow_mut()
+            .log_and_apply(cs.compaction.into_edit())
     }
 }
 
@@ -932,11 +971,12 @@ impl CompactionStats {
     }
 }
 
-pub fn build_table<I: LdbIterator, P: AsRef<Path>>(dbname: P,
-                                   opt: &Options,
-                                   mut from: I,
-                                   num: FileNum)
-                                   -> Result<FileMetaData> {
+pub fn build_table<I: LdbIterator, P: AsRef<Path>>(
+    dbname: P,
+    opt: &Options,
+    mut from: I,
+    num: FileNum,
+) -> Result<FileMetaData> {
     from.reset();
     let filename = table_file_name(dbname.as_ref(), num);
 
@@ -996,7 +1036,8 @@ fn open_info_log<E: Env + ?Sized, P: AsRef<Path>>(env: &E, db: P) -> Logger {
     env.mkdir(Path::new(db)).is_ok();
     if let Ok(e) = env.exists(Path::new(&logfilename)) {
         if e {
-            env.rename(Path::new(&logfilename), Path::new(&oldlogfilename)).is_ok();
+            env.rename(Path::new(&logfilename), Path::new(&oldlogfilename))
+                .is_ok();
         }
     }
     if let Ok(w) = env.open_writable_file(Path::new(&logfilename)) {
@@ -1105,10 +1146,12 @@ mod tests {
         let mut mt = MemTable::new(options::for_test().cmp);
         let mut i = 1;
         for k in ["abc", "def", "ghi", "jkl", "mno", "aabc", "test123"].iter() {
-            mt.add(i,
-                   ValueType::TypeValue,
-                   k.as_bytes(),
-                   "looooongval".as_bytes());
+            mt.add(
+                i,
+                ValueType::TypeValue,
+                k.as_bytes(),
+                "looooongval".as_bytes(),
+            );
             i += 1;
         }
         mt
@@ -1128,8 +1171,10 @@ mod tests {
             opt.reuse_manifest = false;
             let _ = DB::open("otherdb", opt.clone()).unwrap();
 
-            println!("children after: {:?}",
-                     env.children(Path::new("otherdb/")).unwrap());
+            println!(
+                "children after: {:?}",
+                env.children(Path::new("otherdb/")).unwrap()
+            );
             assert!(env.exists(Path::new("otherdb/CURRENT")).unwrap());
             // Database is initialized and initial manifest reused.
             assert!(!env.exists(Path::new("otherdb/MANIFEST-000001")).unwrap());
@@ -1142,8 +1187,10 @@ mod tests {
             opt.reuse_manifest = true;
             let mut db = DB::open("db", opt.clone()).unwrap();
 
-            println!("children after: {:?}",
-                     env.children(Path::new("db/")).unwrap());
+            println!(
+                "children after: {:?}",
+                env.children(Path::new("db/")).unwrap()
+            );
             assert!(env.exists(Path::new("db/CURRENT")).unwrap());
             // Database is initialized and initial manifest reused.
             assert!(env.exists(Path::new("db/MANIFEST-000001")).unwrap());
@@ -1155,15 +1202,19 @@ mod tests {
         }
 
         {
-            println!("children before: {:?}",
-                     env.children(Path::new("db/")).unwrap());
+            println!(
+                "children before: {:?}",
+                env.children(Path::new("db/")).unwrap()
+            );
             let mut opt = opt.clone();
             opt.reuse_manifest = false;
             opt.reuse_logs = false;
             let mut db = DB::open("db", opt.clone()).unwrap();
 
-            println!("children after: {:?}",
-                     env.children(Path::new("db/")).unwrap());
+            println!(
+                "children after: {:?}",
+                env.children(Path::new("db/")).unwrap()
+            );
             // Obsolete manifest is deleted.
             assert!(!env.exists(Path::new("db/MANIFEST-000001")).unwrap());
             // New manifest is created.
@@ -1176,27 +1227,34 @@ mod tests {
             // Check that entry exists and is correct. Phew, long call chain!
             let current = db.current();
             log!(opt.log, "files: {:?}", current.borrow().files);
-            assert_eq!("def".as_bytes(),
-                       current.borrow_mut()
-                           .get(LookupKey::new("abc".as_bytes(), 1).internal_key())
-                           .unwrap()
-                           .unwrap()
-                           .0
-                           .as_slice());
+            assert_eq!(
+                "def".as_bytes(),
+                current
+                    .borrow_mut()
+                    .get(LookupKey::new("abc".as_bytes(), 1).internal_key())
+                    .unwrap()
+                    .unwrap()
+                    .0
+                    .as_slice()
+            );
             db.put("abe".as_bytes(), "def".as_bytes()).unwrap();
         }
 
         {
-            println!("children before: {:?}",
-                     env.children(Path::new("db/")).unwrap());
+            println!(
+                "children before: {:?}",
+                env.children(Path::new("db/")).unwrap()
+            );
             // reuse_manifest above causes the old manifest to be deleted as obsolete, but no new
             // manifest is written. CURRENT becomes stale.
             let mut opt = opt.clone();
             opt.reuse_logs = true;
             let db = DB::open("db", opt).unwrap();
 
-            println!("children after: {:?}",
-                     env.children(Path::new("db/")).unwrap());
+            println!(
+                "children after: {:?}",
+                env.children(Path::new("db/")).unwrap()
+            );
             assert!(!env.exists(Path::new("db/MANIFEST-000001")).unwrap());
             assert!(env.exists(Path::new("db/MANIFEST-000002")).unwrap());
             assert!(!env.exists(Path::new("db/MANIFEST-000005")).unwrap());
@@ -1205,12 +1263,14 @@ mod tests {
             assert!(!env.exists(Path::new("db/000006.log")).unwrap());
             // Log is reused, so memtable should contain last written entry from above.
             assert_eq!(1, db.mem.len());
-            assert_eq!("def".as_bytes(),
-                       db.mem
-                           .get(&LookupKey::new("abe".as_bytes(), 3))
-                           .0
-                           .unwrap()
-                           .as_slice());
+            assert_eq!(
+                "def".as_bytes(),
+                db.mem
+                    .get(&LookupKey::new("abe".as_bytes(), 3))
+                    .0
+                    .unwrap()
+                    .as_slice()
+            );
         }
     }
 
@@ -1219,11 +1279,15 @@ mod tests {
         let (mut db, opt) = build_db();
         let env = &opt.env;
 
-        println!("children before: {:?}",
-                 env.children(Path::new("db/")).unwrap());
+        println!(
+            "children before: {:?}",
+            env.children(Path::new("db/")).unwrap()
+        );
         db.compact_range(b"aaa", b"dba").unwrap();
-        println!("children after: {:?}",
-                 env.children(Path::new("db/")).unwrap());
+        println!(
+            "children after: {:?}",
+            env.children(Path::new("db/")).unwrap()
+        );
 
         assert_eq!(250, opt.env.size_of(Path::new("db/000007.ldb")).unwrap());
         assert_eq!(200, opt.env.size_of(Path::new("db/000008.ldb")).unwrap());
@@ -1251,11 +1315,15 @@ mod tests {
 
         db.put(b"xxx", b"123").unwrap();
 
-        println!("children before: {:?}",
-                 env.children(Path::new("db/")).unwrap());
+        println!(
+            "children before: {:?}",
+            env.children(Path::new("db/")).unwrap()
+        );
         db.compact_range(b"aaa", b"dba").unwrap();
-        println!("children after: {:?}",
-                 env.children(Path::new("db/")).unwrap());
+        println!(
+            "children after: {:?}",
+            env.children(Path::new("db/")).unwrap()
+        );
 
         assert_eq!(250, opt.env.size_of(Path::new("db/000007.ldb")).unwrap());
         assert_eq!(200, opt.env.size_of(Path::new("db/000008.ldb")).unwrap());
@@ -1284,8 +1352,10 @@ mod tests {
     fn test_db_impl_locking() {
         let opt = options::for_test();
         let db = DB::open("db", opt.clone()).unwrap();
-        let want_err = Status::new(StatusCode::LockError,
-                                   "database lock is held by another instance");
+        let want_err = Status::new(
+            StatusCode::LockError,
+            "database lock is held by another instance",
+        );
         assert_eq!(want_err, DB::open("db", opt.clone()).err().unwrap());
     }
 
@@ -1298,10 +1368,14 @@ mod tests {
         let f = build_table("db", &opt, mt.iter(), 123).unwrap();
         let path = Path::new("db/000123.ldb");
 
-        assert_eq!(LookupKey::new("aabc".as_bytes(), 6).internal_key(),
-                   f.smallest.as_slice());
-        assert_eq!(LookupKey::new("test123".as_bytes(), 7).internal_key(),
-                   f.largest.as_slice());
+        assert_eq!(
+            LookupKey::new("aabc".as_bytes(), 6).internal_key(),
+            f.smallest.as_slice()
+        );
+        assert_eq!(
+            LookupKey::new("test123".as_bytes(), 7).internal_key(),
+            f.largest.as_slice()
+        );
         assert_eq!(379, f.size);
         assert_eq!(123, f.num);
         assert!(opt.env.exists(path).unwrap());
@@ -1316,15 +1390,27 @@ mod tests {
         {
             // Corrupt table; make sure it doesn't load fully.
             let mut buf = vec![];
-            opt.env.open_sequential_file(path).unwrap().read_to_end(&mut buf).unwrap();
+            opt.env
+                .open_sequential_file(path)
+                .unwrap()
+                .read_to_end(&mut buf)
+                .unwrap();
             buf[150] += 1;
-            opt.env.open_writable_file(path).unwrap().write_all(&buf).unwrap();
+            opt.env
+                .open_writable_file(path)
+                .unwrap()
+                .write_all(&buf)
+                .unwrap();
 
             let mut tc = TableCache::new("db", opt.clone(), 100);
             let tbl = tc.get_table(123).unwrap();
             // The last two entries are skipped due to the corruption above.
-            assert_eq!(5,
-                       LdbIteratorIter::wrap(&mut tbl.iter()).map(|v| println!("{:?}", v)).count());
+            assert_eq!(
+                5,
+                LdbIteratorIter::wrap(&mut tbl.iter())
+                    .map(|v| println!("{:?}", v))
+                    .count()
+            );
         }
     }
 
@@ -1354,8 +1440,10 @@ mod tests {
         assert!(db.get_at(&old_ss, "xyz".as_bytes()).unwrap().is_none());
 
         // memtable get
-        assert_eq!("123".as_bytes(),
-                   db.get("xyz".as_bytes()).unwrap().as_slice());
+        assert_eq!(
+            "123".as_bytes(),
+            db.get("xyz".as_bytes()).unwrap().as_slice()
+        );
         assert!(db.get_internal(31, "xyy".as_bytes()).unwrap().is_some());
         assert!(db.get_internal(32, "xyy".as_bytes()).unwrap().is_some());
 
@@ -1363,20 +1451,29 @@ mod tests {
         assert!(db.get_internal(32, "xyz".as_bytes()).unwrap().is_some());
 
         // table get
-        assert_eq!("val2".as_bytes(),
-                   db.get("eab".as_bytes()).unwrap().as_slice());
+        assert_eq!(
+            "val2".as_bytes(),
+            db.get("eab".as_bytes()).unwrap().as_slice()
+        );
         assert!(db.get_internal(3, "eab".as_bytes()).unwrap().is_none());
         assert!(db.get_internal(32, "eab".as_bytes()).unwrap().is_some());
 
         {
             let ss = db.get_snapshot();
-            assert_eq!("val2".as_bytes(),
-                       db.get_at(&ss, "eab".as_bytes()).unwrap().unwrap().as_slice());
+            assert_eq!(
+                "val2".as_bytes(),
+                db.get_at(&ss, "eab".as_bytes())
+                    .unwrap()
+                    .unwrap()
+                    .as_slice()
+            );
         }
 
         // from table.
-        assert_eq!("val2".as_bytes(),
-                   db.get("cab".as_bytes()).unwrap().as_slice());
+        assert_eq!(
+            "val2".as_bytes(),
+            db.get("cab".as_bytes()).unwrap().as_slice()
+        );
     }
 
     #[test]
@@ -1412,7 +1509,6 @@ mod tests {
         assert!(env.exists(Path::new(&table_file_name(name, 13))).unwrap());
     }
 
-
     #[test]
     fn test_db_impl_compaction_trivial_move() {
         let mut db = DB::open("db", options::for_test()).unwrap();
@@ -1427,8 +1523,10 @@ mod tests {
         db.imm = Some(imm);
         db.compact_memtable().unwrap();
 
-        println!("children after: {:?}",
-                 db.opt.env.children(Path::new("db/")).unwrap());
+        println!(
+            "children after: {:?}",
+            db.opt.env.children(Path::new("db/")).unwrap()
+        );
         assert!(db.opt.env.exists(Path::new("db/000004.ldb")).unwrap());
 
         {
@@ -1462,9 +1560,10 @@ mod tests {
         assert!(db.opt.env.exists(Path::new("db/000002.log")).unwrap());
         assert!(db.opt.env.exists(Path::new("db/000003.ldb")).unwrap());
         assert_eq!(351, db.opt.env.size_of(Path::new("db/000003.ldb")).unwrap());
-        assert_eq!(7,
-                   LdbIteratorIter::wrap(&mut db.cache.borrow_mut().get_table(3).unwrap().iter())
-                       .count());
+        assert_eq!(
+            7,
+            LdbIteratorIter::wrap(&mut db.cache.borrow_mut().get_table(3).unwrap().iter()).count()
+        );
     }
 
     #[test]
@@ -1515,7 +1614,10 @@ mod tests {
         let name = "db";
 
         let stuff = "abcdefghijkl".as_bytes();
-        env.open_writable_file(Path::new("db/000001.ldb")).unwrap().write_all(stuff).unwrap();
+        env.open_writable_file(Path::new("db/000001.ldb"))
+            .unwrap()
+            .write_all(stuff)
+            .unwrap();
         let mut fmd = FileMetaData::default();
         fmd.num = 1;
 

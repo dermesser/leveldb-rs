@@ -3,7 +3,7 @@
 //! returned.
 
 use cache::{self, Cache};
-use error::{err, StatusCode, Result};
+use error::{err, Result, StatusCode};
 use key_types::InternalKey;
 use options::Options;
 use table_reader::Table;
@@ -44,10 +44,11 @@ impl TableCache {
         }
     }
 
-    pub fn get<'a>(&mut self,
-                   file_num: FileNum,
-                   key: InternalKey<'a>)
-                   -> Result<Option<(Vec<u8>, Vec<u8>)>> {
+    pub fn get<'a>(
+        &mut self,
+        file_num: FileNum,
+        key: InternalKey<'a>,
+    ) -> Result<Option<(Vec<u8>, Vec<u8>)>> {
         let tbl = self.get_table(file_num)?;
         tbl.get(key)
     }
@@ -97,7 +98,10 @@ mod tests {
     #[test]
     fn test_table_file_name() {
         assert_eq!(Path::new("abc/000122.ldb"), table_file_name("abc", 122));
-        assert_eq!(Path::new("abc/1234567.ldb"), table_file_name("abc", 1234567));
+        assert_eq!(
+            Path::new("abc/1234567.ldb"),
+            table_file_name("abc", 1234567)
+        );
     }
 
     fn make_key(a: u8, b: u8, c: u8) -> cache::CacheKey {
@@ -115,7 +119,12 @@ mod tests {
         let w = o.env.open_writable_file(p).unwrap();
         let mut b = TableBuilder::new_raw(o, w);
 
-        let data = vec![("abc", "def"), ("abd", "dee"), ("bcd", "asa"), ("bsr", "a00")];
+        let data = vec![
+            ("abc", "def"),
+            ("abd", "dee"),
+            ("bcd", "asa"),
+            ("bsr", "a00"),
+        ];
 
         for &(k, v) in data.iter() {
             b.add(k.as_bytes(), v.as_bytes()).unwrap();
@@ -139,11 +148,15 @@ mod tests {
 
         let mut cache = TableCache::new(dbname, opt.clone(), 10);
         assert!(cache.cache.get(&filenum_to_key(123)).is_none());
-        assert_eq!(LdbIteratorIter::wrap(&mut cache.get_table(123).unwrap().iter()).count(),
-                   4);
+        assert_eq!(
+            LdbIteratorIter::wrap(&mut cache.get_table(123).unwrap().iter()).count(),
+            4
+        );
         // Test cached table.
-        assert_eq!(LdbIteratorIter::wrap(&mut cache.get_table(123).unwrap().iter()).count(),
-                   4);
+        assert_eq!(
+            LdbIteratorIter::wrap(&mut cache.get_table(123).unwrap().iter()).count(),
+            4
+        );
 
         assert!(cache.cache.get(&filenum_to_key(123)).is_some());
         assert!(cache.evict(123).is_ok());

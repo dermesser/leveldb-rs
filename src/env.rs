@@ -6,7 +6,7 @@ use error::Result;
 use std::io::prelude::*;
 use std::fs::File;
 use std::os::unix::fs::FileExt;
-use std::path::{Path,PathBuf};
+use std::path::{Path, PathBuf};
 
 pub trait RandomAccess {
     fn read_at(&self, off: usize, dst: &mut [u8]) -> Result<usize>;

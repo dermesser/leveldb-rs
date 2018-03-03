@@ -1,4 +1,3 @@
-
 use cmp::Cmp;
 use key_types::{parse_internal_key, truncate_to_userkey, LookupKey, ValueType};
 use merging_iter::MergingIter;
@@ -36,11 +35,12 @@ pub struct DBIterator {
 }
 
 impl DBIterator {
-    pub fn new(cmp: Rc<Box<Cmp>>,
-               vset: Shared<VersionSet>,
-               iter: MergingIter,
-               ss: Snapshot)
-               -> DBIterator {
+    pub fn new(
+        cmp: Rc<Box<Cmp>>,
+        vset: Shared<VersionSet>,
+        iter: MergingIter,
+        ss: Snapshot,
+    ) -> DBIterator {
         DBIterator {
             cmp: cmp,
             vset: vset,
@@ -130,8 +130,9 @@ impl DBIterator {
             let (typ, seq, ukey) = parse_internal_key(&self.keybuf);
 
             if seq > 0 && seq <= self.ss.sequence() {
-                if value_type != ValueType::TypeDeletion &&
-                   self.cmp.cmp(ukey, &self.savedkey) == Ordering::Less {
+                if value_type != ValueType::TypeDeletion
+                    && self.cmp.cmp(ukey, &self.savedkey) == Ordering::Less
+                {
                     // We found a non-deleted entry for a previous key (in the previous iteration)
                     break;
                 }
@@ -185,8 +186,10 @@ impl LdbIterator for DBIterator {
             assert!(self.iter.current(&mut self.savedkey, &mut self.savedval));
             truncate_to_userkey(&mut self.savedkey);
         }
-        self.find_next_user_entry(// skipping=
-                                  true)
+        self.find_next_user_entry(
+            // skipping=
+            true,
+        )
     }
     fn current(&self, key: &mut Vec<u8>, val: &mut Vec<u8>) -> bool {
         if !self.valid() {
@@ -243,11 +246,14 @@ impl LdbIterator for DBIterator {
         self.dir = Direction::Forward;
         self.savedkey.clear();
         self.savedval.clear();
-        self.savedkey.extend_from_slice(LookupKey::new(to, self.ss.sequence()).internal_key());
+        self.savedkey
+            .extend_from_slice(LookupKey::new(to, self.ss.sequence()).internal_key());
         self.iter.seek(&self.savedkey);
         if self.iter.valid() {
-            self.find_next_user_entry(// skipping=
-                                      false);
+            self.find_next_user_entry(
+                // skipping=
+                false,
+            );
         } else {
             self.valid = false;
         }
@@ -257,8 +263,10 @@ impl LdbIterator for DBIterator {
         self.savedval.clear();
         self.iter.seek_to_first();
         if self.iter.valid() {
-            self.find_next_user_entry(// skipping=
-                                      false);
+            self.find_next_user_entry(
+                // skipping=
+                false,
+            );
         } else {
             self.valid = false;
         }
@@ -294,9 +302,12 @@ mod tests {
         let mut iter = db.new_iter().unwrap();
 
         // keys and values come from make_version(); they are each the latest entry.
-        let keys: &[&[u8]] = &[b"aaa", b"aab", b"aax", b"aba", b"bab", b"bba", b"cab", b"cba"];
-        let vals: &[&[u8]] = &[b"val1", b"val2", b"val2", b"val3", b"val4", b"val5", b"val2",
-                               b"val3"];
+        let keys: &[&[u8]] = &[
+            b"aaa", b"aab", b"aax", b"aba", b"bab", b"bba", b"cab", b"cba"
+        ];
+        let vals: &[&[u8]] = &[
+            b"val1", b"val2", b"val2", b"val3", b"val4", b"val5", b"val2", b"val3"
+        ];
 
         for (k, v) in keys.iter().zip(vals.iter()) {
             assert!(iter.advance());
@@ -323,31 +334,38 @@ mod tests {
         let mut iter = db.new_iter().unwrap();
 
         // keys and values come from make_version(); they are each the latest entry.
-        let keys: &[&[u8]] = &[b"aaa", b"aab", b"aax", b"aba", b"bab", b"bba", b"cab", b"cba"];
-        let vals: &[&[u8]] = &[b"val1", b"val2", b"val2", b"val3", b"val4", b"val5", b"val2",
-                               b"val3"];
+        let keys: &[&[u8]] = &[
+            b"aaa", b"aab", b"aax", b"aba", b"bab", b"bba", b"cab", b"cba"
+        ];
+        let vals: &[&[u8]] = &[
+            b"val1", b"val2", b"val2", b"val3", b"val4", b"val5", b"val2", b"val3"
+        ];
 
         // This specifies the direction that the iterator should move to. Based on this, an index
         // into keys/vals is incremented/decremented so that we get a nice test checking iterator
         // move correctness.
-        let dirs: &[Direction] = &[Direction::Forward,
-                                   Direction::Forward,
-                                   Direction::Forward,
-                                   Direction::Reverse,
-                                   Direction::Reverse,
-                                   Direction::Reverse,
-                                   Direction::Forward,
-                                   Direction::Forward,
-                                   Direction::Reverse,
-                                   Direction::Forward,
-                                   Direction::Forward,
-                                   Direction::Forward,
-                                   Direction::Forward];
+        let dirs: &[Direction] = &[
+            Direction::Forward,
+            Direction::Forward,
+            Direction::Forward,
+            Direction::Reverse,
+            Direction::Reverse,
+            Direction::Reverse,
+            Direction::Forward,
+            Direction::Forward,
+            Direction::Reverse,
+            Direction::Forward,
+            Direction::Forward,
+            Direction::Forward,
+            Direction::Forward,
+        ];
         let mut i = 0;
         iter.advance();
         for d in dirs {
-            assert_eq!((keys[i].to_vec(), vals[i].to_vec()),
-                       current_key_val(&iter).unwrap());
+            assert_eq!(
+                (keys[i].to_vec(), vals[i].to_vec()),
+                current_key_val(&iter).unwrap()
+            );
             match *d {
                 Direction::Forward => {
                     assert!(iter.advance());
@@ -368,7 +386,9 @@ mod tests {
 
         // gca is the deleted entry.
         let keys: &[&[u8]] = &[b"aab", b"aaa", b"cab", b"eaa", b"aaa", b"iba", b"fba"];
-        let vals: &[&[u8]] = &[b"val2", b"val1", b"val2", b"val1", b"val1", b"val2", b"val3"];
+        let vals: &[&[u8]] = &[
+            b"val2", b"val1", b"val2", b"val1", b"val1", b"val2", b"val3"
+        ];
 
         for (k, v) in keys.iter().zip(vals.iter()) {
             println!("{:?}", String::from_utf8(k.to_vec()).unwrap());
@@ -385,8 +405,10 @@ mod tests {
         // Seek skips over deleted entry.
         iter.seek(b"gca");
         assert!(iter.valid());
-        assert_eq!((b"gda".to_vec(), b"val5".to_vec()),
-                   current_key_val(&iter).unwrap());
+        assert_eq!(
+            (b"gda".to_vec(), b"val5".to_vec()),
+            current_key_val(&iter).unwrap()
+        );
     }
 
     #[test]
@@ -429,7 +451,6 @@ mod tests {
             db.delete(b"xx2").unwrap();
         }
 
-
         {
             let mut db = DB::open("db", opt.clone()).unwrap();
             db.put(b"xx4", b"222").unwrap();
@@ -442,19 +463,17 @@ mod tests {
             // xx5 should not be visible.
             db.put(b"xx5", b"223").unwrap();
 
-            let expected: HashMap<Vec<u8>, Vec<u8>> = HashMap::from_iter(vec![
-                                                  (b"xx1".to_vec(), b"111".to_vec()),
-                                                  (b"xx4".to_vec(), b"222".to_vec()),
-                                                  (b"aaa".to_vec(), b"val1".to_vec()),
-                                                  (b"cab".to_vec(), b"val2".to_vec()),
-            ]
-                .into_iter());
-            let non_existing: HashSet<Vec<u8>> = HashSet::from_iter(vec![
-                                                      b"gca".to_vec(),
-                                                      b"xx2".to_vec(),
-                                                      b"xx5".to_vec(),
-            ]
-                .into_iter());
+            let expected: HashMap<Vec<u8>, Vec<u8>> = HashMap::from_iter(
+                vec![
+                    (b"xx1".to_vec(), b"111".to_vec()),
+                    (b"xx4".to_vec(), b"222".to_vec()),
+                    (b"aaa".to_vec(), b"val1".to_vec()),
+                    (b"cab".to_vec(), b"val2".to_vec()),
+                ].into_iter(),
+            );
+            let non_existing: HashSet<Vec<u8>> = HashSet::from_iter(
+                vec![b"gca".to_vec(), b"xx2".to_vec(), b"xx5".to_vec()].into_iter(),
+            );
 
             let mut iter = db.new_iter_at(ss.clone()).unwrap();
             for (k, v) in LdbIteratorIter::wrap(&mut iter) {

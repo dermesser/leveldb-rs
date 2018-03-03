@@ -54,8 +54,10 @@ impl BlockBuilder {
 
     pub fn add(&mut self, key: &[u8], val: &[u8]) {
         assert!(self.restart_counter <= self.opt.block_restart_interval);
-        assert!(self.buffer.is_empty() ||
-                self.opt.cmp.cmp(self.last_key.as_slice(), key) == Ordering::Less);
+        assert!(
+            self.buffer.is_empty()
+                || self.opt.cmp.cmp(self.last_key.as_slice(), key) == Ordering::Less
+        );
 
         let mut shared = 0;
 
@@ -77,9 +79,15 @@ impl BlockBuilder {
 
         let non_shared = key.len() - shared;
 
-        self.buffer.write_varint(shared).expect("write to buffer failed");
-        self.buffer.write_varint(non_shared).expect("write to buffer failed");
-        self.buffer.write_varint(val.len()).expect("write to buffer failed");
+        self.buffer
+            .write_varint(shared)
+            .expect("write to buffer failed");
+        self.buffer
+            .write_varint(non_shared)
+            .expect("write to buffer failed");
+        self.buffer
+            .write_varint(val.len())
+            .expect("write to buffer failed");
         self.buffer.extend_from_slice(&key[shared..]);
         self.buffer.extend_from_slice(val);
 
@@ -96,11 +104,15 @@ impl BlockBuilder {
 
         // 1. Append RESTARTS
         for r in self.restarts.iter() {
-            self.buffer.write_fixedint(*r as u32).expect("write to buffer failed");
+            self.buffer
+                .write_fixedint(*r as u32)
+                .expect("write to buffer failed");
         }
 
         // 2. Append N_RESTARTS
-        self.buffer.write_fixedint(self.restarts.len() as u32).expect("write to buffer failed");
+        self.buffer
+            .write_fixedint(self.restarts.len() as u32)
+            .expect("write to buffer failed");
 
         // done
         self.buffer
@@ -113,12 +125,17 @@ mod tests {
     use options;
 
     fn get_data() -> Vec<(&'static [u8], &'static [u8])> {
-        vec![("key1".as_bytes(), "value1".as_bytes()),
-             ("loooooooooooooooooooooooooooooooooongerkey1".as_bytes(), "shrtvl1".as_bytes()),
-             ("medium length key 1".as_bytes(), "some value 2".as_bytes()),
-             ("prefix_key1".as_bytes(), "value".as_bytes()),
-             ("prefix_key2".as_bytes(), "value".as_bytes()),
-             ("prefix_key3".as_bytes(), "value".as_bytes())]
+        vec![
+            ("key1".as_bytes(), "value1".as_bytes()),
+            (
+                "loooooooooooooooooooooooooooooooooongerkey1".as_bytes(),
+                "shrtvl1".as_bytes(),
+            ),
+            ("medium length key 1".as_bytes(), "some value 2".as_bytes()),
+            ("prefix_key1".as_bytes(), "value".as_bytes()),
+            ("prefix_key2".as_bytes(), "value".as_bytes()),
+            ("prefix_key3".as_bytes(), "value".as_bytes()),
+        ]
     }
 
     #[test]

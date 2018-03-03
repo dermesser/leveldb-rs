@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::io::{self, Read, Write};
 use std::ops::Deref;
-use std::path::{Path,PathBuf};
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 /// BufferBackedFile is a simple type implementing RandomAccess on a Vec<u8>.
@@ -130,7 +130,9 @@ pub struct MemFS {
 
 impl MemFS {
     fn new() -> MemFS {
-        MemFS { store: Arc::new(Mutex::new(HashMap::new())) }
+        MemFS {
+            store: Arc::new(Mutex::new(HashMap::new())),
+        }
     }
 
     /// Open a file. The caller can use the MemFile either inside a MemFileReader or as
@@ -141,8 +143,10 @@ impl MemFS {
             Entry::Occupied(o) => Ok(o.get().f.clone()),
             Entry::Vacant(v) => {
                 if !create {
-                    return err(StatusCode::NotFound,
-                               &format!("open: file not found: {}", path_to_str(p)));
+                    return err(
+                        StatusCode::NotFound,
+                        &format!("open: file not found: {}", path_to_str(p)),
+                    );
                 }
                 let f = MemFile::new();
                 v.insert(MemFSEntry {
@@ -183,10 +187,10 @@ impl MemFS {
         let mut fs = self.store.lock()?;
         match fs.entry(path_to_string(p)) {
             Entry::Occupied(o) => Ok(o.get().f.0.lock()?.len()),
-            _ => {
-                err(StatusCode::NotFound,
-                    &format!("size_of: file not found: {}", path_to_str(p)))
-            }
+            _ => err(
+                StatusCode::NotFound,
+                &format!("size_of: file not found: {}", path_to_str(p)),
+            ),
         }
     }
     fn delete_(&self, p: &Path) -> Result<()> {
@@ -196,10 +200,10 @@ impl MemFS {
                 o.remove_entry();
                 Ok(())
             }
-            _ => {
-                err(StatusCode::NotFound,
-                    &format!("delete: file not found: {}", path_to_str(p)))
-            }
+            _ => err(
+                StatusCode::NotFound,
+                &format!("delete: file not found: {}", path_to_str(p)),
+            ),
         }
     }
     fn rename_(&self, from: &Path, to: &Path) -> Result<()> {
@@ -209,10 +213,10 @@ impl MemFS {
                 fs.insert(path_to_string(to), v);
                 Ok(())
             }
-            _ => {
-                err(StatusCode::NotFound,
-                    &format!("rename: file not found: {}", path_to_str(from)))
-            }
+            _ => err(
+                StatusCode::NotFound,
+                &format!("rename: file not found: {}", path_to_str(from)),
+            ),
         }
     }
     fn lock_(&self, p: &Path) -> Result<FileLock> {
@@ -220,11 +224,15 @@ impl MemFS {
         match fs.entry(path_to_string(p)) {
             Entry::Occupied(mut o) => {
                 if o.get().locked {
-                    err(StatusCode::LockError,
-                        &format!("already locked: {}", path_to_str(p)))
+                    err(
+                        StatusCode::LockError,
+                        &format!("already locked: {}", path_to_str(p)),
+                    )
                 } else {
                     o.get_mut().locked = true;
-                    Ok(FileLock { id: path_to_string(p) })
+                    Ok(FileLock {
+                        id: path_to_string(p),
+                    })
                 }
             }
             Entry::Vacant(v) => {
@@ -233,7 +241,9 @@ impl MemFS {
                     f: f.clone(),
                     locked: true,
                 });
-                Ok(FileLock { id: path_to_string(p) })
+                Ok(FileLock {
+                    id: path_to_string(p),
+                })
             }
         }
     }
@@ -243,17 +253,19 @@ impl MemFS {
         match fs.entry(l.id) {
             Entry::Occupied(mut o) => {
                 if !o.get().locked {
-                    err(StatusCode::LockError,
-                        &format!("unlocking unlocked file: {}", id))
+                    err(
+                        StatusCode::LockError,
+                        &format!("unlocking unlocked file: {}", id),
+                    )
                 } else {
                     o.get_mut().locked = false;
                     Ok(())
                 }
             }
-            _ => {
-                err(StatusCode::NotFound,
-                    &format!("unlock: file not found: {}", id))
-            }
+            _ => err(
+                StatusCode::NotFound,
+                &format!("unlock: file not found: {}", id),
+            ),
         }
     }
 }
@@ -274,7 +286,9 @@ impl Env for MemEnv {
         Ok(Box::new(MemFileReader::new(f, 0)))
     }
     fn open_random_access_file(&self, p: &Path) -> Result<Box<RandomAccess>> {
-        self.0.open(p, false).map(|m| Box::new(m) as Box<RandomAccess>)
+        self.0
+            .open(p, false)
+            .map(|m| Box::new(m) as Box<RandomAccess>)
     }
     fn open_writable_file(&self, p: &Path) -> Result<Box<Write>> {
         self.0.open_w(p, true, true)
@@ -329,7 +343,8 @@ impl Env for MemEnv {
     }
 
     fn new_logger(&self, p: &Path) -> Result<Logger> {
-        self.open_appendable_file(p).map(|dst| Logger::new(Box::new(dst)))
+        self.open_appendable_file(p)
+            .map(|dst| Logger::new(Box::new(dst)))
     }
 }
 
@@ -364,8 +379,10 @@ mod tests {
         assert_eq!(w1.write(&[1, 7, 8, 9]).unwrap(), 4);
         assert_eq!(w2.write(&[4, 5, 6]).unwrap(), 3);
 
-        assert_eq!((w1.0).0.lock().unwrap().as_ref() as &Vec<u8>,
-                   &[1, 2, 3, 4, 5, 6, 9]);
+        assert_eq!(
+            (w1.0).0.lock().unwrap().as_ref() as &Vec<u8>,
+            &[1, 2, 3, 4, 5, 6, 9]
+        );
     }
 
     #[test]
@@ -411,7 +428,6 @@ mod tests {
             s.clear();
             assert_eq!(r2.read_to_string(&mut s).unwrap(), 8);
             assert_eq!(s, "lloWorld");
-
         }
         assert_eq!(fs.size_of_(&path).unwrap(), 10);
         assert!(fs.exists_(&path).unwrap());
@@ -442,7 +458,6 @@ mod tests {
             let mut s = String::new();
             assert_eq!(r.read_to_string(&mut s).unwrap(), 32);
             assert_eq!(s, "OveXyzitingEverythingWithGarbage");
-
         }
         assert!(fs.exists_(&path).unwrap());
         assert_eq!(fs.size_of_(&path).unwrap(), 32);
@@ -494,16 +509,25 @@ mod tests {
     #[test]
     fn test_mem_fs_children() {
         let fs = MemFS::new();
-        let (path1, path2, path3) =
-            (Path::new("/a/1.txt"), Path::new("/a/2.txt"), Path::new("/b/1.txt"));
+        let (path1, path2, path3) = (
+            Path::new("/a/1.txt"),
+            Path::new("/a/2.txt"),
+            Path::new("/b/1.txt"),
+        );
 
         for p in &[&path1, &path2, &path3] {
             fs.open_w(*p, false, false).unwrap();
         }
         let children = fs.children_of(&Path::new("/a")).unwrap();
-        assert!((children == vec![s2p("1.txt"), s2p("2.txt")]) || (children == vec![s2p("2.txt"), s2p("1.txt")]));
+        assert!(
+            (children == vec![s2p("1.txt"), s2p("2.txt")])
+                || (children == vec![s2p("2.txt"), s2p("1.txt")])
+        );
         let children = fs.children_of(&Path::new("/a/")).unwrap();
-        assert!((children == vec![s2p("1.txt"), s2p("2.txt")]) || (children == vec![s2p("2.txt"), s2p("1.txt")]));
+        assert!(
+            (children == vec![s2p("1.txt"), s2p("2.txt")])
+                || (children == vec![s2p("2.txt"), s2p("1.txt")])
+        );
     }
 
     #[test]
@@ -529,12 +553,16 @@ mod tests {
         assert!(fs.unlock_(lock).is_ok());
 
         // Rogue operation.
-        assert!(fs.unlock_(env::FileLock { id: "/a/lock".to_string() }).is_err());
+        assert!(fs.unlock_(env::FileLock {
+            id: "/a/lock".to_string(),
+        }).is_err());
 
         // Non-existent files.
         let p2 = Path::new("/a/lock2");
         assert!(fs.lock_(p2).is_ok());
-        assert!(fs.unlock_(env::FileLock { id: "/a/lock2".to_string() }).is_ok());
+        assert!(fs.unlock_(env::FileLock {
+            id: "/a/lock2".to_string(),
+        }).is_ok());
     }
 
     #[test]

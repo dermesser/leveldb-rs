@@ -41,11 +41,16 @@ impl Table {
     /// Creates a new table reader operating on unformatted keys (i.e., UserKey).
     fn new_raw(opt: Options, file: Rc<Box<RandomAccess>>, size: usize) -> Result<Table> {
         let footer = try!(read_footer(file.as_ref().as_ref(), size));
-        let indexblock =
-            try!(table_block::read_table_block(opt.clone(), file.as_ref().as_ref(), &footer.index));
-        let metaindexblock = try!(table_block::read_table_block(opt.clone(),
-                                                                file.as_ref().as_ref(),
-                                                                &footer.meta_index));
+        let indexblock = try!(table_block::read_table_block(
+            opt.clone(),
+            file.as_ref().as_ref(),
+            &footer.index
+        ));
+        let metaindexblock = try!(table_block::read_table_block(
+            opt.clone(),
+            file.as_ref().as_ref(),
+            &footer.meta_index
+        ));
 
         let filter_block_reader =
             Table::read_filter_block(&metaindexblock, file.as_ref().as_ref(), &opt)?;
@@ -62,12 +67,15 @@ impl Table {
         })
     }
 
-    fn read_filter_block(metaix: &Block,
-                         file: &RandomAccess,
-                         options: &Options)
-                         -> Result<Option<FilterBlockReader>> {
+    fn read_filter_block(
+        metaix: &Block,
+        file: &RandomAccess,
+        options: &Options,
+    ) -> Result<Option<FilterBlockReader>> {
         // Open filter block for reading
-        let filter_name = format!("filter.{}", options.filter_policy.name()).as_bytes().to_vec();
+        let filter_name = format!("filter.{}", options.filter_policy.name())
+            .as_bytes()
+            .to_vec();
 
         let mut metaindexiter = metaix.iter();
         metaindexiter.seek(&filter_name);
@@ -75,9 +83,11 @@ impl Table {
         if let Some((_key, val)) = current_key_val(&metaindexiter) {
             let filter_block_location = BlockHandle::decode(&val).0;
             if filter_block_location.size() > 0 {
-                return Ok(Some(table_block::read_filter_block(file,
-                                                              &filter_block_location,
-                                                              options.filter_policy.clone())?));
+                return Ok(Some(table_block::read_filter_block(
+                    file,
+                    &filter_block_location,
+                    options.filter_policy.clone(),
+                )?));
             }
         }
         Ok(None)
@@ -88,7 +98,9 @@ impl Table {
     /// (InternalFilterPolicy) are used.
     pub fn new(mut opt: Options, file: Rc<Box<RandomAccess>>, size: usize) -> Result<Table> {
         opt.cmp = Rc::new(Box::new(InternalKeyCmp(opt.cmp.clone())));
-        opt.filter_policy = Rc::new(Box::new(filter::InternalFilterPolicy::new(opt.filter_policy)));
+        opt.filter_policy = Rc::new(Box::new(filter::InternalFilterPolicy::new(
+            opt.filter_policy,
+        )));
         Table::new_raw(opt, file, size)
     }
 
@@ -96,8 +108,12 @@ impl Table {
     /// block cache.
     fn block_cache_handle(&self, block_off: usize) -> cache::CacheKey {
         let mut dst = [0; 2 * 8];
-        (&mut dst[..8]).write_fixedint(self.cache_id).expect("error writing to vec");
-        (&mut dst[8..]).write_fixedint(block_off as u64).expect("error writing to vec");
+        (&mut dst[..8])
+            .write_fixedint(self.cache_id)
+            .expect("error writing to vec");
+        (&mut dst[8..])
+            .write_fixedint(block_off as u64)
+            .expect("error writing to vec");
         dst
     }
 
@@ -110,12 +126,17 @@ impl Table {
         }
 
         // Two times as_ref(): First time to get a ref from Rc<>, then one from Box<>.
-        let b = try!(table_block::read_table_block(self.opt.clone(),
-                                                   self.file.as_ref().as_ref(),
-                                                   location));
+        let b = try!(table_block::read_table_block(
+            self.opt.clone(),
+            self.file.as_ref().as_ref(),
+            location
+        ));
 
         // insert a cheap copy (Rc).
-        self.opt.block_cache.borrow_mut().insert(&cachekey, b.clone());
+        self.opt
+            .block_cache
+            .borrow_mut()
+            .insert(&cachekey, b.clone());
 
         Ok(b)
     }
@@ -350,16 +371,18 @@ mod tests {
     use super::*;
 
     fn build_data() -> Vec<(&'static str, &'static str)> {
-        vec![// block 1
-             ("abc", "def"),
-             ("abd", "dee"),
-             ("bcd", "asa"),
-             // block 2
-             ("bsr", "a00"),
-             ("xyz", "xxx"),
-             ("xzz", "yyy"),
-             // block 3
-             ("zzz", "111")]
+        vec![
+            // block 1
+            ("abc", "def"),
+            ("abd", "dee"),
+            ("bcd", "asa"),
+            // block 2
+            ("bsr", "a00"),
+            ("xyz", "xxx"),
+            ("xzz", "yyy"),
+            // block 3
+            ("zzz", "111"),
+        ]
     }
 
     // Build a table containing raw keys (no format). It returns (vector, length) for convenience
@@ -473,8 +496,10 @@ mod tests {
         let mut i = 0;
 
         while let Some((k, v)) = iter.next() {
-            assert_eq!((data[i].0.as_bytes(), data[i].1.as_bytes()),
-                       (k.as_ref(), v.as_ref()));
+            assert_eq!(
+                (data[i].0.as_bytes(), data[i].1.as_bytes()),
+                (k.as_ref(), v.as_ref())
+            );
             i += 1;
         }
 
@@ -495,9 +520,13 @@ mod tests {
         while iter.prev() {
             if let Some((k, v)) = current_key_val(&iter) {
                 j += 1;
-                assert_eq!((data[data.len() - 1 - j].0.as_bytes(),
-                            data[data.len() - 1 - j].1.as_bytes()),
-                           (k.as_ref(), v.as_ref()));
+                assert_eq!(
+                    (
+                        data[data.len() - 1 - j].0.as_bytes(),
+                        data[data.len() - 1 - j].1.as_bytes()
+                    ),
+                    (k.as_ref(), v.as_ref())
+                );
             } else {
                 break;
             }
@@ -583,8 +612,10 @@ mod tests {
             iter.prev();
 
             if let Some((k, v)) = current_key_val(&iter) {
-                assert_eq!((data[i].0.as_bytes(), data[i].1.as_bytes()),
-                           (k.as_ref(), v.as_ref()));
+                assert_eq!(
+                    (data[i].0.as_bytes(), data[i].1.as_bytes()),
+                    (k.as_ref(), v.as_ref())
+                );
             } else {
                 break;
             }
@@ -608,12 +639,16 @@ mod tests {
 
         iter.seek(b"bcd");
         assert!(iter.valid());
-        assert_eq!(current_key_val(&iter),
-                   Some((b"bcd".to_vec(), b"asa".to_vec())));
+        assert_eq!(
+            current_key_val(&iter),
+            Some((b"bcd".to_vec(), b"asa".to_vec()))
+        );
         iter.seek(b"abc");
         assert!(iter.valid());
-        assert_eq!(current_key_val(&iter),
-                   Some((b"abc".to_vec(), b"def".to_vec())));
+        assert_eq!(
+            current_key_val(&iter),
+            Some((b"abc".to_vec(), b"def".to_vec()))
+        );
 
         // Seek-past-last invalidates.
         iter.seek("{{{".as_bytes());
@@ -670,7 +705,12 @@ mod tests {
             assert_eq!((k.to_vec(), v.to_vec()), table.get(k).unwrap().unwrap());
         }
 
-        assert!(table.get(LookupKey::new(b"abc", 1000).internal_key()).unwrap().is_some());
+        assert!(
+            table
+                .get(LookupKey::new(b"abc", 1000).internal_key())
+                .unwrap()
+                .is_some()
+        );
 
         let mut iter = table.iter();
 

@@ -263,14 +263,16 @@ impl VersionEdit {
                                 if let Ok(size) = reader.read_varint() {
                                     let smallest = try!(read_length_prefixed(&mut reader));
                                     let largest = try!(read_length_prefixed(&mut reader));
-                                    ve.new_files.push((lvl,
-                                                       FileMetaData {
-                                        num: num,
-                                        size: size,
-                                        smallest: smallest,
-                                        largest: largest,
-                                        allowed_seeks: 0,
-                                    }))
+                                    ve.new_files.push((
+                                        lvl,
+                                        FileMetaData {
+                                            num: num,
+                                            size: size,
+                                            smallest: smallest,
+                                            largest: largest,
+                                            allowed_seeks: 0,
+                                        },
+                                    ))
                                 } else {
                                     return err(StatusCode::IOError, "Couldn't read file size");
                                 }
@@ -283,8 +285,10 @@ impl VersionEdit {
                     }
                 }
             } else {
-                return err(StatusCode::Corruption,
-                           &format!("Invalid tag number {}", tag));
+                return err(
+                    StatusCode::Corruption,
+                    &format!("Invalid tag number {}", tag),
+                );
             }
         }
 
@@ -310,14 +314,16 @@ mod tests {
         ve.set_compact_pointer(0, &[0, 1, 2]);
         ve.set_compact_pointer(1, &[3, 4, 5]);
         ve.set_compact_pointer(2, &[6, 7, 8]);
-        ve.add_file(0,
-                    FileMetaData {
-                        allowed_seeks: 12345,
-                        num: 901,
-                        size: 234,
-                        smallest: vec![5, 6, 7],
-                        largest: vec![8, 9, 0],
-                    });
+        ve.add_file(
+            0,
+            FileMetaData {
+                allowed_seeks: 12345,
+                num: 901,
+                size: 234,
+                smallest: vec![5, 6, 7],
+                largest: vec![8, 9, 0],
+            },
+        );
         ve.delete_file(1, 132);
 
         let encoded = ve.encode();
@@ -328,31 +334,41 @@ mod tests {
         assert_eq!(decoded.log_number, Some(123));
         assert_eq!(decoded.next_file_number, Some(456));
         assert_eq!(decoded.compaction_ptrs.len(), 3);
-        assert_eq!(decoded.compaction_ptrs[0],
-                   CompactionPointer {
-                       level: 0,
-                       key: vec![0, 1, 2],
-                   });
-        assert_eq!(decoded.compaction_ptrs[1],
-                   CompactionPointer {
-                       level: 1,
-                       key: vec![3, 4, 5],
-                   });
-        assert_eq!(decoded.compaction_ptrs[2],
-                   CompactionPointer {
-                       level: 2,
-                       key: vec![6, 7, 8],
-                   });
+        assert_eq!(
+            decoded.compaction_ptrs[0],
+            CompactionPointer {
+                level: 0,
+                key: vec![0, 1, 2],
+            }
+        );
+        assert_eq!(
+            decoded.compaction_ptrs[1],
+            CompactionPointer {
+                level: 1,
+                key: vec![3, 4, 5],
+            }
+        );
+        assert_eq!(
+            decoded.compaction_ptrs[2],
+            CompactionPointer {
+                level: 2,
+                key: vec![6, 7, 8],
+            }
+        );
         assert_eq!(decoded.new_files.len(), 1);
-        assert_eq!(decoded.new_files[0],
-                   (0,
-                    FileMetaData {
-                       allowed_seeks: 0,
-                       num: 901,
-                       size: 234,
-                       smallest: vec![5, 6, 7],
-                       largest: vec![8, 9, 0],
-                   }));
+        assert_eq!(
+            decoded.new_files[0],
+            (
+                0,
+                FileMetaData {
+                    allowed_seeks: 0,
+                    num: 901,
+                    size: 234,
+                    smallest: vec![5, 6, 7],
+                    largest: vec![8, 9, 0],
+                }
+            )
+        );
         assert_eq!(decoded.deleted.len(), 1);
         assert!(decoded.deleted.contains(&(1, 132)));
     }

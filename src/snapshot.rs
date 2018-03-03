@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use types::{share, MAX_SEQUENCE_NUMBER, SequenceNumber, Shared};
+use types::{share, SequenceNumber, Shared, MAX_SEQUENCE_NUMBER};
 
 use std::rc::Rc;
 
@@ -78,9 +78,14 @@ impl SnapshotList {
     /// oldest returns the lowest sequence number of all snapshots. It returns 0 if no snapshots
     /// are present.
     pub fn oldest(&self) -> SequenceNumber {
-        let oldest =
-            self.inner.borrow().map.iter().fold(MAX_SEQUENCE_NUMBER,
-                                                |s, (seq, _)| if *seq < s { *seq } else { s });
+        let oldest = self.inner
+            .borrow()
+            .map
+            .iter()
+            .fold(
+                MAX_SEQUENCE_NUMBER,
+                |s, (seq, _)| if *seq < s { *seq } else { s },
+            );
         if oldest == MAX_SEQUENCE_NUMBER {
             0
         } else {
@@ -91,7 +96,11 @@ impl SnapshotList {
     /// newest returns the newest sequence number of all snapshots. If no snapshots are present, it
     /// returns 0.
     pub fn newest(&self) -> SequenceNumber {
-        self.inner.borrow().map.iter().fold(0, |s, (seq, _)| if *seq > s { *seq } else { s })
+        self.inner
+            .borrow()
+            .map
+            .iter()
+            .fold(0, |s, (seq, _)| if *seq > s { *seq } else { s })
     }
 
     pub fn empty(&self) -> bool {
