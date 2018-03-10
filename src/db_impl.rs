@@ -408,9 +408,6 @@ impl DB {
     // READ //
 
     fn get_internal(&mut self, seq: SequenceNumber, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        let current = self.current();
-        let mut current = current.borrow_mut();
-
         // Using this lookup key will skip all entries with higher sequence numbers, because they
         // will compare "Lesser" using the InternalKeyCmp
         let lkey = LookupKey::new(key, seq);
@@ -433,15 +430,27 @@ impl DB {
             }
         }
 
-        if let Ok(Some((v, st))) = current.get(lkey.internal_key()) {
-            if current.update_stats(st) {
-                if let Err(e) = self.maybe_do_compaction() {
-                    log!(self.opt.log, "error while doing compaction in get: {}", e);
+        let mut do_compaction = false;
+        let mut result = None;
+
+        // Limiting the borrow scope of self.current.
+        {
+            let current = self.current();
+            let mut current = current.borrow_mut();
+            if let Ok(Some((v, st))) = current.get(lkey.internal_key()) {
+                if current.update_stats(st) {
+                    do_compaction = true;
                 }
+                result = Some(v)
             }
-            return Ok(Some(v));
         }
-        Ok(None)
+
+        if do_compaction {
+            if let Err(e) = self.maybe_do_compaction() {
+                log!(self.opt.log, "error while doing compaction in get: {}", e);
+            }
+        }
+        Ok(result)
     }
 
     /// get_at reads the value for a given key at or before snapshot. It returns Ok(None) if the
