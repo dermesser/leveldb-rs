@@ -17,11 +17,13 @@ impl BlockHandle {
         let (off, offsize) = usize::decode_var(from);
         let (sz, szsize) = usize::decode_var(&from[offsize..]);
 
-        (BlockHandle {
-            offset: off,
-            size: sz,
-        },
-         offsize + szsize)
+        (
+            BlockHandle {
+                offset: off,
+                size: sz,
+            },
+            offsize + szsize,
+        )
     }
 
     pub fn new(offset: usize, size: usize) -> BlockHandle {

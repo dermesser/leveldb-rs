@@ -1,4 +1,3 @@
-
 use block::Block;
 use cache::Cache;
 use cmp::{Cmp, DefaultCmp};

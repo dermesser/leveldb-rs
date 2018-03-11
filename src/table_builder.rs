@@ -185,7 +185,10 @@ impl<Dst: Write> TableBuilder<Dst> {
         let mut handle_enc = [0 as u8; 16];
         let enc_len = handle.encode_to(&mut handle_enc);
 
-        self.index_block.as_mut().unwrap().add(&sep, &handle_enc[0..enc_len]);
+        self.index_block
+            .as_mut()
+            .unwrap()
+            .add(&sep, &handle_enc[0..enc_len]);
         self.data_block = Some(BlockBuilder::new(self.opt.clone()));
 
         if let Some(ref mut fblock) = self.filter_block {
@@ -225,8 +228,9 @@ impl<Dst: Write> TableBuilder<Dst> {
         // If there's a pending data block, write it
         if self.data_block.as_ref().unwrap().entries() > 0 {
             // Find a key reliably past the last key
-            let key_past_last =
-                self.opt.cmp.find_short_succ(self.data_block.as_ref().unwrap().last_key());
+            let key_past_last = self.opt
+                .cmp
+                .find_short_succ(self.data_block.as_ref().unwrap().last_key());
             self.write_data_block(&key_past_last)?;
         }
 
@@ -282,7 +286,6 @@ mod tests {
         assert_eq!(f2.meta_index.size(), 4);
         assert_eq!(f2.index.offset(), 55);
         assert_eq!(f2.index.size(), 5);
-
     }
 
     #[test]
@@ -293,12 +296,23 @@ mod tests {
         opt.compression_type = CompressionType::CompressionSnappy;
         let mut b = TableBuilder::new_raw(opt, &mut d);
 
-        let data = vec![("abc", "def"), ("abe", "dee"), ("bcd", "asa"), ("dcc", "a00")];
-        let data2 = vec![("abd", "def"), ("abf", "dee"), ("ccd", "asa"), ("dcd", "a00")];
+        let data = vec![
+            ("abc", "def"),
+            ("abe", "dee"),
+            ("bcd", "asa"),
+            ("dcc", "a00"),
+        ];
+        let data2 = vec![
+            ("abd", "def"),
+            ("abf", "dee"),
+            ("ccd", "asa"),
+            ("dcd", "a00"),
+        ];
 
         for i in 0..data.len() {
             b.add(&data[i].0.as_bytes(), &data[i].1.as_bytes()).unwrap();
-            b.add(&data2[i].0.as_bytes(), &data2[i].1.as_bytes()).unwrap();
+            b.add(&data2[i].0.as_bytes(), &data2[i].1.as_bytes())
+                .unwrap();
         }
 
         let estimate = b.size_estimate();
@@ -319,7 +333,12 @@ mod tests {
         let mut b = TableBuilder::new_raw(opt, &mut d);
 
         // Test two equal consecutive keys
-        let data = vec![("abc", "def"), ("abc", "dee"), ("bcd", "asa"), ("bsr", "a00")];
+        let data = vec![
+            ("abc", "def"),
+            ("abc", "dee"),
+            ("bcd", "asa"),
+            ("bsr", "a00"),
+        ];
 
         for &(k, v) in data.iter() {
             b.add(k.as_bytes(), v.as_bytes()).unwrap();

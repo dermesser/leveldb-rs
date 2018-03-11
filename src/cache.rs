@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::mem::{swap, replace};
+use std::mem::{replace, swap};
 
 // No clone, no copy! That asserts that an LRUHandle exists only once.
 type LRUHandle<T> = *mut LRUNode<T>;
@@ -68,8 +68,10 @@ impl<T> LRUList<T> {
     fn remove_last(&mut self) -> Option<T> {
         if self.head.prev.is_some() {
             let mut lasto = unsafe {
-                replace(&mut (*((*self.head.prev.unwrap()).prev.unwrap())).next,
-                        None)
+                replace(
+                    &mut (*((*self.head.prev.unwrap()).prev.unwrap())).next,
+                    None,
+                )
             };
 
             if let Some(ref mut last) = lasto {

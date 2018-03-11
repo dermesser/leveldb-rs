@@ -157,7 +157,8 @@ impl BlockIter {
     /// Only self.key is mutated.
     fn assemble_key(&mut self, off: usize, shared: usize, non_shared: usize) {
         self.key.truncate(shared);
-        self.key.extend_from_slice(&self.block[off..off + non_shared]);
+        self.key
+            .extend_from_slice(&self.block[off..off + non_shared]);
     }
 
     pub fn seek_to_last(&mut self) {
@@ -195,8 +196,9 @@ impl LdbIterator for BlockIter {
 
         // Adjust current_restart_ix
         let num_restarts = self.number_restarts();
-        while self.current_restart_ix + 1 < num_restarts &&
-              self.get_restart_point(self.current_restart_ix + 1) < self.current_entry_offset {
+        while self.current_restart_ix + 1 < num_restarts
+            && self.get_restart_point(self.current_restart_ix + 1) < self.current_entry_offset
+        {
             self.current_restart_ix += 1;
         }
         true
@@ -307,12 +309,17 @@ mod tests {
     use types::{current_key_val, LdbIterator};
 
     fn get_data() -> Vec<(&'static [u8], &'static [u8])> {
-        vec![("key1".as_bytes(), "value1".as_bytes()),
-             ("loooooooooooooooooooooooooooooooooongerkey1".as_bytes(), "shrtvl1".as_bytes()),
-             ("medium length key 1".as_bytes(), "some value 2".as_bytes()),
-             ("prefix_key1".as_bytes(), "value".as_bytes()),
-             ("prefix_key2".as_bytes(), "value".as_bytes()),
-             ("prefix_key3".as_bytes(), "value".as_bytes())]
+        vec![
+            ("key1".as_bytes(), "value1".as_bytes()),
+            (
+                "loooooooooooooooooooooooooooooooooongerkey1".as_bytes(),
+                "shrtvl1".as_bytes(),
+            ),
+            ("medium length key 1".as_bytes(), "some value 2".as_bytes()),
+            ("prefix_key1".as_bytes(), "value".as_bytes()),
+            ("prefix_key2".as_bytes(), "value".as_bytes()),
+            ("prefix_key3".as_bytes(), "value".as_bytes()),
+        ]
     }
 
     #[test]
@@ -385,27 +392,35 @@ mod tests {
         let mut block = Block::new(o.clone(), block_contents).iter();
 
         assert!(!block.valid());
-        assert_eq!(block.next(),
-                   Some(("key1".as_bytes().to_vec(), "value1".as_bytes().to_vec())));
+        assert_eq!(
+            block.next(),
+            Some(("key1".as_bytes().to_vec(), "value1".as_bytes().to_vec()))
+        );
         assert!(block.valid());
         block.next();
         assert!(block.valid());
         block.prev();
         assert!(block.valid());
-        assert_eq!(current_key_val(&block),
-                   Some(("key1".as_bytes().to_vec(), "value1".as_bytes().to_vec())));
+        assert_eq!(
+            current_key_val(&block),
+            Some(("key1".as_bytes().to_vec(), "value1".as_bytes().to_vec()))
+        );
         block.prev();
         assert!(!block.valid());
 
         // Verify that prev() from the last entry goes to the prev-to-last entry
         // (essentially, that next() returning None doesn't advance anything)
-        while let Some(_) = block.next() {
-        }
+        while let Some(_) = block.next() {}
 
         block.prev();
         assert!(block.valid());
-        assert_eq!(current_key_val(&block),
-                   Some(("prefix_key2".as_bytes().to_vec(), "value".as_bytes().to_vec())));
+        assert_eq!(
+            current_key_val(&block),
+            Some((
+                "prefix_key2".as_bytes().to_vec(),
+                "value".as_bytes().to_vec()
+            ))
+        );
     }
 
     #[test]
@@ -426,23 +441,40 @@ mod tests {
 
         block.seek(&"prefix_key2".as_bytes());
         assert!(block.valid());
-        assert_eq!(current_key_val(&block),
-                   Some(("prefix_key2".as_bytes().to_vec(), "value".as_bytes().to_vec())));
+        assert_eq!(
+            current_key_val(&block),
+            Some((
+                "prefix_key2".as_bytes().to_vec(),
+                "value".as_bytes().to_vec()
+            ))
+        );
 
         block.seek(&"prefix_key0".as_bytes());
         assert!(block.valid());
-        assert_eq!(current_key_val(&block),
-                   Some(("prefix_key1".as_bytes().to_vec(), "value".as_bytes().to_vec())));
+        assert_eq!(
+            current_key_val(&block),
+            Some((
+                "prefix_key1".as_bytes().to_vec(),
+                "value".as_bytes().to_vec()
+            ))
+        );
 
         block.seek(&"key1".as_bytes());
         assert!(block.valid());
-        assert_eq!(current_key_val(&block),
-                   Some(("key1".as_bytes().to_vec(), "value1".as_bytes().to_vec())));
+        assert_eq!(
+            current_key_val(&block),
+            Some(("key1".as_bytes().to_vec(), "value1".as_bytes().to_vec()))
+        );
 
         block.seek(&"prefix_key3".as_bytes());
         assert!(block.valid());
-        assert_eq!(current_key_val(&block),
-                   Some(("prefix_key3".as_bytes().to_vec(), "value".as_bytes().to_vec())));
+        assert_eq!(
+            current_key_val(&block),
+            Some((
+                "prefix_key3".as_bytes().to_vec(),
+                "value".as_bytes().to_vec()
+            ))
+        );
 
         block.seek(&"prefix_key8".as_bytes());
         assert!(!block.valid());
@@ -470,8 +502,13 @@ mod tests {
 
             block.seek_to_last();
             assert!(block.valid());
-            assert_eq!(current_key_val(&block),
-                       Some(("prefix_key3".as_bytes().to_vec(), "value".as_bytes().to_vec())));
+            assert_eq!(
+                current_key_val(&block),
+                Some((
+                    "prefix_key3".as_bytes().to_vec(),
+                    "value".as_bytes().to_vec()
+                ))
+            );
         }
     }
 }

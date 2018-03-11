@@ -1,6 +1,6 @@
 use key_types::{LookupKey, UserKey};
 use cmp::{Cmp, MemtableKeyCmp};
-use key_types::{parse_internal_key, parse_memtable_key, build_memtable_key, ValueType};
+use key_types::{build_memtable_key, parse_internal_key, parse_memtable_key, ValueType};
 use types::{current_key_val, LdbIterator, SequenceNumber};
 use skipmap::{SkipMap, SkipMapIter};
 
@@ -23,7 +23,9 @@ impl MemTable {
 
     /// Doesn't wrap the comparator in a MemtableKeyCmp.
     fn new_raw(cmp: Rc<Box<Cmp>>) -> MemTable {
-        MemTable { map: SkipMap::new(cmp) }
+        MemTable {
+            map: SkipMap::new(cmp),
+        }
     }
 
     pub fn len(&self) -> usize {
@@ -35,7 +37,8 @@ impl MemTable {
     }
 
     pub fn add<'a>(&mut self, seq: SequenceNumber, t: ValueType, key: UserKey<'a>, value: &[u8]) {
-        self.map.insert(build_memtable_key(key, value, t, seq), Vec::new())
+        self.map
+            .insert(build_memtable_key(key, value, t, seq), Vec::new())
     }
 
     /// get returns the value for the given entry and whether the entry is marked as deleted. This
@@ -62,7 +65,9 @@ impl MemTable {
     }
 
     pub fn iter(&self) -> MemtableIterator {
-        MemtableIterator { skipmapiter: self.map.iter() }
+        MemtableIterator {
+            skipmapiter: self.map.iter(),
+        }
     }
 }
 
@@ -131,7 +136,8 @@ impl LdbIterator for MemtableIterator {
     fn seek(&mut self, to: &[u8]) {
         // Assemble the correct memtable key from the supplied InternalKey.
         let (_, seq, ukey) = parse_internal_key(to);
-        self.skipmapiter.seek(LookupKey::new(ukey, seq).memtable_key());
+        self.skipmapiter
+            .seek(LookupKey::new(ukey, seq).memtable_key());
     }
 }
 
@@ -165,11 +171,13 @@ mod tests {
 
     fn get_memtable() -> MemTable {
         let mut mt = MemTable::new(options::for_test().cmp);
-        let entries = vec![(ValueType::TypeValue, 115, "abc", "122"),
-                           (ValueType::TypeValue, 120, "abc", "123"),
-                           (ValueType::TypeValue, 121, "abd", "124"),
-                           (ValueType::TypeDeletion, 122, "abe", "125"),
-                           (ValueType::TypeValue, 123, "abf", "126")];
+        let entries = vec![
+            (ValueType::TypeValue, 115, "abc", "122"),
+            (ValueType::TypeValue, 120, "abc", "123"),
+            (ValueType::TypeValue, 121, "abd", "124"),
+            (ValueType::TypeDeletion, 122, "abe", "125"),
+            (ValueType::TypeValue, 123, "abf", "126"),
+        ];
 
         for e in entries.iter() {
             mt.add(e.1, e.0, e.2.as_bytes(), e.3.as_bytes());
@@ -186,15 +194,21 @@ mod tests {
     #[test]
     fn test_memtable_add() {
         let mut mt = MemTable::new(options::for_test().cmp);
-        mt.add(123,
-               ValueType::TypeValue,
-               "abc".as_bytes(),
-               "123".as_bytes());
+        mt.add(
+            123,
+            ValueType::TypeValue,
+            "abc".as_bytes(),
+            "123".as_bytes(),
+        );
 
-        assert_eq!(mt.map.iter().next().unwrap().0,
-                   &[11, 97, 98, 99, 1, 123, 0, 0, 0, 0, 0, 0, 3, 49, 50, 51]);
-        assert_eq!(mt.iter().next().unwrap().0,
-                   &[97, 98, 99, 1, 123, 0, 0, 0, 0, 0, 0]);
+        assert_eq!(
+            mt.map.iter().next().unwrap().0,
+            &[11, 97, 98, 99, 1, 123, 0, 0, 0, 0, 0, 0, 3, 49, 50, 51]
+        );
+        assert_eq!(
+            mt.iter().next().unwrap().0,
+            &[97, 98, 99, 1, 123, 0, 0, 0, 0, 0, 0]
+        );
     }
 
     #[test]
@@ -248,8 +262,10 @@ mod tests {
         assert!(!iter.valid());
         iter.next();
         assert!(iter.valid());
-        assert_eq!(current_key_val(&iter).unwrap().0,
-                   vec![97, 98, 99, 1, 120, 0, 0, 0, 0, 0, 0].as_slice());
+        assert_eq!(
+            current_key_val(&iter).unwrap().0,
+            vec![97, 98, 99, 1, 120, 0, 0, 0, 0, 0, 0].as_slice()
+        );
         iter.reset();
         assert!(!iter.valid());
     }
@@ -264,8 +280,10 @@ mod tests {
         iter.seek(LookupKey::new("abc".as_bytes(), 400).internal_key());
         let (mut gotkey, gotval) = current_key_val(&iter).unwrap();
         truncate_to_userkey(&mut gotkey);
-        assert_eq!(("abc".as_bytes(), "123".as_bytes()),
-                   (gotkey.as_slice(), gotval.as_slice()));
+        assert_eq!(
+            ("abc".as_bytes(), "123".as_bytes()),
+            (gotkey.as_slice(), gotval.as_slice())
+        );
 
         iter.seek(LookupKey::new("xxx".as_bytes(), 400).internal_key());
         assert!(!iter.valid());
@@ -273,8 +291,10 @@ mod tests {
         iter.seek(LookupKey::new("abd".as_bytes(), 400).internal_key());
         let (mut gotkey, gotval) = current_key_val(&iter).unwrap();
         truncate_to_userkey(&mut gotkey);
-        assert_eq!(("abd".as_bytes(), "124".as_bytes()),
-                   (gotkey.as_slice(), gotval.as_slice()));
+        assert_eq!(
+            ("abd".as_bytes(), "124".as_bytes()),
+            (gotkey.as_slice(), gotval.as_slice())
+        );
     }
 
     #[test]
@@ -282,13 +302,15 @@ mod tests {
         let mt = get_memtable();
         let mut iter = mt.iter();
 
-        let expected = vec!["123".as_bytes(), /* i.e., the abc entry with
-                                               * higher sequence number comes first */
-                            "122".as_bytes(),
-                            "124".as_bytes(),
-                            // deleted entry:
-                            "125".as_bytes(),
-                            "126".as_bytes()];
+        let expected = vec![
+            "123".as_bytes(), /* i.e., the abc entry with
+                               * higher sequence number comes first */
+            "122".as_bytes(),
+            "124".as_bytes(),
+            // deleted entry:
+            "125".as_bytes(),
+            "126".as_bytes(),
+        ];
         let mut i = 0;
 
         for (k, v) in LdbIteratorIter::wrap(&mut iter) {
@@ -305,28 +327,38 @@ mod tests {
         // Bigger sequence number comes first
         iter.next();
         assert!(iter.valid());
-        assert_eq!(current_key_val(&iter).unwrap().0,
-                   vec![97, 98, 99, 1, 120, 0, 0, 0, 0, 0, 0].as_slice());
+        assert_eq!(
+            current_key_val(&iter).unwrap().0,
+            vec![97, 98, 99, 1, 120, 0, 0, 0, 0, 0, 0].as_slice()
+        );
 
         iter.next();
         assert!(iter.valid());
-        assert_eq!(current_key_val(&iter).unwrap().0,
-                   vec![97, 98, 99, 1, 115, 0, 0, 0, 0, 0, 0].as_slice());
+        assert_eq!(
+            current_key_val(&iter).unwrap().0,
+            vec![97, 98, 99, 1, 115, 0, 0, 0, 0, 0, 0].as_slice()
+        );
 
         iter.next();
         assert!(iter.valid());
-        assert_eq!(current_key_val(&iter).unwrap().0,
-                   vec![97, 98, 100, 1, 121, 0, 0, 0, 0, 0, 0].as_slice());
+        assert_eq!(
+            current_key_val(&iter).unwrap().0,
+            vec![97, 98, 100, 1, 121, 0, 0, 0, 0, 0, 0].as_slice()
+        );
 
         iter.prev();
         assert!(iter.valid());
-        assert_eq!(current_key_val(&iter).unwrap().0,
-                   vec![97, 98, 99, 1, 115, 0, 0, 0, 0, 0, 0].as_slice());
+        assert_eq!(
+            current_key_val(&iter).unwrap().0,
+            vec![97, 98, 99, 1, 115, 0, 0, 0, 0, 0, 0].as_slice()
+        );
 
         iter.prev();
         assert!(iter.valid());
-        assert_eq!(current_key_val(&iter).unwrap().0,
-                   vec![97, 98, 99, 1, 120, 0, 0, 0, 0, 0, 0].as_slice());
+        assert_eq!(
+            current_key_val(&iter).unwrap().0,
+            vec![97, 98, 99, 1, 120, 0, 0, 0, 0, 0, 0].as_slice()
+        );
 
         iter.prev();
         assert!(!iter.valid());
@@ -346,10 +378,12 @@ mod tests {
     #[test]
     fn test_memtable_iterator_behavior() {
         let mut mt = MemTable::new(options::for_test().cmp);
-        let entries = vec![(115, "abc", "122"),
-                           (120, "abd", "123"),
-                           (121, "abe", "124"),
-                           (123, "abf", "126")];
+        let entries = vec![
+            (115, "abc", "122"),
+            (120, "abd", "123"),
+            (121, "abe", "124"),
+            (123, "abf", "126"),
+        ];
 
         for e in entries.iter() {
             mt.add(e.0, ValueType::TypeValue, e.1.as_bytes(), e.2.as_bytes());

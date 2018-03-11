@@ -130,17 +130,21 @@ pub fn test_iterator_properties<It: LdbIterator>(mut it: It) {
     assert!(!it.valid());
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_test_util_basic() {
-        let v = vec![("abc".as_bytes(), "def".as_bytes()), ("abd".as_bytes(), "deg".as_bytes())];
+        let v = vec![
+            ("abc".as_bytes(), "def".as_bytes()),
+            ("abd".as_bytes(), "deg".as_bytes()),
+        ];
         let mut iter = TestLdbIter::new(v);
-        assert_eq!(iter.next(),
-                   Some((Vec::from("abc".as_bytes()), Vec::from("def".as_bytes()))));
+        assert_eq!(
+            iter.next(),
+            Some((Vec::from("abc".as_bytes()), Vec::from("def".as_bytes())))
+        );
     }
 
     #[test]
@@ -149,10 +153,12 @@ mod tests {
         let v;
         {
             time_test!("init");
-            v = vec![("abc".as_bytes(), "def".as_bytes()),
-                     ("abd".as_bytes(), "deg".as_bytes()),
-                     ("abe".as_bytes(), "deg".as_bytes()),
-                     ("abf".as_bytes(), "deg".as_bytes())];
+            v = vec![
+                ("abc".as_bytes(), "def".as_bytes()),
+                ("abd".as_bytes(), "deg".as_bytes()),
+                ("abe".as_bytes(), "deg".as_bytes()),
+                ("abf".as_bytes(), "deg".as_bytes()),
+            ];
         }
         test_iterator_properties(TestLdbIter::new(v));
     }

@@ -3,7 +3,7 @@
 //! A record is a bytestring: [checksum: uint32, length: uint16, type: uint8, data: [u8]]
 //! checksum is the crc32 sum of type and data; type is one of RecordType::{Full/First/Middle/Last}
 
-use error::{err, StatusCode, Result};
+use error::{err, Result, StatusCode};
 
 use std::io::{Read, Write};
 
@@ -116,7 +116,6 @@ impl<W: Write> LogWriter<W> {
     }
 }
 
-
 pub struct LogReader<R: Read> {
     // TODO: Wrap src in a buffer to enhance read performance.
     src: R,
@@ -151,7 +150,10 @@ impl<R: Read> LogReader<R> {
         loop {
             if self.blocksize - self.blk_off < HEADER_SIZE {
                 // skip to next block
-                try!(self.src.read(&mut self.head_scratch[0..self.blocksize - self.blk_off]));
+                try!(
+                    self.src
+                        .read(&mut self.head_scratch[0..self.blocksize - self.blk_off])
+                );
                 self.blk_off = 0;
             }
 
@@ -169,12 +171,15 @@ impl<R: Read> LogReader<R> {
             typ = self.head_scratch[6];
 
             dst.resize(dst_offset + length as usize, 0);
-            bytes_read = try!(self.src
-                .read(&mut dst[dst_offset..dst_offset + length as usize]));
+            bytes_read = try!(
+                self.src
+                    .read(&mut dst[dst_offset..dst_offset + length as usize])
+            );
             self.blk_off += bytes_read;
 
-            if self.checksums &&
-               !self.check_integrity(typ, &dst[dst_offset..dst_offset + bytes_read], checksum) {
+            if self.checksums
+                && !self.check_integrity(typ, &dst[dst_offset..dst_offset + bytes_read], checksum)
+            {
                 return err(StatusCode::Corruption, "Invalid Checksum");
             }
 
@@ -231,7 +236,11 @@ mod tests {
 
     #[test]
     fn test_writer() {
-        let data = &["hello world. My first log entry.", "and my second", "and my third"];
+        let data = &[
+            "hello world. My first log entry.",
+            "and my second",
+            "and my third",
+        ];
         let mut lw = LogWriter::new(Vec::new());
         let total_len = data.iter().fold(0, |l, d| l + d.len());
 
@@ -244,7 +253,11 @@ mod tests {
 
     #[test]
     fn test_writer_append() {
-        let data = &["hello world. My first log entry.", "and my second", "and my third"];
+        let data = &[
+            "hello world. My first log entry.",
+            "and my second",
+            "and my third",
+        ];
 
         let mut dst = Vec::new();
         dst.resize(1024, 0 as u8);
@@ -262,21 +275,22 @@ mod tests {
         // cursors and stuff is required.
         {
             let offset = data[0].len() + super::HEADER_SIZE;
-            let mut lw = LogWriter::new_with_off(Cursor::new(&mut dst.as_mut_slice()[offset..]),
-                                                 offset);
+            let mut lw =
+                LogWriter::new_with_off(Cursor::new(&mut dst.as_mut_slice()[offset..]), offset);
             for d in &data[1..] {
                 let _ = lw.add_record(d.as_bytes());
             }
         }
         assert_eq!(old, dst);
-
     }
 
     #[test]
     fn test_reader() {
-        let data = vec!["abcdefghi".as_bytes().to_vec(), // fits one block of 17
-                        "123456789012".as_bytes().to_vec(), // spans two blocks of 17
-                        "0101010101010101010101".as_bytes().to_vec()]; // spans three blocks of 17
+        let data = vec![
+            "abcdefghi".as_bytes().to_vec(),    // fits one block of 17
+            "123456789012".as_bytes().to_vec(), // spans two blocks of 17
+            "0101010101010101010101".as_bytes().to_vec(),
+        ]; // spans three blocks of 17
         let mut lw = LogWriter::new(Vec::new());
         lw.block_size = super::HEADER_SIZE + 10;
 
@@ -293,8 +307,10 @@ mod tests {
         let mut dst = Vec::with_capacity(128);
 
         // First record is corrupted.
-        assert_eq!(err(StatusCode::Corruption, "Invalid Checksum"),
-                   lr.read(&mut dst));
+        assert_eq!(
+            err(StatusCode::Corruption, "Invalid Checksum"),
+            lr.read(&mut dst)
+        );
 
         let mut i = 1;
         loop {

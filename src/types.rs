@@ -151,8 +151,10 @@ pub fn parse_file_name(f: &str) -> Result<(FileNum, FileType)> {
             if let Ok(num) = FileNum::from_str_radix(&f[ix + 1..], 10) {
                 return Ok((num, FileType::Descriptor));
             }
-            return err(StatusCode::InvalidArgument,
-                       "manifest file number is invalid");
+            return err(
+                StatusCode::InvalidArgument,
+                "manifest file number is invalid",
+            );
         }
         return err(StatusCode::InvalidArgument, "manifest file has no dash");
     } else if let Some(ix) = f.find('.') {
@@ -163,14 +165,18 @@ pub fn parse_file_name(f: &str) -> Result<(FileNum, FileType)> {
                 "sst" | "ldb" => FileType::Table,
                 "dbtmp" => FileType::Temp,
                 _ => {
-                    return err(StatusCode::InvalidArgument,
-                               "unknown numbered file extension")
+                    return err(
+                        StatusCode::InvalidArgument,
+                        "unknown numbered file extension",
+                    )
                 }
             };
             return Ok((num, typ));
         }
-        return err(StatusCode::InvalidArgument,
-                   "invalid file number for table or temp file");
+        return err(
+            StatusCode::InvalidArgument,
+            "invalid file number for table or temp file",
+        );
     }
     err(StatusCode::InvalidArgument, "unknown file type")
 }
@@ -181,14 +187,16 @@ mod tests {
 
     #[test]
     fn test_types_parse_file_name() {
-        for c in &[("CURRENT", (0, FileType::Current)),
-                   ("LOCK", (0, FileType::DBLock)),
-                   ("LOG", (0, FileType::InfoLog)),
-                   ("LOG.old", (0, FileType::InfoLog)),
-                   ("MANIFEST-01234", (1234, FileType::Descriptor)),
-                   ("001122.sst", (1122, FileType::Table)),
-                   ("001122.ldb", (1122, FileType::Table)),
-                   ("001122.dbtmp", (1122, FileType::Temp))] {
+        for c in &[
+            ("CURRENT", (0, FileType::Current)),
+            ("LOCK", (0, FileType::DBLock)),
+            ("LOG", (0, FileType::InfoLog)),
+            ("LOG.old", (0, FileType::InfoLog)),
+            ("MANIFEST-01234", (1234, FileType::Descriptor)),
+            ("001122.sst", (1122, FileType::Table)),
+            ("001122.ldb", (1122, FileType::Table)),
+            ("001122.dbtmp", (1122, FileType::Temp)),
+        ] {
             assert_eq!(parse_file_name(c.0).unwrap(), c.1);
         }
         assert!(parse_file_name("xyz.LOCK").is_err());

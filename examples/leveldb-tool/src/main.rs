@@ -1,6 +1,6 @@
 extern crate rusty_leveldb;
 
-use rusty_leveldb::{DB, LdbIterator, Options};
+use rusty_leveldb::{LdbIterator, Options, DB};
 
 use std::env::args;
 use std::io::{self, Write};
@@ -44,8 +44,10 @@ fn main() {
     let args = Vec::from_iter(args());
 
     if args.len() < 2 {
-        panic!("Usage: {} [get|put|delete|iter|compact] [key|from] [val|to]",
-               args[0]);
+        panic!(
+            "Usage: {} [get|put|delete|iter|compact] [key|from] [val|to]",
+            args[0]
+        );
     }
 
     let mut opt = Options::default();

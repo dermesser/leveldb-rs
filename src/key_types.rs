@@ -1,11 +1,10 @@
-
 use cmp::Cmp;
 use types::SequenceNumber;
 
 use std::cmp::Ordering;
 use std::io::Write;
 
-use integer_encoding::{FixedInt, VarInt, VarIntWriter, FixedIntWriter};
+use integer_encoding::{FixedInt, FixedIntWriter, VarInt, VarIntWriter};
 
 // The following typedefs are used to distinguish between the different key formats used internally
 // by different modules.
@@ -56,9 +55,12 @@ impl LookupKey {
 
         {
             let mut writer = key.as_mut_slice();
-            writer.write_varint(internal_keylen).expect("write to slice failed");
+            writer
+                .write_varint(internal_keylen)
+                .expect("write to slice failed");
             writer.write(k).expect("write to slice failed");
-            writer.write_fixedint(s << 8 | t as u64)
+            writer
+                .write_fixedint(s << 8 | t as u64)
                 .expect("write to slice failed");
         }
 
@@ -110,14 +112,18 @@ pub fn build_memtable_key(key: &[u8], value: &[u8], t: ValueType, seq: SequenceN
     let keysize = key.len() + U64_SPACE;
     let valsize = value.len();
     let mut buf = Vec::new();
-    buf.resize(keysize + valsize + keysize.required_space() + valsize.required_space(),
-               0);
+    buf.resize(
+        keysize + valsize + keysize.required_space() + valsize.required_space(),
+        0,
+    );
 
     {
         let mut writer = buf.as_mut_slice();
         writer.write_varint(keysize).expect("write to slice failed");
         writer.write(key).expect("write to slice failed");
-        writer.write_fixedint((t as u64) | (seq << 8)).expect("write to slice failed");
+        writer
+            .write_fixedint((t as u64) | (seq << 8))
+            .expect("write to slice failed");
         writer.write_varint(valsize).expect("write to slice failed");
         writer.write(value).expect("write to slice failed");
         assert_eq!(writer.len(), 0);
@@ -216,28 +222,44 @@ mod tests {
 
         assert_eq!(lk1.user_key(), "abcde".as_bytes());
         assert_eq!(u32::decode_var(lk1.memtable_key()), (13, 1));
-        assert_eq!(lk2.internal_key(),
-                   vec![120, 121, 97, 98, 120, 121, 1, 97, 0, 0, 0, 0, 0, 0].as_slice());
+        assert_eq!(
+            lk2.internal_key(),
+            vec![120, 121, 97, 98, 120, 121, 1, 97, 0, 0, 0, 0, 0, 0].as_slice()
+        );
     }
 
     #[test]
     fn test_build_memtable_key() {
-        assert_eq!(build_memtable_key("abc".as_bytes(),
-                                      "123".as_bytes(),
-                                      ValueType::TypeValue,
-                                      231),
-                   vec![11, 97, 98, 99, 1, 231, 0, 0, 0, 0, 0, 0, 3, 49, 50, 51]);
-        assert_eq!(build_memtable_key("".as_bytes(), "123".as_bytes(), ValueType::TypeValue, 231),
-                   vec![8, 1, 231, 0, 0, 0, 0, 0, 0, 3, 49, 50, 51]);
-        assert_eq!(build_memtable_key("abc".as_bytes(),
-                                      "123".as_bytes(),
-                                      ValueType::TypeDeletion,
-                                      231),
-                   vec![11, 97, 98, 99, 0, 231, 0, 0, 0, 0, 0, 0, 3, 49, 50, 51]);
-        assert_eq!(build_memtable_key("abc".as_bytes(),
-                                      "".as_bytes(),
-                                      ValueType::TypeDeletion,
-                                      231),
-                   vec![11, 97, 98, 99, 0, 231, 0, 0, 0, 0, 0, 0, 0]);
+        assert_eq!(
+            build_memtable_key(
+                "abc".as_bytes(),
+                "123".as_bytes(),
+                ValueType::TypeValue,
+                231
+            ),
+            vec![11, 97, 98, 99, 1, 231, 0, 0, 0, 0, 0, 0, 3, 49, 50, 51]
+        );
+        assert_eq!(
+            build_memtable_key("".as_bytes(), "123".as_bytes(), ValueType::TypeValue, 231),
+            vec![8, 1, 231, 0, 0, 0, 0, 0, 0, 3, 49, 50, 51]
+        );
+        assert_eq!(
+            build_memtable_key(
+                "abc".as_bytes(),
+                "123".as_bytes(),
+                ValueType::TypeDeletion,
+                231
+            ),
+            vec![11, 97, 98, 99, 0, 231, 0, 0, 0, 0, 0, 0, 3, 49, 50, 51]
+        );
+        assert_eq!(
+            build_memtable_key(
+                "abc".as_bytes(),
+                "".as_bytes(),
+                ValueType::TypeDeletion,
+                231
+            ),
+            vec![11, 97, 98, 99, 0, 231, 0, 0, 0, 0, 0, 0, 0]
+        );
     }
 }
