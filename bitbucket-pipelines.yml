@@ -2,7 +2,7 @@ image: atlassianlabs/buildpack-deps-rust
 
 pipelines:
   branches:
-    default:
+    '*':
       - step:
           caches:
               - cargo
