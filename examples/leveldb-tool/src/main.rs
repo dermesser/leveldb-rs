@@ -8,7 +8,13 @@ use std::iter::FromIterator;
 
 fn get(db: &mut DB, k: &str) {
     match db.get(k.as_bytes()) {
-        Some(v) => println!("{} => {}", k, String::from_utf8(v).unwrap()),
+        Some(v) => {
+            if let Ok(s) = String::from_utf8(v.clone()) {
+                println!("{} => {}", k, s);
+            } else {
+                println!("{} => {:?}", k, v);
+            }
+        }
         None => println!("{} => <not found>", k),
     }
 }

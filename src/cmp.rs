@@ -52,6 +52,7 @@ impl Cmp for DefaultCmp {
             diff_at += 1;
         }
 
+        // First, try to find a short separator. If that fails, try a backup mechanism below.
         while diff_at < min {
             let diff = a[diff_at];
             if diff < 0xff && diff + 1 < b[diff_at] {
@@ -63,11 +64,15 @@ impl Cmp for DefaultCmp {
 
             diff_at += 1;
         }
+
         // Backup case: either `a` is full of 0xff, or all different places are less than 2
         // characters apart.
-        // The result is not necessarily short, but a good separator.
-        let mut sep = a.to_vec();
-        sep[a.len() - 1] += 1;
+        // The result is not necessarily short, but a good separator: e.g., "abc" vs "abd" ->
+        // "abc\0", which is greater than abc and lesser than abd.
+        let mut sep = Vec::with_capacity(a.len() + 1);
+        sep.extend_from_slice(a);
+        // Append a 0 byte; by making it longer than a, it will compare greater to it.
+        sep.extend_from_slice(&[0]);
         return sep;
     }
 
@@ -100,8 +105,12 @@ impl Cmp for InternalKeyCmp {
     }
 
     fn find_shortest_sep(&self, a: &[u8], b: &[u8]) -> Vec<u8> {
+        if a == b {
+            return a.to_vec();
+        }
+
         let (_, seqa, keya) = key_types::parse_internal_key(a);
-        let keyb = key_types::parse_internal_key(b).2;
+        let (_, _, keyb) = key_types::parse_internal_key(b);
 
         let sep: Vec<u8> = self.0.find_shortest_sep(keya, keyb);
 
@@ -110,7 +119,6 @@ impl Cmp for InternalKeyCmp {
                 .internal_key()
                 .to_vec();
         }
-
         return LookupKey::new(&sep, seqa).internal_key().to_vec();
     }
 
@@ -191,7 +199,7 @@ mod tests {
         );
         assert_eq!(
             DefaultCmp.find_shortest_sep("abc".as_bytes(), "acd".as_bytes()),
-            "abd".as_bytes()
+            "abc\0".as_bytes()
         );
         assert_eq!(
             DefaultCmp.find_shortest_sep("abcdefghi".as_bytes(), "abcffghi".as_bytes()),
@@ -203,7 +211,7 @@ mod tests {
         );
         assert_eq!(
             DefaultCmp.find_shortest_sep("a".as_bytes(), "b".as_bytes()),
-            "b".as_bytes()
+            "a\0".as_bytes()
         );
         assert_eq!(
             DefaultCmp.find_shortest_sep("abc".as_bytes(), "zzz".as_bytes()),
@@ -211,7 +219,7 @@ mod tests {
         );
         assert_eq!(
             DefaultCmp.find_shortest_sep("yyy".as_bytes(), "z".as_bytes()),
-            "yyz".as_bytes()
+            "yyy\0".as_bytes()
         );
         assert_eq!(
             DefaultCmp.find_shortest_sep("".as_bytes(), "".as_bytes()),
@@ -248,6 +256,13 @@ mod tests {
         );
         assert_eq!(
             cmp.find_shortest_sep(
+                LookupKey::new("abcd".as_bytes(), 1).internal_key(),
+                LookupKey::new("abce".as_bytes(), 2).internal_key()
+            ),
+            LookupKey::new("abcd\0".as_bytes(), 1).internal_key()
+        );
+        assert_eq!(
+            cmp.find_shortest_sep(
                 LookupKey::new("abc".as_bytes(), 1).internal_key(),
                 LookupKey::new("zzz".as_bytes(), 2).internal_key()
             ),
@@ -258,7 +273,7 @@ mod tests {
                 LookupKey::new("abc".as_bytes(), 1).internal_key(),
                 LookupKey::new("acd".as_bytes(), 2).internal_key()
             ),
-            LookupKey::new("abd".as_bytes(), 1).internal_key()
+            LookupKey::new("abc\0".as_bytes(), 1).internal_key()
         );
         assert_eq!(
             cmp.find_shortest_sep(
