@@ -746,7 +746,7 @@ mod tests {
     #[test]
     fn test_version_max_next_level_overlapping() {
         let v = make_version().0;
-        assert_eq!(219, v.max_next_level_overlapping_bytes());
+        assert_eq!(218, v.max_next_level_overlapping_bytes());
     }
 
     #[test]
@@ -771,9 +771,9 @@ mod tests {
     #[test]
     fn test_version_summary() {
         let v = make_version().0;
-        let expected = "level 0: 2 files, 485 bytes ([(1, 233), (2, 252)]); level 1: 3 files, 654 \
-                        bytes ([(3, 219), (4, 217), (5, 218)]); level 2: 2 files, 470 bytes ([(6, \
-                        219), (7, 251)]); level 3: 2 files, 402 bytes ([(8, 201), (9, 201)]); ";
+        let expected = "level 0: 2 files, 483 bytes ([(1, 232), (2, 251)]); level 1: 3 files, 651 \
+                        bytes ([(3, 218), (4, 216), (5, 217)]); level 2: 2 files, 468 bytes ([(6, \
+                        218), (7, 250)]); level 3: 2 files, 400 bytes ([(8, 200), (9, 200)]); ";
         assert_eq!(expected, &v.level_summary());
     }
 

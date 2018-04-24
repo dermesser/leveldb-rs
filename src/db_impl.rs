@@ -1298,10 +1298,10 @@ mod tests {
             env.children(Path::new("db/")).unwrap()
         );
 
-        assert_eq!(251, opt.env.size_of(Path::new("db/000007.ldb")).unwrap());
-        assert_eq!(201, opt.env.size_of(Path::new("db/000008.ldb")).unwrap());
-        assert_eq!(201, opt.env.size_of(Path::new("db/000009.ldb")).unwrap());
-        assert_eq!(436, opt.env.size_of(Path::new("db/000015.ldb")).unwrap());
+        assert_eq!(250, opt.env.size_of(Path::new("db/000007.ldb")).unwrap());
+        assert_eq!(200, opt.env.size_of(Path::new("db/000008.ldb")).unwrap());
+        assert_eq!(200, opt.env.size_of(Path::new("db/000009.ldb")).unwrap());
+        assert_eq!(435, opt.env.size_of(Path::new("db/000015.ldb")).unwrap());
 
         assert!(!opt.env.exists(Path::new("db/000001.ldb")).unwrap());
         assert!(!opt.env.exists(Path::new("db/000002.ldb")).unwrap());
@@ -1334,11 +1334,11 @@ mod tests {
             env.children(Path::new("db/")).unwrap()
         );
 
-        assert_eq!(251, opt.env.size_of(Path::new("db/000007.ldb")).unwrap());
-        assert_eq!(201, opt.env.size_of(Path::new("db/000008.ldb")).unwrap());
-        assert_eq!(201, opt.env.size_of(Path::new("db/000009.ldb")).unwrap());
-        assert_eq!(183, opt.env.size_of(Path::new("db/000014.ldb")).unwrap());
-        assert_eq!(436, opt.env.size_of(Path::new("db/000017.ldb")).unwrap());
+        assert_eq!(250, opt.env.size_of(Path::new("db/000007.ldb")).unwrap());
+        assert_eq!(200, opt.env.size_of(Path::new("db/000008.ldb")).unwrap());
+        assert_eq!(200, opt.env.size_of(Path::new("db/000009.ldb")).unwrap());
+        assert_eq!(182, opt.env.size_of(Path::new("db/000014.ldb")).unwrap());
+        assert_eq!(435, opt.env.size_of(Path::new("db/000017.ldb")).unwrap());
 
         assert!(!opt.env.exists(Path::new("db/000001.ldb")).unwrap());
         assert!(!opt.env.exists(Path::new("db/000002.ldb")).unwrap());
@@ -1385,7 +1385,7 @@ mod tests {
             LookupKey::new("test123".as_bytes(), 7).internal_key(),
             f.largest.as_slice()
         );
-        assert_eq!(380, f.size);
+        assert_eq!(379, f.size);
         assert_eq!(123, f.num);
         assert!(opt.env.exists(path).unwrap());
 
@@ -1568,7 +1568,7 @@ mod tests {
         assert_eq!(0, db.mem.len());
         assert!(db.opt.env.exists(Path::new("db/000002.log")).unwrap());
         assert!(db.opt.env.exists(Path::new("db/000003.ldb")).unwrap());
-        assert_eq!(352, db.opt.env.size_of(Path::new("db/000003.ldb")).unwrap());
+        assert_eq!(351, db.opt.env.size_of(Path::new("db/000003.ldb")).unwrap());
         assert_eq!(
             7,
             LdbIteratorIter::wrap(&mut db.cache.borrow_mut().get_table(3).unwrap().iter()).count()
@@ -1586,7 +1586,7 @@ mod tests {
 
         assert!(!db.opt.env.exists(Path::new("db/000003.ldb")).unwrap());
         assert!(db.opt.env.exists(Path::new("db/000013.ldb")).unwrap());
-        assert_eq!(346, db.opt.env.size_of(Path::new("db/000013.ldb")).unwrap());
+        assert_eq!(345, db.opt.env.size_of(Path::new("db/000013.ldb")).unwrap());
 
         // New current version.
         let v = db.current();
@@ -1610,7 +1610,7 @@ mod tests {
 
         assert!(opt.env.exists(Path::new("db/000006.ldb")).unwrap());
         assert!(!opt.env.exists(Path::new("db/000010.ldb")).unwrap());
-        assert_eq!(219, opt.env.size_of(Path::new("db/000006.ldb")).unwrap());
+        assert_eq!(218, opt.env.size_of(Path::new("db/000006.ldb")).unwrap());
 
         let v = db.current();
         assert_eq!(1, v.borrow().files[2].len());

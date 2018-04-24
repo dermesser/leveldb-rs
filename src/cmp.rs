@@ -41,11 +41,7 @@ impl Cmp for DefaultCmp {
             return a.to_vec();
         }
 
-        let min = if a.len() < b.len() {
-            a.len()
-        } else {
-            b.len()
-        };
+        let min = if a.len() < b.len() { a.len() } else { b.len() };
         let mut diff_at = 0;
 
         while diff_at < min && a[diff_at] == b[diff_at] {
@@ -65,12 +61,28 @@ impl Cmp for DefaultCmp {
             diff_at += 1;
         }
 
+        let mut sep = Vec::with_capacity(a.len() + 1);
+        sep.extend_from_slice(a);
+        // Try increasing a and check if it's still smaller than b. First find the last byte
+        // smaller than 0xff, and then increment that byte. Only if the separator is lesser than b,
+        // return it.
+        let mut i = a.len() - 1;
+        while i > 0 && sep[i] == 0xff {
+            i -= 1;
+        }
+        if sep[i] < 0xff {
+            sep[i] += 1;
+            if self.cmp(&sep, b) == Ordering::Less {
+                return sep;
+            } else {
+                sep[i] -= 1;
+            }
+        }
+
         // Backup case: either `a` is full of 0xff, or all different places are less than 2
         // characters apart.
         // The result is not necessarily short, but a good separator: e.g., "abc" vs "abd" ->
         // "abc\0", which is greater than abc and lesser than abd.
-        let mut sep = Vec::with_capacity(a.len() + 1);
-        sep.extend_from_slice(a);
         // Append a 0 byte; by making it longer than a, it will compare greater to it.
         sep.extend_from_slice(&[0]);
         return sep;
@@ -157,31 +169,10 @@ impl Cmp for MemtableKeyCmp {
     // They will crash the program.
     fn find_shortest_sep(&self, _: &[u8], _: &[u8]) -> Vec<u8> {
         panic!("find* functions are invalid on MemtableKeyCmp");
-
-        // let (akeylen, akeyoff, atag, _, _) = key_types::parse_memtable_key(a);
-        // let (bkeylen, bkeyoff, _, _, _) = key_types::parse_memtable_key(a);
-        // let (atyp, aseq) = key_types::parse_tag(atag);
-        //
-        // let sep: Vec<u8> = self.0.find_shortest_sep(&a[akeyoff..akeyoff + akeylen],
-        // &b[bkeyoff..bkeyoff + bkeylen]);
-        //
-        // if sep.len() < akeylen &&
-        // self.0.cmp(&a[akeyoff..akeyoff + akeylen], &sep) == Ordering::Less {
-        // return key_types::build_memtable_key(&sep, &[0; 0], atyp, types::MAX_SEQUENCE_NUMBER);
-        // }
-        // return key_types::build_memtable_key(&sep, &[0; 0], atyp, aseq);
-        //
     }
 
     fn find_short_succ(&self, _: &[u8]) -> Vec<u8> {
         panic!("find* functions are invalid on MemtableKeyCmp");
-
-        // let (keylen, keyoff, tag, _, _) = key_types::parse_memtable_key(a);
-        // let (typ, seq) = key_types::parse_tag(tag);
-        //
-        // let succ: Vec<u8> = self.0.find_short_succ(&a[keyoff..keyoff + keylen]);
-        // return key_types::build_memtable_key(&succ, &[0; 0], typ, seq);
-        //
     }
 }
 
@@ -193,109 +184,59 @@ mod tests {
 
     #[test]
     fn test_cmp_defaultcmp_shortest_sep() {
-        assert_eq!(
-            DefaultCmp.find_shortest_sep("abcd".as_bytes(), "abcf".as_bytes()),
-            "abce".as_bytes()
-        );
-        assert_eq!(
-            DefaultCmp.find_shortest_sep("abc".as_bytes(), "acd".as_bytes()),
-            "abc\0".as_bytes()
-        );
-        assert_eq!(
-            DefaultCmp.find_shortest_sep("abcdefghi".as_bytes(), "abcffghi".as_bytes()),
-            "abce".as_bytes()
-        );
-        assert_eq!(
-            DefaultCmp.find_shortest_sep("a".as_bytes(), "a".as_bytes()),
-            "a".as_bytes()
-        );
-        assert_eq!(
-            DefaultCmp.find_shortest_sep("a".as_bytes(), "b".as_bytes()),
-            "a\0".as_bytes()
-        );
-        assert_eq!(
-            DefaultCmp.find_shortest_sep("abc".as_bytes(), "zzz".as_bytes()),
-            "b".as_bytes()
-        );
-        assert_eq!(
-            DefaultCmp.find_shortest_sep("yyy".as_bytes(), "z".as_bytes()),
-            "yyy\0".as_bytes()
-        );
-        assert_eq!(
-            DefaultCmp.find_shortest_sep("".as_bytes(), "".as_bytes()),
-            "".as_bytes()
-        );
+        assert_eq!(DefaultCmp.find_shortest_sep("abcd".as_bytes(), "abcf".as_bytes()),
+                   "abce".as_bytes());
+        assert_eq!(DefaultCmp.find_shortest_sep("abc".as_bytes(), "acd".as_bytes()),
+                   "abd".as_bytes());
+        assert_eq!(DefaultCmp.find_shortest_sep("abcdefghi".as_bytes(), "abcffghi".as_bytes()),
+                   "abce".as_bytes());
+        assert_eq!(DefaultCmp.find_shortest_sep("a".as_bytes(), "a".as_bytes()),
+                   "a".as_bytes());
+        assert_eq!(DefaultCmp.find_shortest_sep("a".as_bytes(), "b".as_bytes()),
+                   "a\0".as_bytes());
+        assert_eq!(DefaultCmp.find_shortest_sep("abc".as_bytes(), "zzz".as_bytes()),
+                   "b".as_bytes());
+        assert_eq!(DefaultCmp.find_shortest_sep("yyy".as_bytes(), "z".as_bytes()),
+                   "yyz".as_bytes());
+        assert_eq!(DefaultCmp.find_shortest_sep("".as_bytes(), "".as_bytes()),
+                   "".as_bytes());
     }
 
     #[test]
     fn test_cmp_defaultcmp_short_succ() {
-        assert_eq!(
-            DefaultCmp.find_short_succ("abcd".as_bytes()),
-            "b".as_bytes()
-        );
-        assert_eq!(
-            DefaultCmp.find_short_succ("zzzz".as_bytes()),
-            "{".as_bytes()
-        );
+        assert_eq!(DefaultCmp.find_short_succ("abcd".as_bytes()),
+                   "b".as_bytes());
+        assert_eq!(DefaultCmp.find_short_succ("zzzz".as_bytes()),
+                   "{".as_bytes());
         assert_eq!(DefaultCmp.find_short_succ(&[]), &[0xff]);
-        assert_eq!(
-            DefaultCmp.find_short_succ(&[0xff, 0xff, 0xff]),
-            &[0xff, 0xff, 0xff, 0xff]
-        );
+        assert_eq!(DefaultCmp.find_short_succ(&[0xff, 0xff, 0xff]),
+                   &[0xff, 0xff, 0xff, 0xff]);
     }
 
     #[test]
     fn test_cmp_internalkeycmp_shortest_sep() {
         let cmp = InternalKeyCmp(Rc::new(Box::new(DefaultCmp)));
-        assert_eq!(
-            cmp.find_shortest_sep(
-                LookupKey::new("abcd".as_bytes(), 1).internal_key(),
-                LookupKey::new("abcf".as_bytes(), 2).internal_key()
-            ),
-            LookupKey::new("abce".as_bytes(), 1).internal_key()
-        );
-        assert_eq!(
-            cmp.find_shortest_sep(
-                LookupKey::new("abcd".as_bytes(), 1).internal_key(),
-                LookupKey::new("abce".as_bytes(), 2).internal_key()
-            ),
-            LookupKey::new("abcd\0".as_bytes(), 1).internal_key()
-        );
-        assert_eq!(
-            cmp.find_shortest_sep(
-                LookupKey::new("abc".as_bytes(), 1).internal_key(),
-                LookupKey::new("zzz".as_bytes(), 2).internal_key()
-            ),
-            LookupKey::new("b".as_bytes(), types::MAX_SEQUENCE_NUMBER).internal_key()
-        );
-        assert_eq!(
-            cmp.find_shortest_sep(
-                LookupKey::new("abc".as_bytes(), 1).internal_key(),
-                LookupKey::new("acd".as_bytes(), 2).internal_key()
-            ),
-            LookupKey::new("abc\0".as_bytes(), 1).internal_key()
-        );
-        assert_eq!(
-            cmp.find_shortest_sep(
-                LookupKey::new("abc".as_bytes(), 1).internal_key(),
-                LookupKey::new("abe".as_bytes(), 2).internal_key()
-            ),
-            LookupKey::new("abd".as_bytes(), 1).internal_key()
-        );
-        assert_eq!(
-            cmp.find_shortest_sep(
-                LookupKey::new("".as_bytes(), 1).internal_key(),
-                LookupKey::new("".as_bytes(), 2).internal_key()
-            ),
-            LookupKey::new("".as_bytes(), 1).internal_key()
-        );
-        assert_eq!(
-            cmp.find_shortest_sep(
-                LookupKey::new("abc".as_bytes(), 2).internal_key(),
-                LookupKey::new("abc".as_bytes(), 2).internal_key()
-            ),
-            LookupKey::new("abc".as_bytes(), 2).internal_key()
-        );
+        assert_eq!(cmp.find_shortest_sep(LookupKey::new("abcd".as_bytes(), 1).internal_key(),
+                                         LookupKey::new("abcf".as_bytes(), 2).internal_key()),
+                   LookupKey::new("abce".as_bytes(), 1).internal_key());
+        assert_eq!(cmp.find_shortest_sep(LookupKey::new("abcd".as_bytes(), 1).internal_key(),
+                                         LookupKey::new("abce".as_bytes(), 2).internal_key()),
+                   LookupKey::new("abcd\0".as_bytes(), 1).internal_key());
+        assert_eq!(cmp.find_shortest_sep(LookupKey::new("abc".as_bytes(), 1).internal_key(),
+                                         LookupKey::new("zzz".as_bytes(), 2).internal_key()),
+                   LookupKey::new("b".as_bytes(), types::MAX_SEQUENCE_NUMBER).internal_key());
+        assert_eq!(cmp.find_shortest_sep(LookupKey::new("abc".as_bytes(), 1).internal_key(),
+                                         LookupKey::new("acd".as_bytes(), 2).internal_key()),
+                   LookupKey::new("abd".as_bytes(), 1).internal_key());
+        assert_eq!(cmp.find_shortest_sep(LookupKey::new("abc".as_bytes(), 1).internal_key(),
+                                         LookupKey::new("abe".as_bytes(), 2).internal_key()),
+                   LookupKey::new("abd".as_bytes(), 1).internal_key());
+        assert_eq!(cmp.find_shortest_sep(LookupKey::new("".as_bytes(), 1).internal_key(),
+                                         LookupKey::new("".as_bytes(), 2).internal_key()),
+                   LookupKey::new("".as_bytes(), 1).internal_key());
+        assert_eq!(cmp.find_shortest_sep(LookupKey::new("abc".as_bytes(), 2).internal_key(),
+                                         LookupKey::new("abc".as_bytes(), 2).internal_key()),
+                   LookupKey::new("abc".as_bytes(), 2).internal_key());
     }
 
     #[test]

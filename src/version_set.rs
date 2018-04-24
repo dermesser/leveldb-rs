@@ -1152,9 +1152,9 @@ mod tests {
         let v = vs.current();
         let v = v.borrow();
         // num_level_bytes()
-        assert_eq!(485, v.num_level_bytes(0));
-        assert_eq!(654, v.num_level_bytes(1));
-        assert_eq!(470, v.num_level_bytes(2));
+        assert_eq!(483, v.num_level_bytes(0));
+        assert_eq!(651, v.num_level_bytes(1));
+        assert_eq!(468, v.num_level_bytes(2));
         // num_level_files()
         assert_eq!(2, v.num_level_files(0));
         assert_eq!(3, v.num_level_files(1));
@@ -1228,11 +1228,11 @@ mod tests {
                 vs.approximate_offset(&v, LookupKey::new("aaa".as_bytes(), 9000).internal_key())
             );
             assert_eq!(
-                233,
+                232,
                 vs.approximate_offset(&v, LookupKey::new("bab".as_bytes(), 9000).internal_key())
             );
             assert_eq!(
-                1139,
+                1134,
                 vs.approximate_offset(&v, LookupKey::new("fab".as_bytes(), 9000).internal_key())
             );
         }
