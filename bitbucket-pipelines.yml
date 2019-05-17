@@ -2,7 +2,7 @@ image: rustlang/rust:nightly
 
 pipelines:
     branches:
-        master:
+        '*':
             - step:
                 caches:
                     - cargo
