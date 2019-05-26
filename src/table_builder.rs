@@ -228,7 +228,8 @@ impl<Dst: Write> TableBuilder<Dst> {
         // If there's a pending data block, write it
         if self.data_block.as_ref().unwrap().entries() > 0 {
             // Find a key reliably past the last key
-            let key_past_last = self.opt
+            let key_past_last = self
+                .opt
                 .cmp
                 .find_short_succ(self.data_block.as_ref().unwrap().last_key());
             self.write_data_block(&key_past_last)?;

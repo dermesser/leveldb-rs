@@ -146,7 +146,8 @@ impl Version {
             if fs.is_empty() {
                 continue;
             }
-            let filedesc: Vec<(FileNum, usize)> = fs.iter()
+            let filedesc: Vec<(FileNum, usize)> = fs
+                .iter()
                 .map(|f| (f.borrow().num, f.borrow().size))
                 .collect();
             let desc = format!(
@@ -428,7 +429,8 @@ impl LdbIterator for VersionIter {
         }
 
         // Initialize iterator or load next table.
-        if let Ok(tbl) = self.cache
+        if let Ok(tbl) = self
+            .cache
             .borrow_mut()
             .get_table(self.files[self.current_ix].borrow().num)
         {
@@ -447,7 +449,8 @@ impl LdbIterator for VersionIter {
     }
     fn seek(&mut self, key: &[u8]) {
         if let Some(ix) = find_file(&self.cmp, &self.files, key) {
-            if let Ok(tbl) = self.cache
+            if let Ok(tbl) = self
+                .cache
                 .borrow_mut()
                 .get_table(self.files[ix].borrow().num)
             {
@@ -604,7 +607,8 @@ pub mod testutil {
         startseq: u64,
         num: FileNum,
     ) -> FileMetaHandle {
-        let dst = me.open_writable_file(Path::new(&table_file_name("db", num)))
+        let dst = me
+            .open_writable_file(Path::new(&table_file_name("db", num)))
             .unwrap();
         let mut seq = startseq;
         let keys: Vec<Vec<u8>> = contents
@@ -715,8 +719,8 @@ pub mod testutil {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::testutil::*;
+    use super::*;
 
     use cmp::DefaultCmp;
     use error::Result;
@@ -857,7 +861,8 @@ mod tests {
             ("000".as_bytes(), "abc".as_bytes(), 0),
             ("gab".as_bytes(), "hhh".as_bytes(), 1),
             ("000".as_bytes(), "111".as_bytes(), 2),
-        ].iter()
+        ]
+        .iter()
         {
             assert_eq!(c.2, v.pick_memtable_output_level(c.0, c.1));
         }

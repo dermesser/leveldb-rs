@@ -4,8 +4,8 @@ use env::{path_to_str, path_to_string, Env, FileLock, Logger, RandomAccess};
 use env_common::{micros, sleep_for};
 use error::{err, Result, StatusCode};
 
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -553,16 +553,20 @@ mod tests {
         assert!(fs.unlock_(lock).is_ok());
 
         // Rogue operation.
-        assert!(fs.unlock_(env::FileLock {
-            id: "/a/lock".to_string(),
-        }).is_err());
+        assert!(fs
+            .unlock_(env::FileLock {
+                id: "/a/lock".to_string(),
+            })
+            .is_err());
 
         // Non-existent files.
         let p2 = Path::new("/a/lock2");
         assert!(fs.lock_(p2).is_ok());
-        assert!(fs.unlock_(env::FileLock {
-            id: "/a/lock2".to_string(),
-        }).is_ok());
+        assert!(fs
+            .unlock_(env::FileLock {
+                id: "/a/lock2".to_string(),
+            })
+            .is_ok());
     }
 
     #[test]

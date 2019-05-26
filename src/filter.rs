@@ -247,7 +247,8 @@ mod tests {
             "xxx111xxx222".as_bytes(),
             "ab00cd00ab".as_bytes(),
             "908070605040302010".as_bytes(),
-        ].iter()
+        ]
+        .iter()
         {
             offs.push(concat.len());
             concat.extend_from_slice(d);

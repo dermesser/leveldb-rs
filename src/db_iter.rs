@@ -287,10 +287,10 @@ fn random_period() -> isize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use types::{current_key_val, Direction};
-    use test_util::LdbIteratorIter;
-    use db_impl::DB;
     use db_impl::testutil::*;
+    use db_impl::DB;
+    use test_util::LdbIteratorIter;
+    use types::{current_key_val, Direction};
 
     use std::collections::HashMap;
     use std::collections::HashSet;
@@ -303,10 +303,10 @@ mod tests {
 
         // keys and values come from make_version(); they are each the latest entry.
         let keys: &[&[u8]] = &[
-            b"aaa", b"aab", b"aax", b"aba", b"bab", b"bba", b"cab", b"cba"
+            b"aaa", b"aab", b"aax", b"aba", b"bab", b"bba", b"cab", b"cba",
         ];
         let vals: &[&[u8]] = &[
-            b"val1", b"val2", b"val2", b"val3", b"val4", b"val5", b"val2", b"val3"
+            b"val1", b"val2", b"val2", b"val3", b"val4", b"val5", b"val2", b"val3",
         ];
 
         for (k, v) in keys.iter().zip(vals.iter()) {
@@ -335,10 +335,10 @@ mod tests {
 
         // keys and values come from make_version(); they are each the latest entry.
         let keys: &[&[u8]] = &[
-            b"aaa", b"aab", b"aax", b"aba", b"bab", b"bba", b"cab", b"cba"
+            b"aaa", b"aab", b"aax", b"aba", b"bab", b"bba", b"cab", b"cba",
         ];
         let vals: &[&[u8]] = &[
-            b"val1", b"val2", b"val2", b"val3", b"val4", b"val5", b"val2", b"val3"
+            b"val1", b"val2", b"val2", b"val3", b"val4", b"val5", b"val2", b"val3",
         ];
 
         // This specifies the direction that the iterator should move to. Based on this, an index
@@ -387,7 +387,7 @@ mod tests {
         // gca is the deleted entry.
         let keys: &[&[u8]] = &[b"aab", b"aaa", b"cab", b"eaa", b"aaa", b"iba", b"fba"];
         let vals: &[&[u8]] = &[
-            b"val2", b"val1", b"val2", b"val1", b"val1", b"val2", b"val3"
+            b"val2", b"val1", b"val2", b"val1", b"val1", b"val2", b"val3",
         ];
 
         for (k, v) in keys.iter().zip(vals.iter()) {
@@ -469,7 +469,8 @@ mod tests {
                     (b"xx4".to_vec(), b"222".to_vec()),
                     (b"aaa".to_vec(), b"val1".to_vec()),
                     (b"cab".to_vec(), b"val2".to_vec()),
-                ].into_iter(),
+                ]
+                .into_iter(),
             );
             let non_existing: HashSet<Vec<u8>> = HashSet::from_iter(
                 vec![b"gca".to_vec(), b"xx2".to_vec(), b"xx5".to_vec()].into_iter(),

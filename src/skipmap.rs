@@ -1,6 +1,6 @@
 use cmp::{Cmp, MemtableKeyCmp};
-use types::LdbIterator;
 use rand::{Rng, SeedableRng, StdRng};
+use types::LdbIterator;
 
 use std::cell::RefCell;
 use std::cmp::Ordering;
@@ -251,8 +251,10 @@ impl InnerSkipMap {
             }
         }
 
-        let added_mem = size_of::<Node>() + size_of::<Option<*mut Node>>() * new.skips.len()
-            + new.key.len() + new.value.len();
+        let added_mem = size_of::<Node>()
+            + size_of::<Option<*mut Node>>() * new.skips.len()
+            + new.key.len()
+            + new.value.len();
         self.approx_mem += added_mem;
         self.len += 1;
 
@@ -336,7 +338,8 @@ impl LdbIterator for SkipMapIter {
     fn prev(&mut self) -> bool {
         // Going after the original implementation here; we just seek to the node before current().
         if self.valid() {
-            if let Some(prev) = self.map
+            if let Some(prev) = self
+                .map
                 .borrow()
                 .get_next_smaller(unsafe { &(*self.current).key })
             {
@@ -355,9 +358,9 @@ impl LdbIterator for SkipMapIter {
 pub mod tests {
     use super::*;
     use cmp::MemtableKeyCmp;
+    use options;
     use test_util::{test_iterator_properties, LdbIteratorIter};
     use types::current_key_val;
-    use options;
 
     pub fn make_skipmap() -> SkipMap {
         let mut skm = SkipMap::new(options::for_test().cmp);
@@ -412,12 +415,11 @@ pub mod tests {
                 .key,
             "abf".as_bytes().to_vec()
         );
-        assert!(
-            skm.map
-                .borrow()
-                .get_greater_or_equal(&"ab{".as_bytes().to_vec())
-                .is_none()
-        );
+        assert!(skm
+            .map
+            .borrow()
+            .get_greater_or_equal(&"ab{".as_bytes().to_vec())
+            .is_none());
         assert_eq!(
             skm.map
                 .borrow()
@@ -444,12 +446,11 @@ pub mod tests {
                 .as_slice(),
             "abc".as_bytes()
         );
-        assert!(
-            skm.map
-                .borrow()
-                .get_next_smaller(&"ab0".as_bytes())
-                .is_none()
-        );
+        assert!(skm
+            .map
+            .borrow()
+            .get_next_smaller(&"ab0".as_bytes())
+            .is_none());
         assert_eq!(
             skm.map
                 .borrow()

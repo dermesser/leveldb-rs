@@ -150,10 +150,9 @@ impl<R: Read> LogReader<R> {
         loop {
             if self.blocksize - self.blk_off < HEADER_SIZE {
                 // skip to next block
-                try!(
-                    self.src
-                        .read(&mut self.head_scratch[0..self.blocksize - self.blk_off])
-                );
+                try!(self
+                    .src
+                    .read(&mut self.head_scratch[0..self.blocksize - self.blk_off]));
                 self.blk_off = 0;
             }
 
@@ -171,10 +170,9 @@ impl<R: Read> LogReader<R> {
             typ = self.head_scratch[6];
 
             dst.resize(dst_offset + length as usize, 0);
-            bytes_read = try!(
-                self.src
-                    .read(&mut dst[dst_offset..dst_offset + length as usize])
-            );
+            bytes_read = try!(self
+                .src
+                .read(&mut dst[dst_offset..dst_offset + length as usize]));
             self.blk_off += bytes_read;
 
             if self.checksums

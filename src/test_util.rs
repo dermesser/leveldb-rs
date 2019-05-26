@@ -1,5 +1,5 @@
-use types::{current_key_val, LdbIterator};
 use cmp::{Cmp, DefaultCmp};
+use types::{current_key_val, LdbIterator};
 
 use std::cmp::Ordering;
 

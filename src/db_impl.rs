@@ -10,19 +10,23 @@ use env::{Env, FileLock};
 use error::{err, Result, StatusCode};
 use filter::{BoxedFilterPolicy, InternalFilterPolicy};
 use infolog::Logger;
-use log::{LogReader, LogWriter};
 use key_types::{parse_internal_key, InternalKey, LookupKey, ValueType};
+use log::{LogReader, LogWriter};
 use memtable::MemTable;
 use merging_iter::MergingIter;
 use options::Options;
 use snapshot::{Snapshot, SnapshotList};
 use table_builder::TableBuilder;
 use table_cache::{table_file_name, TableCache};
-use types::{parse_file_name, share, FileMetaData, FileNum, FileType, LdbIterator, SequenceNumber,
-            Shared, MAX_SEQUENCE_NUMBER, NUM_LEVELS};
-use version_edit::VersionEdit;
-use version_set::{manifest_file_name, read_current_file, set_current_file, Compaction, VersionSet};
+use types::{
+    parse_file_name, share, FileMetaData, FileNum, FileType, LdbIterator, SequenceNumber, Shared,
+    MAX_SEQUENCE_NUMBER, NUM_LEVELS,
+};
 use version::Version;
+use version_edit::VersionEdit;
+use version_set::{
+    manifest_file_name, read_current_file, set_current_file, Compaction, VersionSet,
+};
 use write_batch::WriteBatch;
 
 use std::cmp::Ordering;
@@ -108,7 +112,8 @@ impl DB {
         // Create log file if an old one is not being reused.
         if db.log.is_none() {
             let lognum = db.vset.borrow_mut().new_file_number();
-            let logfile = db.opt
+            let logfile = db
+                .opt
                 .env
                 .open_writable_file(Path::new(&log_file_name(&db.name, lognum)))?;
             ve.set_log_num(lognum);
@@ -225,8 +230,7 @@ impl DB {
         let cmp: Rc<Box<Cmp>> = self.opt.cmp.clone();
 
         let mut logreader = LogReader::new(
-            logfile,
-            // checksum=
+            logfile, // checksum=
             true,
         );
         log!(self.opt.log, "Recovering log file {:?}", filename);
@@ -553,7 +557,8 @@ impl DB {
         } else {
             // Create new memtable.
             let logn = self.vset.borrow_mut().new_file_number();
-            let logf = self.opt
+            let logf = self
+                .opt
                 .env
                 .open_writable_file(Path::new(&log_file_name(&self.name, logn)));
             if logf.is_err() {
@@ -614,7 +619,8 @@ impl DB {
 
         for l in 0..max_level + 1 {
             loop {
-                let c_ = self.vset
+                let c_ = self
+                    .vset
                     .borrow_mut()
                     .compact_range(l, &ifrom, iend.internal_key());
                 if let Some(c) = c_ {
@@ -731,7 +737,8 @@ impl DB {
                 num,
                 e
             );
-            let _ = self.opt
+            let _ = self
+                .opt
                 .env
                 .delete(Path::new(&table_file_name(&self.name, num)));
             return Err(e);
@@ -814,7 +821,8 @@ impl DB {
             }
             // Entry is deletion; no older version is observable by any snapshot; and all entries
             // in compacted levels with smaller sequence numbers will
-            if ktyp == ValueType::TypeDeletion && seq <= cs.smallest_seq
+            if ktyp == ValueType::TypeDeletion
+                && seq <= cs.smallest_seq
                 && cs.compaction.is_base_level_for(ukey)
             {
                 last_seq_for_key = seq;
@@ -1114,13 +1122,13 @@ pub mod testutil {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::testutil::{build_db, set_file_to_compact};
+    use super::*;
 
     use error::Status;
-    use options;
     use key_types::LookupKey;
     use mem_env::MemEnv;
+    use options;
     use test_util::LdbIteratorIter;
     use version::testutil::make_version;
 
