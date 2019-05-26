@@ -178,7 +178,7 @@ impl MemFS {
         let mut children = Vec::new();
         for k in fs.keys() {
             if k.starts_with(&prefix) {
-                children.push(Path::new(k.trim_left_matches(&prefix)).to_owned());
+                children.push(Path::new(k.trim_start_matches(&prefix)).to_owned());
             }
         }
         Ok(children)
