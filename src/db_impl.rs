@@ -151,7 +151,7 @@ impl DB {
             return err(StatusCode::AlreadyExists, "database already exists");
         }
 
-        self.opt.env.mkdir(Path::new(&self.name)).is_ok();
+        let _ = self.opt.env.mkdir(Path::new(&self.name));
         self.acquire_lock()?;
 
         if let Err(e) = read_current_file(&self.opt.env, &self.name) {
@@ -321,7 +321,7 @@ impl DB {
 
                 // If we're here, delete this file.
                 if typ == FileType::Table {
-                    self.cache.borrow_mut().evict(num).is_ok();
+                    let _ = self.cache.borrow_mut().evict(num);
                 }
                 log!(self.opt.log, "Deleting file type={:?} num={}", typ, num);
                 if let Err(e) = self.opt.env.delete(&self.name.join(&name)) {
@@ -731,10 +731,9 @@ impl DB {
                 num,
                 e
             );
-            self.opt
+            let _ = self.opt
                 .env
-                .delete(Path::new(&table_file_name(&self.name, num)))
-                .is_ok();
+                .delete(Path::new(&table_file_name(&self.name, num)));
             return Err(e);
         }
 
@@ -928,7 +927,7 @@ impl DB {
 
 impl Drop for DB {
     fn drop(&mut self) {
-        self.release_lock().is_ok();
+        let _ = self.release_lock();
     }
 }
 
@@ -960,7 +959,7 @@ impl CompactionState {
     fn cleanup<P: AsRef<Path>>(&mut self, env: &Box<Env>, name: P) {
         for o in self.outputs.drain(..) {
             let name = table_file_name(name.as_ref(), o.num);
-            env.delete(&name).is_ok();
+            let _ = env.delete(&name);
         }
     }
 }
@@ -1012,13 +1011,13 @@ pub fn build_table<I: LdbIterator, P: AsRef<Path>>(
     })();
 
     if let Err(e) = r {
-        opt.env.delete(Path::new(&filename)).is_ok();
+        let _ = opt.env.delete(Path::new(&filename));
         return Err(e);
     }
 
     let mut md = FileMetaData::default();
     if firstkey.is_none() {
-        opt.env.delete(Path::new(&filename)).is_ok();
+        let _ = opt.env.delete(Path::new(&filename));
     } else {
         md.num = num;
         md.size = opt.env.size_of(Path::new(&filename))?;
@@ -1042,11 +1041,10 @@ fn open_info_log<E: Env + ?Sized, P: AsRef<Path>>(env: &E, db: P) -> Logger {
     let db = db.as_ref();
     let logfilename = db.join("LOG");
     let oldlogfilename = db.join("LOG.old");
-    env.mkdir(Path::new(db)).is_ok();
+    let _ = env.mkdir(Path::new(db));
     if let Ok(e) = env.exists(Path::new(&logfilename)) {
         if e {
-            env.rename(Path::new(&logfilename), Path::new(&oldlogfilename))
-                .is_ok();
+            let _ = env.rename(Path::new(&logfilename), Path::new(&oldlogfilename));
         }
     }
     if let Ok(w) = env.open_writable_file(Path::new(&logfilename)) {

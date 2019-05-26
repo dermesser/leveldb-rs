@@ -886,7 +886,7 @@ pub fn set_current_file<P: AsRef<Path>>(
     let currentfile = current_file_name(dbname);
     if let Err(e) = env.rename(Path::new(&tempfile), Path::new(&currentfile)) {
         // ignore error.
-        env.delete(Path::new(&tempfile)).is_ok();
+        let _ = env.delete(Path::new(&tempfile));
         return Err(Status::from(e));
     }
     Ok(())
