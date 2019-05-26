@@ -6,8 +6,9 @@ use log::{LogReader, LogWriter};
 use merging_iter::MergingIter;
 use options::Options;
 use table_cache::TableCache;
-use types::{parse_file_name, share, FileMetaData, FileNum, FileType, LdbIterator, Shared,
-            NUM_LEVELS};
+use types::{
+    parse_file_name, share, FileMetaData, FileNum, FileType, LdbIterator, Shared, NUM_LEVELS,
+};
 use version::{new_version_iter, total_size, FileMetaHandle, Version};
 use version_edit::VersionEdit;
 
@@ -142,7 +143,8 @@ impl Compaction {
         }
         let grandparents = self.grandparents.as_ref().unwrap();
         while self.grandparent_ix < grandparents.len()
-            && self.icmp
+            && self
+                .icmp
                 .cmp(k, &grandparents[self.grandparent_ix].borrow().largest)
                 == Ordering::Greater
         {
@@ -294,7 +296,8 @@ impl VersionSet {
 
             for f in &current.files[level] {
                 if self.compaction_ptrs[level].is_empty()
-                    || self.cmp
+                    || self
+                        .cmp
                         .cmp(&f.borrow().largest, &self.compaction_ptrs[level])
                         == Ordering::Greater
                 {
@@ -336,11 +339,12 @@ impl VersionSet {
         to: InternalKey<'b>,
     ) -> Option<Compaction> {
         assert!(self.current.is_some());
-        let mut inputs = self.current.as_ref().unwrap().borrow().overlapping_inputs(
-            level,
-            from,
-            to,
-        );
+        let mut inputs = self
+            .current
+            .as_ref()
+            .unwrap()
+            .borrow()
+            .overlapping_inputs(level, from, to);
         if inputs.is_empty() {
             return None;
         }
@@ -503,9 +507,9 @@ impl VersionSet {
         if self.descriptor_log.is_none() {
             let descname = manifest_file_name(&self.dbname, self.manifest_num);
             edit.set_next_file(self.next_file_num);
-            self.descriptor_log = Some(LogWriter::new(self.opt
-                .env
-                .open_writable_file(Path::new(&descname))?));
+            self.descriptor_log = Some(LogWriter::new(
+                self.opt.env.open_writable_file(Path::new(&descname))?,
+            ));
             self.write_snapshot()?;
         }
 
@@ -566,7 +570,10 @@ impl VersionSet {
         let descfilename = self.dbname.join(current);
         let mut builder = Builder::new();
         {
-            let mut descfile = self.opt.env.open_sequential_file(Path::new(&descfilename))?;
+            let mut descfile = self
+                .opt
+                .env
+                .open_sequential_file(Path::new(&descfilename))?;
             let mut logreader = LogReader::new(
                 &mut descfile,
                 // checksum=
@@ -681,7 +688,8 @@ impl VersionSet {
             }
 
             assert!(self.descriptor_log.is_none());
-            let s = self.opt
+            let s = self
+                .opt
                 .env
                 .open_appendable_file(Path::new(current_manifest_path));
             if let Ok(f) = s {
@@ -1243,7 +1251,8 @@ mod tests {
             // compact level 0 with a partial range.
             let from = LookupKey::new("000".as_bytes(), 1000);
             let to = LookupKey::new("ab".as_bytes(), 1010);
-            let c = vs.compact_range(0, from.internal_key(), to.internal_key())
+            let c = vs
+                .compact_range(0, from.internal_key(), to.internal_key())
                 .unwrap();
             assert_eq!(2, c.inputs[0].len());
             assert_eq!(1, c.inputs[1].len());
@@ -1252,7 +1261,8 @@ mod tests {
             // compact level 0, but entire range of keys in version.
             let from = LookupKey::new("000".as_bytes(), 1000);
             let to = LookupKey::new("zzz".as_bytes(), 1010);
-            let c = vs.compact_range(0, from.internal_key(), to.internal_key())
+            let c = vs
+                .compact_range(0, from.internal_key(), to.internal_key())
                 .unwrap();
             assert_eq!(2, c.inputs[0].len());
             assert_eq!(1, c.inputs[1].len());
@@ -1266,7 +1276,8 @@ mod tests {
             // Expand input range on higher level.
             let from = LookupKey::new("dab".as_bytes(), 1000);
             let to = LookupKey::new("eab".as_bytes(), 1010);
-            let c = vs.compact_range(1, from.internal_key(), to.internal_key())
+            let c = vs
+                .compact_range(1, from.internal_key(), to.internal_key())
                 .unwrap();
             assert_eq!(3, c.inputs[0].len());
             assert_eq!(1, c.inputs[1].len());
@@ -1280,7 +1291,8 @@ mod tests {
             // is_trivial_move
             let from = LookupKey::new("fab".as_bytes(), 1000);
             let to = LookupKey::new("fba".as_bytes(), 1010);
-            let mut c = vs.compact_range(2, from.internal_key(), to.internal_key())
+            let mut c = vs
+                .compact_range(2, from.internal_key(), to.internal_key())
                 .unwrap();
             // pretend it's not manual
             c.manual = false;
@@ -1290,7 +1302,8 @@ mod tests {
             let from = LookupKey::new("000".as_bytes(), 1000);
             let to = LookupKey::new("zzz".as_bytes(), 1010);
             let mid = LookupKey::new("abc".as_bytes(), 1010);
-            let mut c = vs.compact_range(0, from.internal_key(), to.internal_key())
+            let mut c = vs
+                .compact_range(0, from.internal_key(), to.internal_key())
                 .unwrap();
             assert!(!c.should_stop_before(from.internal_key()));
             assert!(!c.should_stop_before(mid.internal_key()));
@@ -1299,7 +1312,8 @@ mod tests {
             // is_base_level_for
             let from = LookupKey::new("000".as_bytes(), 1000);
             let to = LookupKey::new("zzz".as_bytes(), 1010);
-            let mut c = vs.compact_range(0, from.internal_key(), to.internal_key())
+            let mut c = vs
+                .compact_range(0, from.internal_key(), to.internal_key())
                 .unwrap();
             assert!(c.is_base_level_for("aaa".as_bytes()));
             assert!(!c.is_base_level_for("hac".as_bytes()));
@@ -1307,7 +1321,8 @@ mod tests {
             // input/add_input_deletions
             let from = LookupKey::new("000".as_bytes(), 1000);
             let to = LookupKey::new("zzz".as_bytes(), 1010);
-            let mut c = vs.compact_range(0, from.internal_key(), to.internal_key())
+            let mut c = vs
+                .compact_range(0, from.internal_key(), to.internal_key())
                 .unwrap();
             for inp in &[(0, 0, 1), (0, 1, 2), (1, 0, 3)] {
                 let f = &c.inputs[inp.0][inp.1];

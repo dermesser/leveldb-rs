@@ -165,10 +165,10 @@ impl FilterBlockReader {
 
 #[cfg(test)]
 mod tests {
-    use filter::BloomPolicy;
-    use super::*;
-    use super::FILTER_BASE_LOG2;
     use super::get_filter_index;
+    use super::FILTER_BASE_LOG2;
+    use super::*;
+    use filter::BloomPolicy;
 
     #[test]
     fn test_filter_index() {

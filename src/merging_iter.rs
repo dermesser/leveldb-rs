@@ -199,9 +199,9 @@ mod tests {
     use super::*;
 
     use cmp::DefaultCmp;
+    use skipmap::tests;
     use test_util::{test_iterator_properties, LdbIteratorIter, TestLdbIter};
     use types::{current_key_val, LdbIterator};
-    use skipmap::tests;
 
     #[test]
     fn test_merging_one() {

@@ -43,10 +43,12 @@ fn map_err_with_name(method: &'static str, f: &Path, e: io::Error) -> Status {
 // error conversion using std::convert::From.
 impl Env for PosixDiskEnv {
     fn open_sequential_file(&self, p: &Path) -> Result<Box<Read>> {
-        Ok(Box::new(fs::OpenOptions::new()
-            .read(true)
-            .open(p)
-            .map_err(|e| map_err_with_name("open (seq)", p, e))?))
+        Ok(Box::new(
+            fs::OpenOptions::new()
+                .read(true)
+                .open(p)
+                .map_err(|e| map_err_with_name("open (seq)", p, e))?,
+        ))
     }
     fn open_random_access_file(&self, p: &Path) -> Result<Box<RandomAccess>> {
         Ok(fs::OpenOptions::new()
@@ -59,20 +61,24 @@ impl Env for PosixDiskEnv {
             .map_err(|e| map_err_with_name("open (randomaccess)", p, e))?)
     }
     fn open_writable_file(&self, p: &Path) -> Result<Box<Write>> {
-        Ok(Box::new(fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .append(false)
-            .open(p)
-            .map_err(|e| map_err_with_name("open (write)", p, e))?))
+        Ok(Box::new(
+            fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .append(false)
+                .open(p)
+                .map_err(|e| map_err_with_name("open (write)", p, e))?,
+        ))
     }
     fn open_appendable_file(&self, p: &Path) -> Result<Box<Write>> {
-        Ok(Box::new(fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .append(true)
-            .open(p)
-            .map_err(|e| map_err_with_name("open (append)", p, e))?))
+        Ok(Box::new(
+            fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .append(true)
+                .open(p)
+                .map_err(|e| map_err_with_name("open (append)", p, e))?,
+        ))
     }
 
     fn exists(&self, p: &Path) -> Result<bool> {
@@ -279,9 +285,11 @@ mod tests {
         let env = PosixDiskEnv::new();
 
         assert!(env.mkdir(dirname).is_ok());
-        assert!(env.open_writable_file(
-            String::from_iter(vec![d.to_string(), "f1.txt".to_string()].into_iter()).as_ref()
-        ).is_ok());
+        assert!(env
+            .open_writable_file(
+                String::from_iter(vec![d.to_string(), "f1.txt".to_string()].into_iter()).as_ref()
+            )
+            .is_ok());
         assert_eq!(env.children(dirname).unwrap().len(), 1);
         assert!(env.rmdir(dirname).is_ok());
     }

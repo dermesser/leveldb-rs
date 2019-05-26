@@ -11,9 +11,9 @@ use types::FileNum;
 
 use integer_encoding::FixedIntWriter;
 
+use std::convert::AsRef;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::convert::AsRef;
 
 pub fn table_file_name<P: AsRef<Path>>(name: P, num: FileNum) -> PathBuf {
     assert!(num > 0);

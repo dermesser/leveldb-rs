@@ -3,8 +3,8 @@
 use error::{err, Result, StatusCode};
 
 use std::cell::RefCell;
-use std::rc::Rc;
 use std::path::Path;
+use std::rc::Rc;
 
 pub const NUM_LEVELS: usize = 7;
 

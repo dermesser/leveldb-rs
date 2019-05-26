@@ -239,8 +239,8 @@ impl<T> Cache<T> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::LRUList;
+    use super::*;
 
     fn make_key(a: u8, b: u8, c: u8) -> CacheKey {
         [a, b, c, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]

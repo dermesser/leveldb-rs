@@ -362,11 +362,11 @@ impl LdbIterator for TableIterator {
 #[cfg(test)]
 mod tests {
     use filter::BloomPolicy;
+    use key_types::LookupKey;
     use options::{self, CompressionType};
     use table_builder::TableBuilder;
     use test_util::{test_iterator_properties, LdbIteratorIter};
     use types::{current_key_val, LdbIterator};
-    use key_types::LookupKey;
 
     use super::*;
 
@@ -705,12 +705,10 @@ mod tests {
             assert_eq!((k.to_vec(), v.to_vec()), table.get(k).unwrap().unwrap());
         }
 
-        assert!(
-            table
-                .get(LookupKey::new(b"abc", 1000).internal_key())
-                .unwrap()
-                .is_some()
-        );
+        assert!(table
+            .get(LookupKey::new(b"abc", 1000).internal_key())
+            .unwrap()
+            .is_some());
 
         let mut iter = table.iter();
 

@@ -1,8 +1,8 @@
-use key_types::{LookupKey, UserKey};
 use cmp::{Cmp, MemtableKeyCmp};
 use key_types::{build_memtable_key, parse_internal_key, parse_memtable_key, ValueType};
-use types::{current_key_val, LdbIterator, SequenceNumber};
+use key_types::{LookupKey, UserKey};
 use skipmap::{SkipMap, SkipMapIter};
+use types::{current_key_val, LdbIterator, SequenceNumber};
 
 use std::rc::Rc;
 
@@ -155,8 +155,8 @@ fn shift_left(s: &mut Vec<u8>, mid: usize) {
 mod tests {
     use super::*;
     use key_types::*;
-    use test_util::{test_iterator_properties, LdbIteratorIter};
     use options;
+    use test_util::{test_iterator_properties, LdbIteratorIter};
 
     #[test]
     fn test_shift_left() {

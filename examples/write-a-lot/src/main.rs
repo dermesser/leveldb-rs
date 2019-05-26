@@ -1,10 +1,10 @@
 extern crate rand;
 extern crate rusty_leveldb;
 
-use rusty_leveldb::CompressionType;
-use rusty_leveldb::DB;
-use rusty_leveldb::Options;
 use rand::Rng;
+use rusty_leveldb::CompressionType;
+use rusty_leveldb::Options;
+use rusty_leveldb::DB;
 
 use std::error::Error;
 use std::iter::FromIterator;

@@ -3,8 +3,8 @@
 
 use error::Result;
 
-use std::io::prelude::*;
 use std::fs::File;
+use std::io::prelude::*;
 use std::os::unix::fs::FileExt;
 use std::path::{Path, PathBuf};
 
