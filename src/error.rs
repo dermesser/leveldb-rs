@@ -5,6 +5,7 @@ use std::io;
 use std::result;
 use std::sync;
 
+use errno;
 use snap;
 
 /// StatusCode describes various failure modes of database operations.
@@ -24,6 +25,7 @@ pub enum StatusCode {
     NotSupported,
     PermissionDenied,
     Unknown,
+    Errno(errno::Errno),
 }
 
 /// Status encapsulates a `StatusCode` and an error message. It can be displayed, and also

@@ -24,6 +24,7 @@
 #![allow(dead_code)]
 
 extern crate crc;
+extern crate errno;
 extern crate integer_encoding;
 extern crate libc;
 extern crate rand;
