@@ -147,7 +147,7 @@ impl Env for PosixDiskEnv {
             if result < 0 {
                 return Err(Status::new(
                     StatusCode::Errno(errno::errno()),
-                    "Lock is held (fcntl)",
+                    &format!("fcntl error on fd {} (file {})", fd, p.display()),
                 ));
             }
 
