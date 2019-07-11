@@ -6,7 +6,6 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::{self, Read, Write};
 use std::iter::FromIterator;
-use std::mem;
 use std::os::unix::io::IntoRawFd;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -128,26 +127,18 @@ impl Env for PosixDiskEnv {
                 .open(p)
                 .map_err(|e| map_err_with_name("lock", p, e))?;
 
-            let flock_arg = libc::flock {
-                l_type: F_WRLCK,
-                l_whence: libc::SEEK_SET as libc::c_short,
-                l_start: 0,
-                l_len: 0,
-                l_pid: 0,
-            };
             let fd = f.into_raw_fd();
             let result = unsafe {
-                libc::fcntl(
-                    fd,
-                    libc::F_SETLK,
-                    mem::transmute::<&libc::flock, *const libc::flock>(&&flock_arg),
-                )
+                libc::flock(fd as libc::c_int, libc::LOCK_EX | libc::LOCK_NB)
             };
 
             if result < 0 {
+                if errno::errno() == errno::Errno(libc::EWOULDBLOCK) {
+                    return Err(Status::new(StatusCode::LockError, "lock on database is already held by different process"))
+                }
                 return Err(Status::new(
                     StatusCode::Errno(errno::errno()),
-                    &format!("fcntl error on fd {} (file {})", fd, p.display()),
+                    &format!("unknown lock error on fd {} (file {})", fd, p.display()),
                 ));
             }
 
@@ -160,7 +151,6 @@ impl Env for PosixDiskEnv {
     }
     fn unlock(&self, l: FileLock) -> Result<()> {
         let mut locks = self.locks.lock().unwrap();
-
         if !locks.contains_key(&l.id) {
             return err(
                 StatusCode::LockError,
@@ -168,19 +158,12 @@ impl Env for PosixDiskEnv {
             );
         } else {
             let fd = locks.remove(&l.id).unwrap();
-            let flock_arg = libc::flock {
-                l_type: F_UNLCK,
-                l_whence: libc::SEEK_SET as libc::c_short,
-                l_start: 0,
-                l_len: 0,
-                l_pid: 0,
-            };
             let result = unsafe {
-                libc::fcntl(
-                    fd,
-                    libc::F_SETLK,
-                    mem::transmute::<&libc::flock, *const libc::flock>(&&flock_arg),
-                )
+                let ok = libc::fcntl(fd, libc::F_GETFD);
+                if ok < 0 { // Likely EBADF when already closed. In that case, the lock is released and all is fine.
+                    return Ok(())
+                }
+                libc::flock(fd, libc::LOCK_UN)
             };
             if result < 0 {
                 return err(StatusCode::LockError, &format!("unlock failed: {}", l.id));
