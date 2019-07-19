@@ -128,13 +128,14 @@ impl Env for PosixDiskEnv {
                 .map_err(|e| map_err_with_name("lock", p, e))?;
 
             let fd = f.into_raw_fd();
-            let result = unsafe {
-                libc::flock(fd as libc::c_int, libc::LOCK_EX | libc::LOCK_NB)
-            };
+            let result = unsafe { libc::flock(fd as libc::c_int, libc::LOCK_EX | libc::LOCK_NB) };
 
             if result < 0 {
                 if errno::errno() == errno::Errno(libc::EWOULDBLOCK) {
-                    return Err(Status::new(StatusCode::LockError, "lock on database is already held by different process"))
+                    return Err(Status::new(
+                        StatusCode::LockError,
+                        "lock on database is already held by different process",
+                    ));
                 }
                 return Err(Status::new(
                     StatusCode::Errno(errno::errno()),
@@ -160,8 +161,9 @@ impl Env for PosixDiskEnv {
             let fd = locks.remove(&l.id).unwrap();
             let result = unsafe {
                 let ok = libc::fcntl(fd, libc::F_GETFD);
-                if ok < 0 { // Likely EBADF when already closed. In that case, the lock is released and all is fine.
-                    return Ok(())
+                if ok < 0 {
+                    // Likely EBADF when already closed. In that case, the lock is released and all is fine.
+                    return Ok(());
                 }
                 libc::flock(fd, libc::LOCK_UN)
             };
