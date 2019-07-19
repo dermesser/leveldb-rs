@@ -19,6 +19,13 @@ errno = "0.2"
 
 [dev-dependencies]
 time-test = "0.2"
+bencher = "0.1"
+
+[[bench]]
+name = "maps_bench"
+harness = false
+path = "src/benches/maps_bench.rs"
 
 [workspace]
 members = ["examples/write-a-lot", "examples/leveldb-tool"]
+
