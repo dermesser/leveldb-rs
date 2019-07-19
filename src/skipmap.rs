@@ -1,5 +1,6 @@
 use cmp::{Cmp, MemtableKeyCmp};
-use rand::{Rng, SeedableRng, StdRng};
+use rand::rngs::StdRng;
+use rand::{RngCore, SeedableRng};
 use types::LdbIterator;
 
 use std::cell::RefCell;
@@ -55,7 +56,7 @@ impl SkipMap {
                     key: Vec::new(),
                     value: Vec::new(),
                 }),
-                rand: StdRng::from_seed(&[0xde, 0xad, 0xbe, 0xef]),
+                rand: StdRng::seed_from_u64(0xdeadbeef),
                 len: 0,
                 approx_mem: size_of::<Self>() + MAX_HEIGHT * size_of::<Option<*mut Node>>(),
                 cmp: cmp,
