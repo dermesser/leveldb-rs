@@ -2,7 +2,7 @@
 #!/bin/bash
 
 KCOV=kcov
-KCOV_OPTS="--verify --exclude-pattern=/.cargo"
+KCOV_OPTS="--verify --exclude-pattern=/.cargo,/glibc,/usr/lib,/usr/include"
 KCOV_OUT="./kcov-out/"
 
 export RUSTFLAGS="-C link-dead-code"
