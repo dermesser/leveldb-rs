@@ -30,7 +30,7 @@ struct InnerSkipMap {
     len: usize,
     // approximation of memory used.
     approx_mem: usize,
-    cmp: Rc<Box<Cmp>>,
+    cmp: Rc<Box<dyn Cmp>>,
 }
 
 pub struct SkipMap {
@@ -39,12 +39,12 @@ pub struct SkipMap {
 
 impl SkipMap {
     /// Returns a SkipMap that wraps the comparator inside a MemtableKeyCmp.
-    pub fn new_memtable_map(cmp: Rc<Box<Cmp>>) -> SkipMap {
+    pub fn new_memtable_map(cmp: Rc<Box<dyn Cmp>>) -> SkipMap {
         SkipMap::new(Rc::new(Box::new(MemtableKeyCmp(cmp))))
     }
 
     /// Returns a SkipMap that uses the specified comparator.
-    pub fn new(cmp: Rc<Box<Cmp>>) -> SkipMap {
+    pub fn new(cmp: Rc<Box<dyn Cmp>>) -> SkipMap {
         let mut s = Vec::new();
         s.resize(MAX_HEIGHT, None);
 
@@ -475,7 +475,7 @@ pub mod tests {
     #[test]
     fn test_empty_skipmap_find_memtable_cmp() {
         // Regression test: Make sure comparator isn't called with empty key.
-        let cmp: Rc<Box<Cmp>> = Rc::new(Box::new(MemtableKeyCmp(options::for_test().cmp)));
+        let cmp: Rc<Box<dyn Cmp>> = Rc::new(Box::new(MemtableKeyCmp(options::for_test().cmp)));
         let skm = SkipMap::new(cmp);
 
         let mut it = skm.iter();

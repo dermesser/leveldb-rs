@@ -43,14 +43,14 @@ pub struct DB {
     name: PathBuf,
     lock: Option<FileLock>,
 
-    internal_cmp: Rc<Box<Cmp>>,
+    internal_cmp: Rc<Box<dyn Cmp>>,
     fpol: InternalFilterPolicy<BoxedFilterPolicy>,
     opt: Options,
 
     mem: MemTable,
     imm: Option<MemTable>,
 
-    log: Option<LogWriter<BufWriter<Box<Write>>>>,
+    log: Option<LogWriter<BufWriter<Box<dyn Write>>>>,
     log_num: Option<FileNum>,
     cache: Shared<TableCache>,
     vset: Shared<VersionSet>,
@@ -227,7 +227,7 @@ impl DB {
         let filename = log_file_name(&self.name, log_num);
         let logfile = self.opt.env.open_sequential_file(Path::new(&filename))?;
         // Use the user-supplied comparator; it will be wrapped inside a MemtableKeyCmp.
-        let cmp: Rc<Box<Cmp>> = self.opt.cmp.clone();
+        let cmp: Rc<Box<dyn Cmp>> = self.opt.cmp.clone();
 
         let mut logreader = LogReader::new(
             logfile, // checksum=
@@ -496,7 +496,7 @@ impl DB {
     /// merge_iterators produces a MergingIter merging the entries in the memtable, the immutable
     /// memtable, and table files from all levels.
     fn merge_iterators(&mut self) -> Result<MergingIter> {
-        let mut iters: Vec<Box<LdbIterator>> = vec![];
+        let mut iters: Vec<Box<dyn LdbIterator>> = vec![];
         if self.mem.len() > 0 {
             iters.push(Box::new(self.mem.iter()));
         }
@@ -942,7 +942,7 @@ struct CompactionState {
     compaction: Compaction,
     smallest_seq: SequenceNumber,
     outputs: Vec<FileMetaData>,
-    builder: Option<TableBuilder<Box<Write>>>,
+    builder: Option<TableBuilder<Box<dyn Write>>>,
     total_bytes: usize,
 }
 
@@ -963,7 +963,7 @@ impl CompactionState {
     }
 
     /// cleanup cleans up after an aborted compaction.
-    fn cleanup<P: AsRef<Path>>(&mut self, env: &Box<Env>, name: P) {
+    fn cleanup<P: AsRef<Path>>(&mut self, env: &Box<dyn Env>, name: P) {
         for o in self.outputs.drain(..) {
             let name = table_file_name(name.as_ref(), o.num);
             let _ = env.delete(&name);
@@ -1624,7 +1624,7 @@ mod tests {
 
     #[test]
     fn test_db_impl_compaction_state_cleanup() {
-        let env: Box<Env> = Box::new(MemEnv::new());
+        let env: Box<dyn Env> = Box::new(MemEnv::new());
         let name = "db";
 
         let stuff = "abcdefghijkl".as_bytes();

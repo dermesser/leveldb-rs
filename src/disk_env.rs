@@ -41,7 +41,7 @@ fn map_err_with_name(method: &'static str, f: &Path, e: io::Error) -> Status {
 // Note: We're using Ok(f()?) in several locations below in order to benefit from the automatic
 // error conversion using std::convert::From.
 impl Env for PosixDiskEnv {
-    fn open_sequential_file(&self, p: &Path) -> Result<Box<Read>> {
+    fn open_sequential_file(&self, p: &Path) -> Result<Box<dyn Read>> {
         Ok(Box::new(
             fs::OpenOptions::new()
                 .read(true)
@@ -49,17 +49,17 @@ impl Env for PosixDiskEnv {
                 .map_err(|e| map_err_with_name("open (seq)", p, e))?,
         ))
     }
-    fn open_random_access_file(&self, p: &Path) -> Result<Box<RandomAccess>> {
+    fn open_random_access_file(&self, p: &Path) -> Result<Box<dyn RandomAccess>> {
         Ok(fs::OpenOptions::new()
             .read(true)
             .open(p)
             .map(|f| {
-                let b: Box<RandomAccess> = Box::new(f);
+                let b: Box<dyn RandomAccess> = Box::new(f);
                 b
             })
             .map_err(|e| map_err_with_name("open (randomaccess)", p, e))?)
     }
-    fn open_writable_file(&self, p: &Path) -> Result<Box<Write>> {
+    fn open_writable_file(&self, p: &Path) -> Result<Box<dyn Write>> {
         Ok(Box::new(
             fs::OpenOptions::new()
                 .create(true)
@@ -69,7 +69,7 @@ impl Env for PosixDiskEnv {
                 .map_err(|e| map_err_with_name("open (write)", p, e))?,
         ))
     }
-    fn open_appendable_file(&self, p: &Path) -> Result<Box<Write>> {
+    fn open_appendable_file(&self, p: &Path) -> Result<Box<dyn Write>> {
         Ok(Box::new(
             fs::OpenOptions::new()
                 .create(true)

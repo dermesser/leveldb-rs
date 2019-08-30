@@ -39,8 +39,8 @@ pub fn int_to_compressiontype(i: u32) -> Option<CompressionType> {
 /// Note: Compression is not yet implemented.
 #[derive(Clone)]
 pub struct Options {
-    pub cmp: Rc<Box<Cmp>>,
-    pub env: Rc<Box<Env>>,
+    pub cmp: Rc<Box<dyn Cmp>>,
+    pub env: Rc<Box<dyn Env>>,
     pub log: Option<Shared<Logger>>,
     pub create_if_missing: bool,
     pub error_if_exists: bool,

@@ -17,12 +17,12 @@ pub struct MemTable {
 impl MemTable {
     /// Returns a new MemTable.
     /// This wraps opt.cmp inside a MemtableKey-specific comparator.
-    pub fn new(cmp: Rc<Box<Cmp>>) -> MemTable {
+    pub fn new(cmp: Rc<Box<dyn Cmp>>) -> MemTable {
         MemTable::new_raw(Rc::new(Box::new(MemtableKeyCmp(cmp))))
     }
 
     /// Doesn't wrap the comparator in a MemtableKeyCmp.
-    fn new_raw(cmp: Rc<Box<Cmp>>) -> MemTable {
+    fn new_raw(cmp: Rc<Box<dyn Cmp>>) -> MemTable {
         MemTable {
             map: SkipMap::new(cmp),
         }

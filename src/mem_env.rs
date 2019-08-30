@@ -158,7 +158,7 @@ impl MemFS {
         }
     }
     /// Open a file for writing.
-    fn open_w(&self, p: &Path, append: bool, truncate: bool) -> Result<Box<Write>> {
+    fn open_w(&self, p: &Path, append: bool, truncate: bool) -> Result<Box<dyn Write>> {
         let f = self.open(p, true)?;
         if truncate {
             f.0.lock().unwrap().clear();
@@ -281,19 +281,19 @@ impl MemEnv {
 }
 
 impl Env for MemEnv {
-    fn open_sequential_file(&self, p: &Path) -> Result<Box<Read>> {
+    fn open_sequential_file(&self, p: &Path) -> Result<Box<dyn Read>> {
         let f = self.0.open(p, false)?;
         Ok(Box::new(MemFileReader::new(f, 0)))
     }
-    fn open_random_access_file(&self, p: &Path) -> Result<Box<RandomAccess>> {
+    fn open_random_access_file(&self, p: &Path) -> Result<Box<dyn RandomAccess>> {
         self.0
             .open(p, false)
-            .map(|m| Box::new(m) as Box<RandomAccess>)
+            .map(|m| Box::new(m) as Box<dyn RandomAccess>)
     }
-    fn open_writable_file(&self, p: &Path) -> Result<Box<Write>> {
+    fn open_writable_file(&self, p: &Path) -> Result<Box<dyn Write>> {
         self.0.open_w(p, true, true)
     }
-    fn open_appendable_file(&self, p: &Path) -> Result<Box<Write>> {
+    fn open_appendable_file(&self, p: &Path) -> Result<Box<dyn Write>> {
         self.0.open_w(p, true, false)
     }
 

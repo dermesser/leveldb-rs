@@ -4,7 +4,7 @@ use types;
 use std::cmp::Ordering;
 use std::rc::Rc;
 
-type WrappedCmp = Rc<Box<Cmp>>;
+type WrappedCmp = Rc<Box<dyn Cmp>>;
 
 /// Comparator trait, supporting types that can be nested (i.e., add additional functionality on
 /// top of an inner comparator)
@@ -105,7 +105,7 @@ impl Cmp for DefaultCmp {
 
 /// Same as memtable_key_cmp, but for InternalKeys.
 #[derive(Clone)]
-pub struct InternalKeyCmp(pub Rc<Box<Cmp>>);
+pub struct InternalKeyCmp(pub Rc<Box<dyn Cmp>>);
 
 impl Cmp for InternalKeyCmp {
     fn cmp(&self, a: &[u8], b: &[u8]) -> Ordering {
@@ -154,7 +154,7 @@ impl InternalKeyCmp {
 /// ordering the sequence numbers. (This means that when having an entry abx/4 and seRching for
 /// abx/5, then abx/4 is counted as "greater-or-equal", making snapshot functionality work at all)
 #[derive(Clone)]
-pub struct MemtableKeyCmp(pub Rc<Box<Cmp>>);
+pub struct MemtableKeyCmp(pub Rc<Box<dyn Cmp>>);
 
 impl Cmp for MemtableKeyCmp {
     fn cmp(&self, a: &[u8], b: &[u8]) -> Ordering {

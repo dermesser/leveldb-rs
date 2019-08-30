@@ -18,7 +18,7 @@ use std::rc::Rc;
 use integer_encoding::FixedIntWriter;
 
 /// Reads the table footer.
-fn read_footer(f: &RandomAccess, size: usize) -> Result<Footer> {
+fn read_footer(f: &dyn RandomAccess, size: usize) -> Result<Footer> {
     let mut buf = vec![0; table_builder::FULL_FOOTER_LENGTH];
     f.read_at(size - table_builder::FULL_FOOTER_LENGTH, &mut buf)?;
     Ok(Footer::decode(&buf))
@@ -26,7 +26,7 @@ fn read_footer(f: &RandomAccess, size: usize) -> Result<Footer> {
 
 #[derive(Clone)]
 pub struct Table {
-    file: Rc<Box<RandomAccess>>,
+    file: Rc<Box<dyn RandomAccess>>,
     file_size: usize,
     cache_id: cache::CacheID,
 
@@ -39,7 +39,7 @@ pub struct Table {
 
 impl Table {
     /// Creates a new table reader operating on unformatted keys (i.e., UserKey).
-    fn new_raw(opt: Options, file: Rc<Box<RandomAccess>>, size: usize) -> Result<Table> {
+    fn new_raw(opt: Options, file: Rc<Box<dyn RandomAccess>>, size: usize) -> Result<Table> {
         let footer = try!(read_footer(file.as_ref().as_ref(), size));
         let indexblock = try!(table_block::read_table_block(
             opt.clone(),
@@ -69,7 +69,7 @@ impl Table {
 
     fn read_filter_block(
         metaix: &Block,
-        file: &RandomAccess,
+        file: &dyn RandomAccess,
         options: &Options,
     ) -> Result<Option<FilterBlockReader>> {
         // Open filter block for reading
@@ -96,7 +96,7 @@ impl Table {
     /// Creates a new table reader operating on internal keys (i.e., InternalKey). This means that
     /// a different comparator (internal_key_cmp) and a different filter policy
     /// (InternalFilterPolicy) are used.
-    pub fn new(mut opt: Options, file: Rc<Box<RandomAccess>>, size: usize) -> Result<Table> {
+    pub fn new(mut opt: Options, file: Rc<Box<dyn RandomAccess>>, size: usize) -> Result<Table> {
         opt.cmp = Rc::new(Box::new(InternalKeyCmp(opt.cmp.clone())));
         opt.filter_policy = Rc::new(Box::new(filter::InternalFilterPolicy::new(
             opt.filter_policy,
@@ -442,7 +442,7 @@ mod tests {
         (d, size)
     }
 
-    fn wrap_buffer(src: Vec<u8>) -> Rc<Box<RandomAccess>> {
+    fn wrap_buffer(src: Vec<u8>) -> Rc<Box<dyn RandomAccess>> {
         Rc::new(Box::new(src))
     }
 

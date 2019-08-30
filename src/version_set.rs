@@ -25,7 +25,7 @@ pub struct Compaction {
     max_file_size: usize,
     input_version: Option<Shared<Version>>,
     level_ixs: [usize; NUM_LEVELS],
-    cmp: Rc<Box<Cmp>>,
+    cmp: Rc<Box<dyn Cmp>>,
     icmp: InternalKeyCmp,
 
     manual: bool,
@@ -181,7 +181,7 @@ pub struct VersionSet {
     current: Option<Shared<Version>>,
     compaction_ptrs: [Vec<u8>; NUM_LEVELS],
 
-    descriptor_log: Option<LogWriter<Box<Write>>>,
+    descriptor_log: Option<LogWriter<Box<dyn Write>>>,
 }
 
 impl VersionSet {
@@ -705,9 +705,9 @@ impl VersionSet {
     }
 
     /// make_input_iterator returns an iterator over the inputs of a compaction.
-    pub fn make_input_iterator(&self, c: &Compaction) -> Box<LdbIterator> {
+    pub fn make_input_iterator(&self, c: &Compaction) -> Box<dyn LdbIterator> {
         let cap = if c.level == 0 { c.num_inputs(0) + 1 } else { 2 };
-        let mut iters: Vec<Box<LdbIterator>> = Vec::with_capacity(cap);
+        let mut iters: Vec<Box<dyn LdbIterator>> = Vec::with_capacity(cap);
         for i in 0..2 {
             if c.num_inputs(i) == 0 {
                 continue;
@@ -738,7 +738,7 @@ impl VersionSet {
             }
         }
         assert!(iters.len() <= cap);
-        let cmp: Rc<Box<Cmp>> = Rc::new(Box::new(self.cmp.clone()));
+        let cmp: Rc<Box<dyn Cmp>> = Rc::new(Box::new(self.cmp.clone()));
         Box::new(MergingIter::new(cmp, iters))
     }
 }
@@ -865,7 +865,7 @@ fn current_file_name<P: AsRef<Path>>(dbname: P) -> PathBuf {
     dbname.as_ref().join("CURRENT").to_owned()
 }
 
-pub fn read_current_file(env: &Box<Env>, dbname: &Path) -> Result<String> {
+pub fn read_current_file(env: &Box<dyn Env>, dbname: &Path) -> Result<String> {
     let mut current = String::new();
     let mut f = env.open_sequential_file(Path::new(&current_file_name(dbname)))?;
     f.read_to_string(&mut current)?;
@@ -879,7 +879,7 @@ pub fn read_current_file(env: &Box<Env>, dbname: &Path) -> Result<String> {
 }
 
 pub fn set_current_file<P: AsRef<Path>>(
-    env: &Box<Env>,
+    env: &Box<dyn Env>,
     dbname: P,
     manifest_file_num: FileNum,
 ) -> Result<()> {
@@ -1209,7 +1209,7 @@ mod tests {
 
     /// iterator_properties tests that it contains len elements and that they are ordered in
     /// ascending order by cmp.
-    fn iterator_properties<It: LdbIterator>(mut it: It, len: usize, cmp: Rc<Box<Cmp>>) {
+    fn iterator_properties<It: LdbIterator>(mut it: It, len: usize, cmp: Rc<Box<dyn Cmp>>) {
         let mut wr = LdbIteratorIter::wrap(&mut it);
         let first = wr.next().unwrap();
         let mut count = 1;

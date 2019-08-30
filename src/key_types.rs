@@ -152,7 +152,7 @@ pub fn parse_memtable_key<'a>(mkey: MemtableKey<'a>) -> (usize, usize, u64, usiz
 }
 
 /// cmp_memtable_key efficiently compares two memtable keys by only parsing what's actually needed.
-pub fn cmp_memtable_key<'a, 'b>(ucmp: &Cmp, a: MemtableKey<'a>, b: MemtableKey<'b>) -> Ordering {
+pub fn cmp_memtable_key<'a, 'b>(ucmp: &dyn Cmp, a: MemtableKey<'a>, b: MemtableKey<'b>) -> Ordering {
     let (alen, aoff): (usize, usize) = VarInt::decode_var(&a);
     let (blen, boff): (usize, usize) = VarInt::decode_var(&b);
     let userkey_a = &a[aoff..aoff + alen - 8];
@@ -185,7 +185,7 @@ pub fn parse_internal_key<'a>(ikey: InternalKey<'a>) -> (ValueType, SequenceNumb
 
 /// cmp_internal_key efficiently compares keys in InternalKey format by only parsing the parts that
 /// are actually needed for a comparison.
-pub fn cmp_internal_key<'a, 'b>(ucmp: &Cmp, a: InternalKey<'a>, b: InternalKey<'b>) -> Ordering {
+pub fn cmp_internal_key<'a, 'b>(ucmp: &dyn Cmp, a: InternalKey<'a>, b: InternalKey<'b>) -> Ordering {
     match ucmp.cmp(&a[0..a.len() - 8], &b[0..b.len() - 8]) {
         Ordering::Less => Ordering::Less,
         Ordering::Greater => Ordering::Greater,

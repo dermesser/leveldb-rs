@@ -14,7 +14,7 @@ pub trait RandomAccess {
 
 impl RandomAccess for File {
     fn read_at(&self, off: usize, dst: &mut [u8]) -> Result<usize> {
-        Ok((self as &FileExt).read_at(dst, off as u64)?)
+        Ok((self as &dyn FileExt).read_at(dst, off as u64)?)
     }
 }
 
@@ -23,10 +23,10 @@ pub struct FileLock {
 }
 
 pub trait Env {
-    fn open_sequential_file(&self, &Path) -> Result<Box<Read>>;
-    fn open_random_access_file(&self, &Path) -> Result<Box<RandomAccess>>;
-    fn open_writable_file(&self, &Path) -> Result<Box<Write>>;
-    fn open_appendable_file(&self, &Path) -> Result<Box<Write>>;
+    fn open_sequential_file(&self, &Path) -> Result<Box<dyn Read>>;
+    fn open_random_access_file(&self, &Path) -> Result<Box<dyn RandomAccess>>;
+    fn open_writable_file(&self, &Path) -> Result<Box<dyn Write>>;
+    fn open_appendable_file(&self, &Path) -> Result<Box<dyn Write>>;
 
     fn exists(&self, &Path) -> Result<bool>;
     fn children(&self, &Path) -> Result<Vec<PathBuf>>;
@@ -47,11 +47,11 @@ pub trait Env {
 }
 
 pub struct Logger {
-    dst: Box<Write>,
+    dst: Box<dyn Write>,
 }
 
 impl Logger {
-    pub fn new(w: Box<Write>) -> Logger {
+    pub fn new(w: Box<dyn Write>) -> Logger {
         Logger { dst: w }
     }
 

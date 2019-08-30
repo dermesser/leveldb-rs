@@ -17,7 +17,7 @@ pub trait FilterPolicy {
 
 /// A boxed and refcounted filter policy (reference-counted because a Box with unsized content
 /// couldn't be cloned otherwise)
-pub type BoxedFilterPolicy = Rc<Box<FilterPolicy>>;
+pub type BoxedFilterPolicy = Rc<Box<dyn FilterPolicy>>;
 
 impl FilterPolicy for BoxedFilterPolicy {
     fn name(&self) -> &'static str {

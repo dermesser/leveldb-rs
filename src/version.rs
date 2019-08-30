@@ -22,7 +22,7 @@ pub struct GetStats {
 
 pub struct Version {
     table_cache: Shared<TableCache>,
-    user_cmp: Rc<Box<Cmp>>,
+    user_cmp: Rc<Box<dyn Cmp>>,
     pub files: [Vec<FileMetaHandle>; NUM_LEVELS],
 
     pub file_to_compact: Option<FileMetaHandle>,
@@ -32,7 +32,7 @@ pub struct Version {
 }
 
 impl Version {
-    pub fn new(cache: Shared<TableCache>, ucmp: Rc<Box<Cmp>>) -> Version {
+    pub fn new(cache: Shared<TableCache>, ucmp: Rc<Box<dyn Cmp>>) -> Version {
         Version {
             table_cache: cache,
             user_cmp: ucmp,
@@ -360,8 +360,8 @@ impl Version {
 
     /// new_iters returns a set of iterators that can be merged to yield all entries in this
     /// version.
-    pub fn new_iters(&self) -> Result<Vec<Box<LdbIterator>>> {
-        let mut iters: Vec<Box<LdbIterator>> = vec![];
+    pub fn new_iters(&self) -> Result<Vec<Box<dyn LdbIterator>>> {
+        let mut iters: Vec<Box<dyn LdbIterator>> = vec![];
         for f in &self.files[0] {
             iters.push(Box::new(
                 self.table_cache
@@ -386,7 +386,7 @@ impl Version {
 pub fn new_version_iter(
     files: Vec<FileMetaHandle>,
     cache: Shared<TableCache>,
-    ucmp: Rc<Box<Cmp>>,
+    ucmp: Rc<Box<dyn Cmp>>,
 ) -> VersionIter {
     VersionIter {
         files: files,
@@ -602,7 +602,7 @@ pub mod testutil {
     /// write_table creates a table with the given number and contents (must be sorted!) in the
     /// memenv. The sequence numbers given to keys start with startseq.
     pub fn write_table(
-        me: &Box<Env>,
+        me: &Box<dyn Env>,
         contents: &[(&[u8], &[u8], ValueType)],
         startseq: u64,
         num: FileNum,

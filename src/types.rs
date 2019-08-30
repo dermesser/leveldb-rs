@@ -93,7 +93,7 @@ pub fn current_key_val<It: LdbIterator + ?Sized>(it: &It) -> Option<(Vec<u8>, Ve
     }
 }
 
-impl LdbIterator for Box<LdbIterator> {
+impl LdbIterator for Box<dyn LdbIterator> {
     fn advance(&mut self) -> bool {
         self.as_mut().advance()
     }

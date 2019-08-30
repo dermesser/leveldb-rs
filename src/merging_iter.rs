@@ -17,15 +17,15 @@ enum SL {
 }
 
 pub struct MergingIter {
-    iters: Vec<Box<LdbIterator>>,
+    iters: Vec<Box<dyn LdbIterator>>,
     current: Option<usize>,
     direction: Direction,
-    cmp: Rc<Box<Cmp>>,
+    cmp: Rc<Box<dyn Cmp>>,
 }
 
 impl MergingIter {
     /// Construct a new merging iterator.
-    pub fn new(cmp: Rc<Box<Cmp>>, iters: Vec<Box<LdbIterator>>) -> MergingIter {
+    pub fn new(cmp: Rc<Box<dyn Cmp>>, iters: Vec<Box<dyn LdbIterator>>) -> MergingIter {
         let mi = MergingIter {
             iters: iters,
             current: None,

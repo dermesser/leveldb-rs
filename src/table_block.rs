@@ -13,14 +13,14 @@ use integer_encoding::FixedInt;
 use snap::Decoder;
 
 /// Reads the data for the specified block handle from a file.
-fn read_bytes(f: &RandomAccess, location: &BlockHandle) -> Result<Vec<u8>> {
+fn read_bytes(f: &dyn RandomAccess, location: &BlockHandle) -> Result<Vec<u8>> {
     let mut buf = vec![0; location.size()];
     f.read_at(location.offset(), &mut buf).map(|_| buf)
 }
 
 /// Reads a serialized filter block from a file and returns a FilterBlockReader.
 pub fn read_filter_block(
-    src: &RandomAccess,
+    src: &dyn RandomAccess,
     location: &BlockHandle,
     policy: filter::BoxedFilterPolicy,
 ) -> Result<FilterBlockReader> {
@@ -37,7 +37,7 @@ pub fn read_filter_block(
 /// Reads a table block from a random-access source.
 /// A table block consists of [bytes..., compress (1B), checksum (4B)]; the handle only refers to
 /// the location and length of [bytes...].
-pub fn read_table_block(opt: Options, f: &RandomAccess, location: &BlockHandle) -> Result<Block> {
+pub fn read_table_block(opt: Options, f: &dyn RandomAccess, location: &BlockHandle) -> Result<Block> {
     // The block is denoted by offset and length in BlockHandle. A block in an encoded
     // table is followed by 1B compression type and 4B checksum.
     // The checksum refers to the compressed contents.
