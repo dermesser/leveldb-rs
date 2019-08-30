@@ -37,7 +37,11 @@ pub fn read_filter_block(
 /// Reads a table block from a random-access source.
 /// A table block consists of [bytes..., compress (1B), checksum (4B)]; the handle only refers to
 /// the location and length of [bytes...].
-pub fn read_table_block(opt: Options, f: &dyn RandomAccess, location: &BlockHandle) -> Result<Block> {
+pub fn read_table_block(
+    opt: Options,
+    f: &dyn RandomAccess,
+    location: &BlockHandle,
+) -> Result<Block> {
     // The block is denoted by offset and length in BlockHandle. A block in an encoded
     // table is followed by 1B compression type and 4B checksum.
     // The checksum refers to the compressed contents.

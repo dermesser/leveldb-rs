@@ -15,11 +15,7 @@ use rusty_leveldb::SkipMap;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-fn gen_key_val<R: Rng>(
-    gen: &mut R,
-    keylen: usize,
-    vallen: usize,
-) -> (Vec<u8>, Vec<u8>) {
+fn gen_key_val<R: Rng>(gen: &mut R, keylen: usize, vallen: usize) -> (Vec<u8>, Vec<u8>) {
     let mut key = Vec::with_capacity(keylen);
     let mut val = Vec::with_capacity(vallen);
 
