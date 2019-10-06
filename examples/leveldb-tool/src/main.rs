@@ -51,7 +51,7 @@ fn main() {
 
     if args.len() < 2 {
         panic!(
-            "Usage: {} [get|put|delete|iter|compact] [key|from] [val|to]",
+            "Usage: {} [get|put/set|delete|iter|compact] [key|from] [val|to]",
             args[0]
         );
     }
@@ -68,7 +68,7 @@ fn main() {
             }
             get(&mut db, &args[2]);
         }
-        "put" => {
+        "put" | "set" => {
             if args.len() < 4 {
                 panic!("Usage: {} put key val", args[0]);
             }
