@@ -70,14 +70,14 @@ impl DB {
             let log = open_info_log(opt.env.as_ref().as_ref(), name);
             opt.log = Some(share(log));
         }
-	let path = name.canonicalize().unwrap_or(name.to_owned());
+        let path = name.canonicalize().unwrap_or(name.to_owned());
 
         let cache = share(TableCache::new(&name, opt.clone(), opt.max_open_files - 10));
         let vset = VersionSet::new(&name, opt.clone(), cache.clone());
 
         DB {
             name: name.to_owned(),
-	    path: path,
+            path: path,
             lock: None,
             internal_cmp: Rc::new(Box::new(InternalKeyCmp(opt.cmp.clone()))),
             fpol: InternalFilterPolicy::new(opt.filter_policy.clone()),
@@ -143,26 +143,26 @@ impl DB {
         ve.set_last_seq(0);
 
         {
-            let manifest = manifest_file_name(&self.name, 1);
+            let manifest = manifest_file_name(&self.path, 1);
             let manifest_file = self.opt.env.open_writable_file(Path::new(&manifest))?;
             let mut lw = LogWriter::new(manifest_file);
             lw.add_record(&ve.encode())?;
             lw.flush()?;
         }
-        set_current_file(&self.opt.env, &self.name, 1)
+        set_current_file(&self.opt.env, &self.path, 1)
     }
 
     /// recover recovers from the existing state on disk. If the wrapped result is `true`, then
     /// log_and_apply() should be called after recovery has finished.
     fn recover(&mut self, ve: &mut VersionEdit) -> Result<bool> {
-        if self.opt.error_if_exists && self.opt.env.exists(&self.name.as_ref()).unwrap_or(false) {
+        if self.opt.error_if_exists && self.opt.env.exists(&self.path.as_ref()).unwrap_or(false) {
             return err(StatusCode::AlreadyExists, "database already exists");
         }
 
-        let _ = self.opt.env.mkdir(Path::new(&self.name));
+        let _ = self.opt.env.mkdir(Path::new(&self.path));
         self.acquire_lock()?;
 
-        if let Err(e) = read_current_file(&self.opt.env, &self.name) {
+        if let Err(e) = read_current_file(&self.opt.env, &self.path) {
             if e.code == StatusCode::NotFound && self.opt.create_if_missing {
                 self.initialize_db()?;
             } else {
@@ -179,7 +179,7 @@ impl DB {
 
         // Recover from all log files not in the descriptor.
         let mut max_seq = 0;
-        let filenames = self.opt.env.children(&self.name)?;
+        let filenames = self.opt.env.children(&self.path)?;
         let mut expected = self.vset.borrow().live_files();
         let mut log_files = vec![];
 
@@ -227,7 +227,7 @@ impl DB {
         is_last: bool,
         ve: &mut VersionEdit,
     ) -> Result<(bool, SequenceNumber)> {
-        let filename = log_file_name(&self.name, log_num);
+        let filename = log_file_name(&self.path, log_num);
         let logfile = self.opt.env.open_sequential_file(Path::new(&filename))?;
         // Use the user-supplied comparator; it will be wrapped inside a MemtableKeyCmp.
         let cmp: Rc<Box<dyn Cmp>> = self.opt.cmp.clone();
@@ -296,7 +296,7 @@ impl DB {
     /// delete_obsolete_files removes files that are no longer needed from the file system.
     fn delete_obsolete_files(&mut self) -> Result<()> {
         let files = self.vset.borrow().live_files();
-        let filenames = self.opt.env.children(Path::new(&self.name))?;
+        let filenames = self.opt.env.children(Path::new(&self.path))?;
         for name in filenames {
             if let Ok((num, typ)) = parse_file_name(&name) {
                 match typ {
@@ -330,7 +330,7 @@ impl DB {
                     let _ = self.cache.borrow_mut().evict(num);
                 }
                 log!(self.opt.log, "Deleting file type={:?} num={}", typ, num);
-                if let Err(e) = self.opt.env.delete(&self.name.join(&name)) {
+                if let Err(e) = self.opt.env.delete(&self.path.join(&name)) {
                     log!(self.opt.log, "Deleting file num={} failed: {}", num, e);
                 }
             }
@@ -340,7 +340,7 @@ impl DB {
 
     /// acquire_lock acquires the lock file.
     fn acquire_lock(&mut self) -> Result<()> {
-        let lock_r = self.opt.env.lock(Path::new(&lock_file_name(&self.name)));
+        let lock_r = self.opt.env.lock(Path::new(&lock_file_name(&self.path)));
         match lock_r {
             Ok(lockfile) => {
                 self.lock = Some(lockfile);
@@ -562,7 +562,7 @@ impl DB {
             let logf = self
                 .opt
                 .env
-                .open_writable_file(Path::new(&log_file_name(&self.name, logn)));
+                .open_writable_file(Path::new(&log_file_name(&self.path, logn)));
             if logf.is_err() {
                 self.vset.borrow_mut().reuse_file_number(logn);
                 Err(logf.err().unwrap())
@@ -679,7 +679,7 @@ impl DB {
             };
             let mut state = CompactionState::new(compaction, smallest);
             if let Err(e) = self.do_compaction_work(&mut state) {
-                state.cleanup(&self.opt.env, &self.name);
+                state.cleanup(&self.opt.env, &self.path);
                 log!(self.opt.log, "Compaction work failed: {}", e);
             }
             self.install_compaction_results(state)?;
@@ -722,7 +722,7 @@ impl DB {
         let start_ts = self.opt.env.micros();
         let num = self.vset.borrow_mut().new_file_number();
         log!(self.opt.log, "Start write of L0 table {:06}", num);
-        let fmd = build_table(&self.name, &self.opt, memt.iter(), num)?;
+        let fmd = build_table(&self.path, &self.opt, memt.iter(), num)?;
         log!(self.opt.log, "L0 table {:06} has {} bytes", num, fmd.size);
 
         // Wrote empty table.
@@ -742,7 +742,7 @@ impl DB {
             let _ = self
                 .opt
                 .env
-                .delete(Path::new(&table_file_name(&self.name, num)));
+                .delete(Path::new(&table_file_name(&self.path, num)));
             return Err(e);
         }
 
@@ -839,7 +839,7 @@ impl DB {
                 let mut fmd = FileMetaData::default();
                 fmd.num = fnum;
 
-                let fname = table_file_name(&self.name, fnum);
+                let fname = table_file_name(&self.path, fnum);
                 let f = self.opt.env.open_writable_file(Path::new(&fname))?;
                 let f = Box::new(BufWriter::new(f));
                 cs.builder = Some(TableBuilder::new(self.opt.clone(), f));
