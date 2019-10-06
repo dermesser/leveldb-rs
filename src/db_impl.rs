@@ -41,6 +41,7 @@ use std::rc::Rc;
 /// is not concurrent (yet).
 pub struct DB {
     name: PathBuf,
+    path: PathBuf,
     lock: Option<FileLock>,
 
     internal_cmp: Rc<Box<dyn Cmp>>,
@@ -69,12 +70,14 @@ impl DB {
             let log = open_info_log(opt.env.as_ref().as_ref(), name);
             opt.log = Some(share(log));
         }
+	let path = name.canonicalize().unwrap_or(name.to_owned());
 
         let cache = share(TableCache::new(&name, opt.clone(), opt.max_open_files - 10));
         let vset = VersionSet::new(&name, opt.clone(), cache.clone());
 
         DB {
             name: name.to_owned(),
+	    path: path,
             lock: None,
             internal_cmp: Rc::new(Box::new(InternalKeyCmp(opt.cmp.clone()))),
             fpol: InternalFilterPolicy::new(opt.filter_policy.clone()),
