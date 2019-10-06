@@ -106,7 +106,7 @@ impl Env for PosixDiskEnv {
         Ok(fs::remove_file(p).map_err(|e| map_err_with_name("delete", p, e))?)
     }
     fn mkdir(&self, p: &Path) -> Result<()> {
-        Ok(fs::create_dir(p).map_err(|e| map_err_with_name("mkdir", p, e))?)
+        Ok(fs::create_dir_all(p).map_err(|e| map_err_with_name("mkdir", p, e))?)
     }
     fn rmdir(&self, p: &Path) -> Result<()> {
         Ok(fs::remove_dir_all(p).map_err(|e| map_err_with_name("rmdir", p, e))?)
