@@ -19,13 +19,9 @@ I do care, however, about bug reports.
 * Fully synchronous: Efficiency gains by using non-atomic types, but writes may
   occasionally block during a compaction. In --release mode, an average compaction
   takes 0.2-0.5 seconds.
-* Compatibility with the original: Compression is not implemented so far; this works
-  as long as compression is disabled in the original.
-* Performance is decent; while usually not par with the original, due to multi-threading
-  in the original and language-inherent overhead (we are doing things the right way),
-  it will be enough for most use cases.
-* Safe: While using many shared pointers, the implementation is generally safe. Many
-  places use asserts though, so you may see a crash -- in which case you should file a bug.
+* Compatible with the original implementation. If it isn't (crash/read error/write error), it's a bug and needs to be fixed.
+* Performance is decent; while not quite up to par with the original (we don't use multithreading, for example) it is very much usable.
+* Safe: Many places use asserts though, so you may rarely see a crash -- in which case you should file a bug.
 
 ## Goals
 
@@ -33,7 +29,7 @@ Some of the goals of this implementation are
 
 * As few copies of data as possible; most of the time, slices of bytes (`&[u8]`)
   are used. Owned memory is represented as `Vec<u8>` (and then possibly borrowed
-  as slice).
+  as slice). Zero-copy is not always possible, though, and sometimes simplicity is favored.
 * Correctness -- self-checking implementation, good test coverage, etc. Just
   like the original implementation.
 * Clarity; commented code, clear structure (hopefully doing a better job than
