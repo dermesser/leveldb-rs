@@ -23,7 +23,6 @@ rust:
 stages:
   - name: test
   - name: lint
-  - name: coverage
 
 install: true
 
@@ -41,19 +40,5 @@ jobs:
         - rustup component add rustfmt
       script:
         - cargo fmt --all -- --check
-
-    - stage: coverage
-      if: os = linux
-      sudo: true
-      rust: stable
-      env:
-        - RUSTFLAGS="-C link-dead-code -C debuginfo=2 -C opt-level=0"
-        - CACHE_NAME="coverage"
-      install:
-        - ./.travis/install-kcov.sh "v36" "29ccdde3bd44f14e0d7c88d709e1e5ff9b448e735538ae45ee08b73c19a2ea0b" && export PATH="kcov/usr/bin:${PATH}";
-      script:
-        - cargo test --no-run
-        - ./.travis/run-kcov.sh "yup_oauth2"
-        - bash <(curl -s https://codecov.io/bash) -F "${TRAVIS_RUST_VERSION}"
 
 cache: cargo
