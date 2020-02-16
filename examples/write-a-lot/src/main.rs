@@ -17,7 +17,7 @@ fn gen_string(len: usize) -> String {
     String::from_iter(rng.gen_ascii_chars().take(len))
 }
 
-fn fill_db(db: &mut DB, entries: usize) -> Result<(), Box<Error>> {
+fn fill_db(db: &mut DB, entries: usize) -> Result<(), Box<dyn Error>> {
     for i in 0..entries {
         let (k, v) = (gen_string(KEY_LEN), gen_string(VAL_LEN));
         db.put(k.as_bytes(), v.as_bytes())?;

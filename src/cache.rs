@@ -69,24 +69,20 @@ impl<T> LRUList<T> {
         if self.count() == 0 {
             return None;
         }
-        if self.head.prev.is_some() {
-            let mut lasto = unsafe {
-                replace(
-                    &mut (*((*self.head.prev.unwrap()).prev.unwrap())).next,
-                    None,
-                )
-            };
+        let mut lasto = unsafe {
+            replace(
+                &mut (*((*self.head.prev.unwrap()).prev.unwrap())).next,
+                None,
+            )
+        };
 
-            assert!(lasto.is_some());
-            if let Some(ref mut last) = lasto {
-                assert!(last.prev.is_some());
-                assert!(self.head.prev.is_some());
-                self.head.prev = last.prev;
-                self.count -= 1;
-                return replace(&mut (*last).data, None);
-            } else {
-                None
-            }
+        assert!(lasto.is_some());
+        if let Some(ref mut last) = lasto {
+            assert!(last.prev.is_some());
+            assert!(self.head.prev.is_some());
+            self.head.prev = last.prev;
+            self.count -= 1;
+            return replace(&mut (*last).data, None);
         } else {
             None
         }
