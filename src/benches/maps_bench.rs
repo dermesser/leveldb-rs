@@ -12,8 +12,8 @@ use rand::Rng;
 use rusty_leveldb::DefaultCmp;
 use rusty_leveldb::SkipMap;
 
-use std::collections::HashMap;
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::rc::Rc;
 
 fn gen_key_val<R: Rng>(gen: &mut R, keylen: usize, vallen: usize) -> (Vec<u8>, Vec<u8>) {

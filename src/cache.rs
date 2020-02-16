@@ -67,7 +67,7 @@ impl<T> LRUList<T> {
 
     fn remove_last(&mut self) -> Option<T> {
         if self.count() == 0 {
-            return None
+            return None;
         }
         if self.head.prev.is_some() {
             let mut lasto = unsafe {
