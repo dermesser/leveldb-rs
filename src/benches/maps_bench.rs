@@ -13,6 +13,7 @@ use rusty_leveldb::DefaultCmp;
 use rusty_leveldb::SkipMap;
 
 use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::rc::Rc;
 
 fn gen_key_val<R: Rng>(gen: &mut R, keylen: usize, vallen: usize) -> (Vec<u8>, Vec<u8>) {
@@ -93,10 +94,39 @@ fn bench_hashmap_insert(b: &mut Bencher) {
     });
 }
 
+fn bench_btree_insert(b: &mut Bencher) {
+    let mut gen = rand::thread_rng();
+    let mut btm = BTreeMap::new();
+
+    b.iter(|| {
+        let (mut k, v) = gen_key_val(&mut gen, 10, 10);
+        btm.insert(k.clone(), v.clone());
+        k[9] += 1;
+        btm.insert(k.clone(), v.clone());
+        k[9] += 1;
+        btm.insert(k.clone(), v.clone());
+        k[9] += 1;
+        btm.insert(k.clone(), v.clone());
+        k[9] += 1;
+        btm.insert(k.clone(), v.clone());
+        k[9] += 1;
+        btm.insert(k.clone(), v.clone());
+        k[9] += 1;
+        btm.insert(k.clone(), v.clone());
+        k[9] += 1;
+        btm.insert(k.clone(), v.clone());
+        k[9] += 1;
+        btm.insert(k.clone(), v.clone());
+        k[9] += 1;
+        btm.insert(k, v);
+    });
+}
+
 benchmark_group!(
     basic,
     bench_gen_key_val,
     bench_skipmap_insert,
-    bench_hashmap_insert
+    bench_hashmap_insert,
+    bench_btree_insert,
 );
 benchmark_main!(basic);
