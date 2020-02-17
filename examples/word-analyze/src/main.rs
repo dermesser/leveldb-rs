@@ -1,4 +1,3 @@
-
 use rusty_leveldb as leveldb;
 
 use std::fs::OpenOptions;
