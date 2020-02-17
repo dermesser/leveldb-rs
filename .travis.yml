@@ -3,17 +3,6 @@ os:
   - osx
 dist: bionic
 sudo: false
-addons:
-  apt:
-    packages:
-      # necessary for kcov
-      - libcurl4-openssl-dev
-      - libelf-dev
-      - libdw-dev
-      - libiberty-dev
-      - binutils-dev
-      - cmake
-      - gcc
 
 language: rust
 rust:
