@@ -16,7 +16,7 @@ use std::rc::Rc;
 use crc::crc32;
 use crc::Hasher32;
 use integer_encoding::FixedIntWriter;
-use snap::Encoder;
+use snap::write::FrameEncoder;
 
 pub const FOOTER_LENGTH: usize = 40;
 pub const FULL_FOOTER_LENGTH: usize = FOOTER_LENGTH + 8;
@@ -202,8 +202,12 @@ impl<Dst: Write> TableBuilder<Dst> {
     fn write_block(&mut self, block: BlockContents, ctype: CompressionType) -> Result<BlockHandle> {
         let mut data = block;
         if ctype == CompressionType::CompressionSnappy {
-            let mut encoder = Encoder::new();
-            data = encoder.compress_vec(&data)?;
+            let mut encoded = vec![];
+            {
+                let mut encoder = FrameEncoder::new(&mut encoded);
+                encoder.write(&data)?;
+            }
+            data = encoded;
         }
 
         let mut digest = crc32::Digest::new(crc32::CASTAGNOLI);
@@ -322,7 +326,7 @@ mod tests {
         assert!(b.filter_block.is_some());
 
         let actual = b.finish().unwrap();
-        assert_eq!(223, actual);
+        assert_eq!(275, actual);
     }
 
     #[test]
