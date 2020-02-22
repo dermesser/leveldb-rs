@@ -60,6 +60,8 @@ pub struct DB {
     cstats: [CompactionStats; NUM_LEVELS],
 }
 
+unsafe impl Send for DB {}
+
 impl DB {
     // RECOVERY AND INITIALIZATION //
 
