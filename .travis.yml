@@ -19,6 +19,7 @@ install: true
 script: 
   - cargo build
   - cargo test
+  - examples/build_examples.sh
 
 jobs:
   include:
