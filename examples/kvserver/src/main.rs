@@ -39,11 +39,25 @@ impl KVService {
 }
 
 fn get_key_fn(rq: &canteen::Request) -> canteen::Response {
-    unsafe { STORAGE_SERVICE.as_ref().unwrap().lock().unwrap().handle_get(rq) }
+    unsafe {
+        STORAGE_SERVICE
+            .as_ref()
+            .unwrap()
+            .lock()
+            .unwrap()
+            .handle_get(rq)
+    }
 }
 
 fn put_key_fn(rq: &canteen::Request) -> canteen::Response {
-    unsafe { STORAGE_SERVICE.as_ref().unwrap().lock().unwrap().handle_put(rq) }
+    unsafe {
+        STORAGE_SERVICE
+            .as_ref()
+            .unwrap()
+            .lock()
+            .unwrap()
+            .handle_put(rq)
+    }
 }
 
 fn main() {
@@ -53,7 +67,11 @@ fn main() {
 
     let mut ct = canteen::Canteen::new();
     ct.add_route("/kvs/get/<str:key>", &[canteen::Method::Get], get_key_fn);
-    ct.add_route("/kvs/put/<str:key>", &[canteen::Method::Put, canteen::Method::Post], put_key_fn);
+    ct.add_route(
+        "/kvs/put/<str:key>",
+        &[canteen::Method::Put, canteen::Method::Post],
+        put_key_fn,
+    );
     ct.bind("0.0.0.0:8080");
     ct.run()
 }
