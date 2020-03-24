@@ -10,6 +10,8 @@ keywords = ["LevelDB", "key-value", "database", "SSTable", "Google"]
 license = "MIT"
 publish = true
 
+include = ["src/**/*", "src/*", "Cargo.toml", "LICENSE", "README.md"]
+
 [dependencies]
 crc = "1.8"
 integer-encoding = "1.0"
