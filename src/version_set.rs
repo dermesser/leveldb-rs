@@ -18,8 +18,6 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use std::os::unix::ffi::OsStrExt;
-
 pub struct Compaction {
     level: usize,
     max_file_size: usize,
@@ -888,8 +886,8 @@ pub fn set_current_file<P: AsRef<Path>>(
     let tempfile = temp_file_name(dbname, manifest_file_num);
     {
         let mut f = env.open_writable_file(Path::new(&tempfile))?;
-        f.write(manifest_base.as_os_str().as_bytes())?;
-        f.write("\n".as_bytes())?;
+        f.write_all(manifest_base.display().to_string().as_bytes())?;
+        f.write_all(b"\n")?;
     }
     let currentfile = current_file_name(dbname);
     if let Err(e) = env.rename(Path::new(&tempfile), Path::new(&currentfile)) {

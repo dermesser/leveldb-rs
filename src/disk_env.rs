@@ -1,26 +1,20 @@
 use env::{path_to_str, Env, FileLock, Logger, RandomAccess};
 use env_common::{micros, sleep_for};
 use error::{err, Result, Status, StatusCode};
+use fs2::FileExt;
 
 use std::collections::HashMap;
-use std::fs;
-use std::io::{self, Read, Write};
+use std::fs::{self, File};
+use std::io::{self, Read, Write, ErrorKind};
 use std::iter::FromIterator;
-use std::os::unix::io::IntoRawFd;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-
-use libc;
-
-const F_RDLCK: libc::c_short = 0;
-const F_WRLCK: libc::c_short = 1;
-const F_UNLCK: libc::c_short = 2;
 
 type FileDescriptor = i32;
 
 #[derive(Clone)]
 pub struct PosixDiskEnv {
-    locks: Arc<Mutex<HashMap<String, FileDescriptor>>>,
+    locks: Arc<Mutex<HashMap<String, File>>>,
 }
 
 impl PosixDiskEnv {
@@ -127,23 +121,19 @@ impl Env for PosixDiskEnv {
                 .open(p)
                 .map_err(|e| map_err_with_name("lock", p, e))?;
 
-            let fd = f.into_raw_fd();
-            let result = unsafe { libc::flock(fd as libc::c_int, libc::LOCK_EX | libc::LOCK_NB) };
-
-            if result < 0 {
-                if errno::errno() == errno::Errno(libc::EWOULDBLOCK) {
-                    return Err(Status::new(
+            match f.try_lock_exclusive() {
+                Err(err) if err.kind() == ErrorKind::WouldBlock => return Err(Status::new(
                         StatusCode::LockError,
                         "lock on database is already held by different process",
-                    ));
-                }
-                return Err(Status::new(
+                    )),
+                Err(_) => return Err(Status::new(
                     StatusCode::Errno(errno::errno()),
-                    &format!("unknown lock error on fd {} (file {})", fd, p.display()),
-                ));
-            }
+                    &format!("unknown lock error on file {:?} (file {})", f, p.display()),
+                )),
+                _ => (),
+            };
 
-            locks.insert(p.to_str().unwrap().to_string(), fd);
+            locks.insert(p.to_str().unwrap().to_string(), f);
             let lock = FileLock {
                 id: p.to_str().unwrap().to_string(),
             };
@@ -158,16 +148,8 @@ impl Env for PosixDiskEnv {
                 &format!("unlocking a file that is not locked: {}", l.id),
             );
         } else {
-            let fd = locks.remove(&l.id).unwrap();
-            let result = unsafe {
-                let ok = libc::fcntl(fd, libc::F_GETFD);
-                if ok < 0 {
-                    // Likely EBADF when already closed. In that case, the lock is released and all is fine.
-                    return Ok(());
-                }
-                libc::flock(fd, libc::LOCK_UN)
-            };
-            if result < 0 {
+            let f = locks.remove(&l.id).unwrap();
+            if let Err(_) = f.unlock() {
                 return err(StatusCode::LockError, &format!("unlock failed: {}", l.id));
             }
             Ok(())

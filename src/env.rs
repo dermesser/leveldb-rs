@@ -5,16 +5,27 @@ use error::Result;
 
 use std::fs::File;
 use std::io::prelude::*;
+#[cfg(unix)]
 use std::os::unix::fs::FileExt;
+#[cfg(windows)]
+use std::os::windows::fs::FileExt;
 use std::path::{Path, PathBuf};
 
 pub trait RandomAccess {
     fn read_at(&self, off: usize, dst: &mut [u8]) -> Result<usize>;
 }
 
+#[cfg(unix)]
 impl RandomAccess for File {
     fn read_at(&self, off: usize, dst: &mut [u8]) -> Result<usize> {
         Ok((self as &dyn FileExt).read_at(dst, off as u64)?)
+    }
+}
+
+#[cfg(windows)]
+impl RandomAccess for File {
+    fn read_at(&self, off: usize, dst: &mut [u8]) -> Result<usize> {
+        Ok((self as &dyn FileExt).seek_read(dst, off as u64)?)
     }
 }
 
