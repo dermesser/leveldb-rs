@@ -47,7 +47,7 @@ impl Default for Status {
 
 impl Display for Status {
     fn fmt(&self, fmt: &mut Formatter) -> result::Result<(), fmt::Error> {
-        fmt.write_str(self.description())
+        fmt.write_str(&self.to_string())
     }
 }
 
@@ -90,7 +90,7 @@ impl From<io::Error> for Status {
             _ => StatusCode::IOError,
         };
 
-        Status::new(c, e.description())
+        Status::new(c, &e.to_string())
     }
 }
 
@@ -104,7 +104,7 @@ impl From<snap::Error> for Status {
     fn from(e: snap::Error) -> Status {
         Status {
             code: StatusCode::CompressionError,
-            err: e.description().to_string(),
+            err: e.to_string(),
         }
     }
 }
