@@ -81,11 +81,12 @@ impl Env for PosixDiskEnv {
         let dir_reader = fs::read_dir(p).map_err(|e| map_err_with_name("children", p, e))?;
         let filenames = dir_reader
             .map(|r| {
-                if !r.is_ok() {
-                    Path::new("").to_owned()
-                } else {
-                    let direntry = r.unwrap();
-                    Path::new(&direntry.file_name()).to_owned()
+                match r {
+                    Ok(_) => {
+                        let direntry = r.unwrap();
+                        Path::new(&direntry.file_name()).to_owned()
+                    },
+                    Err(_) => Path::new("").to_owned(),
                 }
             })
             .filter(|s| !s.as_os_str().is_empty());
@@ -143,13 +144,13 @@ impl Env for PosixDiskEnv {
     fn unlock(&self, l: FileLock) -> Result<()> {
         let mut locks = self.locks.lock().unwrap();
         if !locks.contains_key(&l.id) {
-            return err(
+            err(
                 StatusCode::LockError,
                 &format!("unlocking a file that is not locked: {}", l.id),
-            );
+            )
         } else {
             let f = locks.remove(&l.id).unwrap();
-            if let Err(_) = f.unlock() {
+            if f.unlock().is_err() {
                 return err(StatusCode::LockError, &format!("unlock failed: {}", l.id));
             }
             Ok(())

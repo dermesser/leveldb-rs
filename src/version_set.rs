@@ -42,7 +42,7 @@ impl Compaction {
     // Note: opt.cmp should be the user-supplied or default comparator (not an InternalKeyCmp).
     pub fn new(opt: &Options, level: usize, input: Option<Shared<Version>>) -> Compaction {
         Compaction {
-            level: level,
+            level,
             max_file_size: opt.max_file_size,
             input_version: input,
             level_ixs: Default::default(),
@@ -190,8 +190,8 @@ impl VersionSet {
         VersionSet {
             dbname: db.as_ref().to_owned(),
             cmp: InternalKeyCmp(opt.cmp.clone()),
-            opt: opt,
-            cache: cache,
+            opt,
+            cache,
 
             next_file_num: 2,
             manifest_num: 0,
@@ -269,10 +269,8 @@ impl VersionSet {
                     if level > 0 {
                         break;
                     }
-                } else {
-                    if let Ok(tbl) = self.cache.borrow_mut().get_table(f.borrow().num) {
-                        offset += tbl.approx_offset_of(key);
-                    }
+                } else if let Ok(tbl) = self.cache.borrow_mut().get_table(f.borrow().num) {
+                    offset += tbl.approx_offset_of(key);
                 }
             }
         }
@@ -849,14 +847,13 @@ fn manifest_name(file_num: FileNum) -> PathBuf {
 }
 
 pub fn manifest_file_name<P: AsRef<Path>>(dbname: P, file_num: FileNum) -> PathBuf {
-    dbname.as_ref().join(manifest_name(file_num)).to_owned()
+    dbname.as_ref().join(manifest_name(file_num))
 }
 
 fn temp_file_name<P: AsRef<Path>>(dbname: P, file_num: FileNum) -> PathBuf {
     dbname
         .as_ref()
         .join(format!("{:06}.dbtmp", file_num))
-        .to_owned()
 }
 
 fn current_file_name<P: AsRef<Path>>(dbname: P) -> PathBuf {

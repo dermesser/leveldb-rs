@@ -7,7 +7,7 @@ pub fn micros() -> u64 {
 
         match now {
             Err(_) => continue,
-            Ok(dur) => return dur.as_secs() * 1000000 + (dur.subsec_nanos() / 1000) as u64,
+            Ok(dur) => return dur.as_secs() * 1000000 + dur.subsec_micros() as u64,
         }
     }
 }

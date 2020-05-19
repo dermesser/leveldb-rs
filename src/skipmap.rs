@@ -59,7 +59,7 @@ impl SkipMap {
                 rand: StdRng::seed_from_u64(0xdeadbeef),
                 len: 0,
                 approx_mem: size_of::<Self>() + MAX_HEIGHT * size_of::<Option<*mut Node>>(),
-                cmp: cmp,
+                cmp,
             })),
         }
     }
@@ -141,11 +141,11 @@ impl InnerSkipMap {
 
         unsafe {
             if current.is_null() || current == self.head.as_ref() {
-                return None;
+                None
             } else if self.cmp.cmp(&(*current).key, key) == Ordering::Less {
-                return None;
+                None
             } else {
-                return Some(&(*current));
+                Some(&(*current))
             }
         }
     }
@@ -180,11 +180,11 @@ impl InnerSkipMap {
         unsafe {
             if current.is_null() || current == self.head.as_ref() {
                 // If we're past the end for some reason or at the head
-                return None;
+                None
             } else if self.cmp.cmp(&(*current).key, key) != Ordering::Less {
-                return None;
+                None
             } else {
-                return Some(&(*current));
+                Some(&(*current))
             }
         }
     }
@@ -238,7 +238,7 @@ impl InnerSkipMap {
         let mut new = Box::new(Node {
             skips: new_skips,
             next: None,
-            key: key,
+            key,
             value: val,
         });
         let newp = new.as_mut() as *mut Node;

@@ -42,10 +42,10 @@ impl DBIterator {
         ss: Snapshot,
     ) -> DBIterator {
         DBIterator {
-            cmp: cmp,
-            vset: vset,
-            iter: iter,
-            ss: ss,
+            cmp,
+            vset,
+            iter,
+            ss,
             dir: Direction::Forward,
             byte_count: random_period(),
 
@@ -59,7 +59,7 @@ impl DBIterator {
 
     /// record_read_sample records a read sample using the current contents of self.keybuf, which
     /// should be an InternalKey.
-    fn record_read_sample<'a>(&mut self, len: usize) {
+    fn record_read_sample(&mut self, len: usize) {
         self.byte_count -= len as isize;
         if self.byte_count < 0 {
             let v = self.vset.borrow().current();

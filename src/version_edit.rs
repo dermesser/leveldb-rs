@@ -48,12 +48,12 @@ fn read_length_prefixed<R: Read>(reader: &mut R) -> Result<Vec<u8>> {
             if l != klen {
                 return err(StatusCode::IOError, "Couldn't read full key");
             }
-            return Ok(keybuf);
+            Ok(keybuf)
         } else {
-            return err(StatusCode::IOError, "Couldn't read key");
+            err(StatusCode::IOError, "Couldn't read key")
         }
     } else {
-        return err(StatusCode::IOError, "Couldn't read key length");
+        err(StatusCode::IOError, "Couldn't read key length")
     }
 }
 
@@ -89,7 +89,7 @@ impl VersionEdit {
     }
 
     pub fn add_file(&mut self, level: usize, file: FileMetaData) {
-        self.new_files.push((level, file.clone()))
+        self.new_files.push((level, file))
     }
 
     pub fn delete_file(&mut self, level: usize, file_num: FileNum) {
@@ -118,7 +118,7 @@ impl VersionEdit {
 
     pub fn set_compact_pointer(&mut self, level: usize, key: InternalKey) {
         self.compaction_ptrs.push(CompactionPointer {
-            level: level,
+            level,
             key: Vec::from(key),
         })
     }
@@ -132,7 +132,7 @@ impl VersionEdit {
             buf.write_varint(EditTag::Comparator as u32).unwrap();
             // data is prefixed by a varint32 describing the length of the following chunk
             buf.write_varint(cmp.len()).unwrap();
-            buf.write(cmp.as_bytes()).unwrap();
+            buf.write_all(cmp.as_bytes()).unwrap();
         }
 
         if let Some(lognum) = self.log_number {
@@ -159,7 +159,7 @@ impl VersionEdit {
             buf.write_varint(EditTag::CompactPointer as u32).unwrap();
             buf.write_varint(cptr.level).unwrap();
             buf.write_varint(cptr.key.len()).unwrap();
-            buf.write(cptr.key.as_ref()).unwrap();
+            buf.write_all(cptr.key.as_ref()).unwrap();
         }
 
         for df in self.deleted.iter() {
@@ -175,9 +175,9 @@ impl VersionEdit {
             buf.write_varint(nf.1.size).unwrap();
 
             buf.write_varint(nf.1.smallest.len()).unwrap();
-            buf.write(nf.1.smallest.as_ref()).unwrap();
+            buf.write_all(nf.1.smallest.as_ref()).unwrap();
             buf.write_varint(nf.1.largest.len()).unwrap();
-            buf.write(nf.1.largest.as_ref()).unwrap();
+            buf.write_all(nf.1.largest.as_ref()).unwrap();
         }
 
         buf
@@ -238,7 +238,7 @@ impl VersionEdit {
 
                             ve.compaction_ptrs.push(CompactionPointer {
                                 level: lvl,
-                                key: key,
+                                key,
                             });
                         } else {
                             return err(StatusCode::IOError, "Couldn't read level");
@@ -266,10 +266,10 @@ impl VersionEdit {
                                     ve.new_files.push((
                                         lvl,
                                         FileMetaData {
-                                            num: num,
-                                            size: size,
-                                            smallest: smallest,
-                                            largest: largest,
+                                            num,
+                                            size,
+                                            smallest,
+                                            largest,
                                             allowed_seeks: 0,
                                         },
                                     ))

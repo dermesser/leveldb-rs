@@ -35,11 +35,11 @@ impl WriteBatch {
     /// Adds an entry to a WriteBatch, to be added to the database.
     #[allow(unused_assignments)]
     pub fn put(&mut self, k: &[u8], v: &[u8]) {
-        self.entries.write(&[ValueType::TypeValue as u8]).unwrap();
+        self.entries.write_all(&[ValueType::TypeValue as u8]).unwrap();
         self.entries.write_varint(k.len()).unwrap();
-        self.entries.write(k).unwrap();
+        self.entries.write_all(k).unwrap();
         self.entries.write_varint(v.len()).unwrap();
-        self.entries.write(v).unwrap();
+        self.entries.write_all(v).unwrap();
 
         let c = self.count();
         self.set_count(c + 1);
@@ -52,7 +52,7 @@ impl WriteBatch {
             .write(&[ValueType::TypeDeletion as u8])
             .unwrap();
         self.entries.write_varint(k.len()).unwrap();
-        self.entries.write(k).unwrap();
+        self.entries.write_all(k).unwrap();
 
         let c = self.count();
         self.set_count(c + 1);
@@ -84,7 +84,7 @@ impl WriteBatch {
         u64::decode_fixed(&self.entries[SEQNUM_OFFSET..SEQNUM_OFFSET + 8])
     }
 
-    pub fn iter<'a>(&'a self) -> WriteBatchIter<'a> {
+    pub fn iter(&self) -> WriteBatchIter {
         WriteBatchIter {
             batch: self,
             ix: HEADER_SIZE,
@@ -95,7 +95,7 @@ impl WriteBatch {
         for (k, v) in self.iter() {
             match v {
                 Some(v_) => mt.add(seq, ValueType::TypeValue, k, v_),
-                None => mt.add(seq, ValueType::TypeDeletion, k, "".as_bytes()),
+                None => mt.add(seq, ValueType::TypeDeletion, k, b""),
             }
             seq += 1;
         }
@@ -134,9 +134,9 @@ impl<'a> Iterator for WriteBatchIter<'a> {
             let v = &self.batch.entries[self.ix..self.ix + vlen];
             self.ix += vlen;
 
-            return Some((k, Some(v)));
+            Some((k, Some(v)))
         } else {
-            return Some((k, None));
+            Some((k, None))
         }
     }
 }
