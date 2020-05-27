@@ -1,6 +1,7 @@
 os:
   - linux
   - osx
+  - windows
 dist: bionic
 sudo: false
 
@@ -16,7 +17,7 @@ stages:
 install: true
 
 # Default script is the "test" stage
-script: 
+script:
   - cargo build
   - cargo test
   - examples/build_examples.sh
