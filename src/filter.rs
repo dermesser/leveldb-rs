@@ -79,10 +79,7 @@ impl BloomPolicy {
             k = 30;
         }
 
-        BloomPolicy {
-            bits_per_key,
-            k,
-        }
+        BloomPolicy { bits_per_key, k }
     }
 
     fn bloom_hash(&self, data: &[u8]) -> u32 {

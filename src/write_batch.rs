@@ -35,7 +35,9 @@ impl WriteBatch {
     /// Adds an entry to a WriteBatch, to be added to the database.
     #[allow(unused_assignments)]
     pub fn put(&mut self, k: &[u8], v: &[u8]) {
-        self.entries.write_all(&[ValueType::TypeValue as u8]).unwrap();
+        self.entries
+            .write_all(&[ValueType::TypeValue as u8])
+            .unwrap();
         self.entries.write_varint(k.len()).unwrap();
         self.entries.write_all(k).unwrap();
         self.entries.write_varint(v.len()).unwrap();

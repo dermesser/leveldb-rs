@@ -67,7 +67,9 @@ impl MergingIter {
                                 // This doesn't work if two iterators are returning the exact same
                                 // keys. However, in reality, two entries will always have differing
                                 // sequence numbers.
-                                if self.iters[i].current(&mut keybuf, &mut valbuf) && self.cmp.cmp(&keybuf, &key) == Ordering::Equal  {
+                                if self.iters[i].current(&mut keybuf, &mut valbuf)
+                                    && self.cmp.cmp(&keybuf, &key) == Ordering::Equal
+                                {
                                     self.iters[i].advance();
                                 }
                             }

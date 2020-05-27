@@ -1031,7 +1031,7 @@ pub fn build_table<I: LdbIterator, P: AsRef<Path>>(
     match firstkey {
         None => {
             let _ = opt.env.delete(Path::new(&filename));
-        },
+        }
         Some(key) => {
             md.num = num;
             md.size = opt.env.size_of(Path::new(&filename))?;
@@ -1039,7 +1039,7 @@ pub fn build_table<I: LdbIterator, P: AsRef<Path>>(
             md.largest = kbuf;
         }
     }
-        Ok(md)
+    Ok(md)
 }
 
 fn log_file_name(db: &Path, num: FileNum) -> PathBuf {

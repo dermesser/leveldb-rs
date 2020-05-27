@@ -851,9 +851,7 @@ pub fn manifest_file_name<P: AsRef<Path>>(dbname: P, file_num: FileNum) -> PathB
 }
 
 fn temp_file_name<P: AsRef<Path>>(dbname: P, file_num: FileNum) -> PathBuf {
-    dbname
-        .as_ref()
-        .join(format!("{:06}.dbtmp", file_num))
+    dbname.as_ref().join(format!("{:06}.dbtmp", file_num))
 }
 
 fn current_file_name<P: AsRef<Path>>(dbname: P) -> PathBuf {

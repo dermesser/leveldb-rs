@@ -131,7 +131,7 @@ impl Cmp for InternalKeyCmp {
                 .internal_key()
                 .to_vec();
         }
-       LookupKey::new(&sep, seqa).internal_key().to_vec()
+        LookupKey::new(&sep, seqa).internal_key().to_vec()
     }
 
     fn find_short_succ(&self, a: &[u8]) -> Vec<u8> {

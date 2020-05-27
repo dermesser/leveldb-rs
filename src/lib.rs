@@ -25,10 +25,10 @@
 
 extern crate crc;
 extern crate errno;
+extern crate fs2;
 extern crate integer_encoding;
 extern crate rand;
 extern crate snap;
-extern crate fs2;
 
 #[cfg(test)]
 #[macro_use]

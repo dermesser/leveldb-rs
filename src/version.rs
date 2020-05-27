@@ -254,7 +254,7 @@ impl Version {
 
     /// overlap_in_level returns true if the specified level's files overlap the range [smallest;
     /// largest].
-    pub fn overlap_in_level<'a> (
+    pub fn overlap_in_level<'a>(
         &self,
         level: usize,
         smallest: UserKey<'a>,

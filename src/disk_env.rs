@@ -5,7 +5,7 @@ use fs2::FileExt;
 
 use std::collections::HashMap;
 use std::fs::{self, File};
-use std::io::{self, Read, Write, ErrorKind};
+use std::io::{self, ErrorKind, Read, Write};
 use std::iter::FromIterator;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -80,14 +80,12 @@ impl Env for PosixDiskEnv {
     fn children(&self, p: &Path) -> Result<Vec<PathBuf>> {
         let dir_reader = fs::read_dir(p).map_err(|e| map_err_with_name("children", p, e))?;
         let filenames = dir_reader
-            .map(|r| {
-                match r {
-                    Ok(_) => {
-                        let direntry = r.unwrap();
-                        Path::new(&direntry.file_name()).to_owned()
-                    },
-                    Err(_) => Path::new("").to_owned(),
+            .map(|r| match r {
+                Ok(_) => {
+                    let direntry = r.unwrap();
+                    Path::new(&direntry.file_name()).to_owned()
                 }
+                Err(_) => Path::new("").to_owned(),
             })
             .filter(|s| !s.as_os_str().is_empty());
         Ok(Vec::from_iter(filenames))
@@ -123,14 +121,18 @@ impl Env for PosixDiskEnv {
                 .map_err(|e| map_err_with_name("lock", p, e))?;
 
             match f.try_lock_exclusive() {
-                Err(err) if err.kind() == ErrorKind::WouldBlock => return Err(Status::new(
+                Err(err) if err.kind() == ErrorKind::WouldBlock => {
+                    return Err(Status::new(
                         StatusCode::LockError,
                         "lock on database is already held by different process",
-                    )),
-                Err(_) => return Err(Status::new(
-                    StatusCode::Errno(errno::errno()),
-                    &format!("unknown lock error on file {:?} (file {})", f, p.display()),
-                )),
+                    ))
+                }
+                Err(_) => {
+                    return Err(Status::new(
+                        StatusCode::Errno(errno::errno()),
+                        &format!("unknown lock error on file {:?} (file {})", f, p.display()),
+                    ))
+                }
                 _ => (),
             };
 

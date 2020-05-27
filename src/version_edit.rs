@@ -236,10 +236,8 @@ impl VersionEdit {
                         if let Ok(lvl) = reader.read_varint() {
                             let key = read_length_prefixed(&mut reader)?;
 
-                            ve.compaction_ptrs.push(CompactionPointer {
-                                level: lvl,
-                                key,
-                            });
+                            ve.compaction_ptrs
+                                .push(CompactionPointer { level: lvl, key });
                         } else {
                             return err(StatusCode::IOError, "Couldn't read level");
                         }
