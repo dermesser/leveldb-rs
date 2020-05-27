@@ -26,13 +26,12 @@ pub struct MergingIter {
 impl MergingIter {
     /// Construct a new merging iterator.
     pub fn new(cmp: Rc<Box<dyn Cmp>>, iters: Vec<Box<dyn LdbIterator>>) -> MergingIter {
-        let mi = MergingIter {
-            iters: iters,
+        MergingIter {
+            iters,
             current: None,
             direction: Direction::Forward,
-            cmp: cmp,
-        };
-        mi
+            cmp,
+        }
     }
 
     fn init(&mut self) {
@@ -68,10 +67,8 @@ impl MergingIter {
                                 // This doesn't work if two iterators are returning the exact same
                                 // keys. However, in reality, two entries will always have differing
                                 // sequence numbers.
-                                if self.iters[i].current(&mut keybuf, &mut valbuf) {
-                                    if self.cmp.cmp(&keybuf, &key) == Ordering::Equal {
-                                        self.iters[i].advance();
-                                    }
+                                if self.iters[i].current(&mut keybuf, &mut valbuf) && self.cmp.cmp(&keybuf, &key) == Ordering::Equal  {
+                                    self.iters[i].advance();
                                 }
                             }
                         }

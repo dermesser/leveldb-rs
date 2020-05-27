@@ -82,7 +82,7 @@ impl<T> LRUList<T> {
             assert!(self.head.prev.is_some());
             self.head.prev = last.prev;
             self.count -= 1;
-            return replace(&mut (*last).data, None);
+            replace(&mut (*last).data, None)
         } else {
             None
         }
@@ -185,17 +185,17 @@ impl<T> Cache<T> {
     /// among several users.
     pub fn new_cache_id(&mut self) -> CacheID {
         self.id += 1;
-        return self.id;
+        self.id
     }
 
     /// How many the cache currently contains
     pub fn count(&self) -> usize {
-        return self.list.count();
+        self.list.count()
     }
 
     /// The capacity of this cache
     pub fn cap(&self) -> usize {
-        return self.cap;
+        self.cap
     }
 
     /// Insert a new element into the cache. The returned `CacheHandle` can be used for further
@@ -211,8 +211,8 @@ impl<T> Cache<T> {
             }
         }
 
-        let lru_handle = self.list.insert(key.clone());
-        self.map.insert(key.clone(), (elem, lru_handle));
+        let lru_handle = self.list.insert(*key);
+        self.map.insert(*key, (elem, lru_handle));
     }
 
     /// Retrieve an element from the cache.

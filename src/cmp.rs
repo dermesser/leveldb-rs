@@ -85,7 +85,7 @@ impl Cmp for DefaultCmp {
         // "abc\0", which is greater than abc and lesser than abd.
         // Append a 0 byte; by making it longer than a, it will compare greater to it.
         sep.extend_from_slice(&[0]);
-        return sep;
+        sep
     }
 
     fn find_short_succ(&self, a: &[u8]) -> Vec<u8> {
@@ -99,7 +99,7 @@ impl Cmp for DefaultCmp {
         }
         // Rare path
         result.push(255);
-        return result;
+        result
     }
 }
 
@@ -131,13 +131,13 @@ impl Cmp for InternalKeyCmp {
                 .internal_key()
                 .to_vec();
         }
-        return LookupKey::new(&sep, seqa).internal_key().to_vec();
+       LookupKey::new(&sep, seqa).internal_key().to_vec()
     }
 
     fn find_short_succ(&self, a: &[u8]) -> Vec<u8> {
         let (_, seq, key) = key_types::parse_internal_key(a);
         let succ: Vec<u8> = self.0.find_short_succ(key);
-        return LookupKey::new(&succ, seq).internal_key().to_vec();
+        LookupKey::new(&succ, seq).internal_key().to_vec()
     }
 }
 

@@ -80,8 +80,8 @@ impl BloomPolicy {
         }
 
         BloomPolicy {
-            bits_per_key: bits_per_key,
-            k: k,
+            bits_per_key,
+            k,
         }
     }
 
@@ -156,7 +156,7 @@ impl FilterPolicy for BloomPolicy {
         filter
     }
     fn key_may_match(&self, key: &[u8], filter: &[u8]) -> bool {
-        if filter.len() == 0 {
+        if filter.is_empty() {
             return true;
         }
 

@@ -79,7 +79,7 @@ impl DB {
 
         DB {
             name: name.to_owned(),
-            path: path,
+            path,
             lock: None,
             internal_cmp: Rc::new(Box::new(InternalKeyCmp(opt.cmp.clone()))),
             fpol: InternalFilterPolicy::new(opt.filter_policy.clone()),
@@ -87,11 +87,11 @@ impl DB {
             mem: MemTable::new(opt.cmp.clone()),
             imm: None,
 
-            opt: opt,
+            opt,
 
             log: None,
             log_num: None,
-            cache: cache,
+            cache,
             vset: share(vset),
             snaps: SnapshotList::new(),
 
@@ -1028,15 +1028,18 @@ pub fn build_table<I: LdbIterator, P: AsRef<Path>>(
     }
 
     let mut md = FileMetaData::default();
-    if firstkey.is_none() {
-        let _ = opt.env.delete(Path::new(&filename));
-    } else {
-        md.num = num;
-        md.size = opt.env.size_of(Path::new(&filename))?;
-        md.smallest = firstkey.unwrap();
-        md.largest = kbuf;
+    match firstkey {
+        None => {
+            let _ = opt.env.delete(Path::new(&filename));
+        },
+        Some(key) => {
+            md.num = num;
+            md.size = opt.env.size_of(Path::new(&filename))?;
+            md.smallest = key;
+            md.largest = kbuf;
+        }
     }
-    Ok(md)
+        Ok(md)
 }
 
 fn log_file_name(db: &Path, num: FileNum) -> PathBuf {

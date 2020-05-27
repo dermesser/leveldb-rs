@@ -37,7 +37,7 @@ impl<W: Write> LogWriter<W> {
             dst: writer,
             current_block_offset: 0,
             block_size: BLOCK_SIZE,
-            digest: digest,
+            digest,
         }
     }
 
@@ -53,14 +53,14 @@ impl<W: Write> LogWriter<W> {
         let mut record = &r[..];
         let mut first_frag = true;
         let mut result = Ok(0);
-        while result.is_ok() && record.len() > 0 {
+        while result.is_ok() && !record.is_empty() {
             assert!(self.block_size > HEADER_SIZE);
 
             let space_left = self.block_size - self.current_block_offset;
 
             // Fill up block; go to next block.
             if space_left < HEADER_SIZE {
-                self.dst.write(&vec![0, 0, 0, 0, 0, 0][0..space_left])?;
+                self.dst.write_all(&vec![0, 0, 0, 0, 0, 0][0..space_left])?;
                 self.current_block_offset = 0;
             }
 
@@ -129,7 +129,7 @@ pub struct LogReader<R: Read> {
 impl<R: Read> LogReader<R> {
     pub fn new(src: R, chksum: bool) -> LogReader<R> {
         LogReader {
-            src: src,
+            src,
             blk_off: 0,
             blocksize: BLOCK_SIZE,
             checksums: chksum,
@@ -151,7 +151,7 @@ impl<R: Read> LogReader<R> {
             if self.blocksize - self.blk_off < HEADER_SIZE {
                 // skip to next block
                 self.src
-                    .read(&mut self.head_scratch[0..self.blocksize - self.blk_off])?;
+                    .read_exact(&mut self.head_scratch[0..self.blocksize - self.blk_off])?;
                 self.blk_off = 0;
             }
 
@@ -210,7 +210,7 @@ pub fn mask_crc(c: u32) -> u32 {
 
 pub fn unmask_crc(mc: u32) -> u32 {
     let rot = mc.wrapping_sub(MASK_DELTA);
-    (rot.wrapping_shr(17) | rot.wrapping_shl(15))
+    rot.wrapping_shr(17) | rot.wrapping_shl(15)
 }
 
 #[cfg(test)]

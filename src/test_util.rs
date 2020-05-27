@@ -12,11 +12,11 @@ pub struct TestLdbIter<'a> {
 
 impl<'a> TestLdbIter<'a> {
     pub fn new(c: Vec<(&'a [u8], &'a [u8])>) -> TestLdbIter<'a> {
-        return TestLdbIter {
+        TestLdbIter {
             v: c,
             ix: 0,
             init: false,
-        };
+        }
     }
 }
 

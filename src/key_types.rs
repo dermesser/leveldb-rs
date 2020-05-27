@@ -44,11 +44,11 @@ pub struct LookupKey {
 const U64_SPACE: usize = 8;
 
 impl LookupKey {
-    pub fn new<'a>(k: UserKey<'a>, s: SequenceNumber) -> LookupKey {
+    pub fn new(k: UserKey, s: SequenceNumber) -> LookupKey {
         LookupKey::new_full(k, s, ValueType::TypeValue)
     }
 
-    pub fn new_full<'a>(k: UserKey<'a>, s: SequenceNumber, t: ValueType) -> LookupKey {
+    pub fn new_full(k: UserKey, s: SequenceNumber, t: ValueType) -> LookupKey {
         let mut key = Vec::new();
         let internal_keylen = k.len() + U64_SPACE;
         key.resize(k.len() + internal_keylen.required_space() + U64_SPACE, 0);
@@ -58,30 +58,30 @@ impl LookupKey {
             writer
                 .write_varint(internal_keylen)
                 .expect("write to slice failed");
-            writer.write(k).expect("write to slice failed");
+            writer.write_all(k).expect("write to slice failed");
             writer
                 .write_fixedint(s << 8 | t as u64)
                 .expect("write to slice failed");
         }
 
         LookupKey {
-            key: key,
+            key,
             key_offset: internal_keylen.required_space(),
         }
     }
 
     /// Returns the full memtable-formatted key.
-    pub fn memtable_key<'a>(&'a self) -> MemtableKey<'a> {
+    pub fn memtable_key(&self) -> MemtableKey {
         self.key.as_slice()
     }
 
     /// Returns only the user key portion.
-    pub fn user_key<'a>(&'a self) -> UserKey<'a> {
+    pub fn user_key(&self) -> UserKey {
         &self.key[self.key_offset..self.key.len() - 8]
     }
 
     /// Returns key and tag.
-    pub fn internal_key<'a>(&'a self) -> InternalKey<'a> {
+    pub fn internal_key(&self) -> InternalKey {
         &self.key[self.key_offset..]
     }
 }
@@ -120,12 +120,12 @@ pub fn build_memtable_key(key: &[u8], value: &[u8], t: ValueType, seq: SequenceN
     {
         let mut writer = buf.as_mut_slice();
         writer.write_varint(keysize).expect("write to slice failed");
-        writer.write(key).expect("write to slice failed");
+        writer.write_all(key).expect("write to slice failed");
         writer
             .write_fixedint((t as u64) | (seq << 8))
             .expect("write to slice failed");
         writer.write_varint(valsize).expect("write to slice failed");
-        writer.write(value).expect("write to slice failed");
+        writer.write_all(value).expect("write to slice failed");
         assert_eq!(writer.len(), 0);
     }
     buf
@@ -134,7 +134,7 @@ pub fn build_memtable_key(key: &[u8], value: &[u8], t: ValueType, seq: SequenceN
 /// Parses a memtable key and returns  (keylen, key offset, tag, vallen, val offset).
 /// If the key only contains (keylen, key, tag), the vallen and val offset return values will be
 /// meaningless.
-pub fn parse_memtable_key<'a>(mkey: MemtableKey<'a>) -> (usize, usize, u64, usize, usize) {
+pub fn parse_memtable_key(mkey: MemtableKey) -> (usize, usize, u64, usize, usize) {
     let (keylen, mut i): (usize, usize) = VarInt::decode_var(&mkey);
     let keyoff = i;
     i += keylen - 8;
@@ -145,9 +145,9 @@ pub fn parse_memtable_key<'a>(mkey: MemtableKey<'a>) -> (usize, usize, u64, usiz
         let (vallen, j): (usize, usize) = VarInt::decode_var(&mkey[i..]);
         i += j;
         let valoff = i;
-        return (keylen - 8, keyoff, tag, vallen, valoff);
+        (keylen - 8, keyoff, tag, vallen, valoff)
     } else {
-        return (keylen - 8, keyoff, 0, 0, 0);
+        (keylen - 8, keyoff, 0, 0, 0)
     }
 }
 
@@ -178,13 +178,13 @@ pub fn cmp_memtable_key<'a, 'b>(
 }
 
 /// Parse a key in InternalKey format.
-pub fn parse_internal_key<'a>(ikey: InternalKey<'a>) -> (ValueType, SequenceNumber, UserKey<'a>) {
+pub fn parse_internal_key(ikey: InternalKey) -> (ValueType, SequenceNumber, UserKey) {
     if ikey.is_empty() {
         return (ValueType::TypeDeletion, 0, &ikey[0..0]);
     }
     assert!(ikey.len() >= 8);
     let (typ, seq) = parse_tag(FixedInt::decode_fixed(&ikey[ikey.len() - 8..]));
-    return (typ, seq, &ikey[0..ikey.len() - 8]);
+    (typ, seq, &ikey[0..ikey.len() - 8])
 }
 
 /// cmp_internal_key efficiently compares keys in InternalKey format by only parsing the parts that

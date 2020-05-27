@@ -51,13 +51,13 @@ impl Table {
         let cache_id = opt.block_cache.borrow_mut().new_cache_id();
 
         Ok(Table {
-            file: file,
+            file,
             file_size: size,
-            cache_id: cache_id,
-            opt: opt,
-            footer: footer,
+            cache_id,
+            opt,
+            footer,
             filters: filter_block_reader,
-            indexblock: indexblock,
+            indexblock,
         })
     }
 
@@ -143,18 +143,17 @@ impl Table {
             return location.offset();
         }
 
-        return self.footer.meta_index.offset();
+        self.footer.meta_index.offset()
     }
 
     /// Iterators read from the file; thus only one iterator can be borrowed (mutably) per scope
     pub fn iter(&self) -> TableIterator {
-        let iter = TableIterator {
+        TableIterator {
             current_block: None,
             current_block_off: 0,
             index_block: self.indexblock.iter(),
             table: self.clone(),
-        };
-        iter
+        }
     }
 
     /// Retrieve next-biggest entry for key from table. This function uses the attached filters, so

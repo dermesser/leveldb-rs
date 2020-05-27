@@ -18,8 +18,6 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use std::os::unix::ffi::OsStrExt;
-
 pub struct Compaction {
     level: usize,
     max_file_size: usize,
@@ -44,7 +42,7 @@ impl Compaction {
     // Note: opt.cmp should be the user-supplied or default comparator (not an InternalKeyCmp).
     pub fn new(opt: &Options, level: usize, input: Option<Shared<Version>>) -> Compaction {
         Compaction {
-            level: level,
+            level,
             max_file_size: opt.max_file_size,
             input_version: input,
             level_ixs: Default::default(),
@@ -192,8 +190,8 @@ impl VersionSet {
         VersionSet {
             dbname: db.as_ref().to_owned(),
             cmp: InternalKeyCmp(opt.cmp.clone()),
-            opt: opt,
-            cache: cache,
+            opt,
+            cache,
 
             next_file_num: 2,
             manifest_num: 0,
@@ -271,10 +269,8 @@ impl VersionSet {
                     if level > 0 {
                         break;
                     }
-                } else {
-                    if let Ok(tbl) = self.cache.borrow_mut().get_table(f.borrow().num) {
-                        offset += tbl.approx_offset_of(key);
-                    }
+                } else if let Ok(tbl) = self.cache.borrow_mut().get_table(f.borrow().num) {
+                    offset += tbl.approx_offset_of(key);
                 }
             }
         }
@@ -851,14 +847,13 @@ fn manifest_name(file_num: FileNum) -> PathBuf {
 }
 
 pub fn manifest_file_name<P: AsRef<Path>>(dbname: P, file_num: FileNum) -> PathBuf {
-    dbname.as_ref().join(manifest_name(file_num)).to_owned()
+    dbname.as_ref().join(manifest_name(file_num))
 }
 
 fn temp_file_name<P: AsRef<Path>>(dbname: P, file_num: FileNum) -> PathBuf {
     dbname
         .as_ref()
         .join(format!("{:06}.dbtmp", file_num))
-        .to_owned()
 }
 
 fn current_file_name<P: AsRef<Path>>(dbname: P) -> PathBuf {
@@ -888,8 +883,8 @@ pub fn set_current_file<P: AsRef<Path>>(
     let tempfile = temp_file_name(dbname, manifest_file_num);
     {
         let mut f = env.open_writable_file(Path::new(&tempfile))?;
-        f.write(manifest_base.as_os_str().as_bytes())?;
-        f.write("\n".as_bytes())?;
+        f.write_all(manifest_base.display().to_string().as_bytes())?;
+        f.write_all(b"\n")?;
     }
     let currentfile = current_file_name(dbname);
     if let Err(e) = env.rename(Path::new(&tempfile), Path::new(&currentfile)) {

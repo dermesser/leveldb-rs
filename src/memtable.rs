@@ -127,7 +127,7 @@ impl LdbIterator for MemtableIterator {
             shift_left(key, keyoff);
             // Truncate key to key+tag.
             key.truncate(keylen + u64::required_space());
-            return true;
+            true
         } else {
             panic!("should not happen");
         }

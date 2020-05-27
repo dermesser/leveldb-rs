@@ -189,7 +189,7 @@ impl Version {
                 level += 1;
             }
         }
-        return level;
+        level
     }
 
     /// record_read_sample returns true if there is a new file to be compacted. It counts the
@@ -202,11 +202,9 @@ impl Version {
         let mut first_file = None;
         let mut first_file_level = None;
         for level in &levels {
-            if !level.is_empty() {
-                if first_file.is_none() && first_file_level.is_none() {
-                    first_file = Some(level[0].clone());
-                    first_file_level = Some(i);
-                }
+            if !level.is_empty() && first_file.is_none() && first_file_level.is_none() {
+                first_file = Some(level[0].clone());
+                first_file_level = Some(i);
             }
             contained_in += level.len();
             i += 1;
@@ -227,7 +225,7 @@ impl Version {
     pub fn update_stats(&mut self, stats: GetStats) -> bool {
         if let Some(file) = stats.file {
             if file.borrow().allowed_seeks <= 1 && self.file_to_compact.is_none() {
-                self.file_to_compact = Some(file.clone());
+                self.file_to_compact = Some(file);
                 self.file_to_compact_lvl = stats.level;
                 return true;
             } else if file.borrow().allowed_seeks > 0 {
@@ -256,7 +254,7 @@ impl Version {
 
     /// overlap_in_level returns true if the specified level's files overlap the range [smallest;
     /// largest].
-    pub fn overlap_in_level<'a, 'b>(
+    pub fn overlap_in_level<'a> (
         &self,
         level: usize,
         smallest: UserKey<'a>,
@@ -389,8 +387,8 @@ pub fn new_version_iter(
     ucmp: Rc<Box<dyn Cmp>>,
 ) -> VersionIter {
     VersionIter {
-        files: files,
-        cache: cache,
+        files,
+        cache,
         cmp: InternalKeyCmp(ucmp),
         current: None,
         current_ix: 0,
@@ -593,7 +591,7 @@ pub mod testutil {
         share(FileMetaData {
             allowed_seeks: 10,
             size: 163840,
-            num: num,
+            num,
             smallest: LookupKey::new(smallest, smallestix).internal_key().to_vec(),
             largest: LookupKey::new(largest, largestix).internal_key().to_vec(),
         })
