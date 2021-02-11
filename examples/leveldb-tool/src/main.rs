@@ -59,6 +59,7 @@ fn main() {
     let mut opt = Options::default();
     opt.reuse_logs = false;
     opt.reuse_manifest = false;
+    opt.compression_type = rusty_leveldb::CompressionType::CompressionNone;
     let mut db = DB::open("tooldb", opt).unwrap();
 
     match args[1].as_str() {
