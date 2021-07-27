@@ -10,12 +10,12 @@ fn get(db: &mut DB, k: &str) {
     match db.get(k.as_bytes()) {
         Some(v) => {
             if let Ok(s) = String::from_utf8(v.clone()) {
-                println!("{} => {}", k, s);
+                eprintln!("{} => {}", k, s);
             } else {
-                println!("{} => {:?}", k, v);
+                eprintln!("{} => {:?}", k, v);
             }
         }
-        None => println!("{} => <not found>", k),
+        None => eprintln!("{} => <not found>", k),
     }
 }
 

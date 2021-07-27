@@ -1,4 +1,5 @@
 #!/bin/bash
+set -x
 
 KCOV=kcov
 KCOV_OPTS="--exclude-pattern=/.cargo,/glibc,/usr/lib,/usr/include"

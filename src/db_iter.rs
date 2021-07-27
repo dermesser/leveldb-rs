@@ -391,7 +391,7 @@ mod tests {
         ];
 
         for (k, v) in keys.iter().zip(vals.iter()) {
-            println!("{:?}", String::from_utf8(k.to_vec()).unwrap());
+            eprintln!("{:?}", String::from_utf8(k.to_vec()).unwrap());
             iter.seek(k);
             assert_eq!((k.to_vec(), v.to_vec()), current_key_val(&iter).unwrap());
         }

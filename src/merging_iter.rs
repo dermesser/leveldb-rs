@@ -286,7 +286,7 @@ mod tests {
         let second = miter.next();
         // -> abc
         let third = miter.next();
-        println!("{:?} {:?} {:?}", first, second, third);
+        eprintln!("{:?} {:?} {:?}", first, second, third);
 
         assert!(first != third);
         // abb <-

@@ -270,7 +270,7 @@ impl InnerSkipMap {
         let mut current = self.head.as_ref() as *const Node;
         loop {
             unsafe {
-                println!(
+                eprintln!(
                     "{:?} {:?}/{:?} - {:?}",
                     current,
                     (*current).key,

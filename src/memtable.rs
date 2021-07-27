@@ -217,12 +217,12 @@ mod tests {
 
         // Smaller sequence number doesn't find entry
         if let Some(v) = mt.get(&LookupKey::new("abc".as_bytes(), 110)).0 {
-            println!("{:?}", v);
+            eprintln!("{:?}", v);
             panic!("found");
         }
 
         if let Some(v) = mt.get(&LookupKey::new("abf".as_bytes(), 110)).0 {
-            println!("{:?}", v);
+            eprintln!("{:?}", v);
             panic!("found");
         }
 

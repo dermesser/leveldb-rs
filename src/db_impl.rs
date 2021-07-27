@@ -1193,7 +1193,7 @@ mod tests {
             opt.reuse_manifest = false;
             let _ = DB::open("otherdb", opt.clone()).unwrap();
 
-            println!(
+            eprintln!(
                 "children after: {:?}",
                 env.children(Path::new("otherdb/")).unwrap()
             );
@@ -1209,7 +1209,7 @@ mod tests {
             opt.reuse_manifest = true;
             let mut db = DB::open("db", opt.clone()).unwrap();
 
-            println!(
+            eprintln!(
                 "children after: {:?}",
                 env.children(Path::new("db/")).unwrap()
             );
@@ -1224,7 +1224,7 @@ mod tests {
         }
 
         {
-            println!(
+            eprintln!(
                 "children before: {:?}",
                 env.children(Path::new("db/")).unwrap()
             );
@@ -1233,7 +1233,7 @@ mod tests {
             opt.reuse_logs = false;
             let mut db = DB::open("db", opt.clone()).unwrap();
 
-            println!(
+            eprintln!(
                 "children after: {:?}",
                 env.children(Path::new("db/")).unwrap()
             );
@@ -1263,7 +1263,7 @@ mod tests {
         }
 
         {
-            println!(
+            eprintln!(
                 "children before: {:?}",
                 env.children(Path::new("db/")).unwrap()
             );
@@ -1273,7 +1273,7 @@ mod tests {
             opt.reuse_logs = true;
             let db = DB::open("db", opt).unwrap();
 
-            println!(
+            eprintln!(
                 "children after: {:?}",
                 env.children(Path::new("db/")).unwrap()
             );
@@ -1301,12 +1301,12 @@ mod tests {
         let (mut db, opt) = build_db();
         let env = &opt.env;
 
-        println!(
+        eprintln!(
             "children before: {:?}",
             env.children(Path::new("db/")).unwrap()
         );
         db.compact_range(b"aaa", b"dba").unwrap();
-        println!(
+        eprintln!(
             "children after: {:?}",
             env.children(Path::new("db/")).unwrap()
         );
@@ -1337,12 +1337,12 @@ mod tests {
 
         db.put(b"xxx", b"123").unwrap();
 
-        println!(
+        eprintln!(
             "children before: {:?}",
             env.children(Path::new("db/")).unwrap()
         );
         db.compact_range(b"aaa", b"dba").unwrap();
-        println!(
+        eprintln!(
             "children after: {:?}",
             env.children(Path::new("db/")).unwrap()
         );
@@ -1430,7 +1430,7 @@ mod tests {
             assert_eq!(
                 5,
                 LdbIteratorIter::wrap(&mut tbl.iter())
-                    .map(|v| println!("{:?}", v))
+                    .map(|v| eprintln!("{:?}", v))
                     .count()
             );
         }
@@ -1545,7 +1545,7 @@ mod tests {
         db.imm = Some(imm);
         db.compact_memtable().unwrap();
 
-        println!(
+        eprintln!(
             "children after: {:?}",
             db.opt.env.children(Path::new("db/")).unwrap()
         );
