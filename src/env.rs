@@ -34,24 +34,24 @@ pub struct FileLock {
 }
 
 pub trait Env {
-    fn open_sequential_file(&self, &Path) -> Result<Box<dyn Read>>;
-    fn open_random_access_file(&self, &Path) -> Result<Box<dyn RandomAccess>>;
-    fn open_writable_file(&self, &Path) -> Result<Box<dyn Write>>;
-    fn open_appendable_file(&self, &Path) -> Result<Box<dyn Write>>;
+    fn open_sequential_file(&self, _: &Path) -> Result<Box<dyn Read>>;
+    fn open_random_access_file(&self, _: &Path) -> Result<Box<dyn RandomAccess>>;
+    fn open_writable_file(&self, _: &Path) -> Result<Box<dyn Write>>;
+    fn open_appendable_file(&self, _: &Path) -> Result<Box<dyn Write>>;
 
-    fn exists(&self, &Path) -> Result<bool>;
-    fn children(&self, &Path) -> Result<Vec<PathBuf>>;
-    fn size_of(&self, &Path) -> Result<usize>;
+    fn exists(&self, _: &Path) -> Result<bool>;
+    fn children(&self, _: &Path) -> Result<Vec<PathBuf>>;
+    fn size_of(&self, _: &Path) -> Result<usize>;
 
-    fn delete(&self, &Path) -> Result<()>;
-    fn mkdir(&self, &Path) -> Result<()>;
-    fn rmdir(&self, &Path) -> Result<()>;
-    fn rename(&self, &Path, &Path) -> Result<()>;
+    fn delete(&self, _: &Path) -> Result<()>;
+    fn mkdir(&self, _: &Path) -> Result<()>;
+    fn rmdir(&self, _: &Path) -> Result<()>;
+    fn rename(&self, _: &Path, _: &Path) -> Result<()>;
 
-    fn lock(&self, &Path) -> Result<FileLock>;
+    fn lock(&self, _: &Path) -> Result<FileLock>;
     fn unlock(&self, l: FileLock) -> Result<()>;
 
-    fn new_logger(&self, &Path) -> Result<Logger>;
+    fn new_logger(&self, _: &Path) -> Result<Logger>;
 
     fn micros(&self) -> u64;
     fn sleep_for(&self, micros: u32);
