@@ -1,5 +1,5 @@
-use key_types::{self, LookupKey};
-use types;
+use crate::key_types::{self, LookupKey};
+use crate::types;
 
 use std::cmp::Ordering;
 use std::rc::Rc;

@@ -3,7 +3,7 @@
 //! A record is a bytestring: [checksum: uint32, length: uint16, type: uint8, data: [u8]]
 //! checksum is the crc32 sum of type and data; type is one of RecordType::{Full/First/Middle/Last}
 
-use error::{err, Result, StatusCode};
+use crate::error::{err, Result, StatusCode};
 
 use std::io::{Read, Write};
 

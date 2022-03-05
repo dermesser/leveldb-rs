@@ -1,7 +1,7 @@
-use integer_encoding::{FixedInt, VarInt, VarIntWriter};
-use key_types::ValueType;
-use memtable::MemTable;
-use types::SequenceNumber;
+use crate::integer_encoding::{FixedInt, VarInt, VarIntWriter};
+use crate::key_types::ValueType;
+use crate::memtable::MemTable;
+use crate::types::SequenceNumber;
 
 use std::io::Write;
 

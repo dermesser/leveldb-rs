@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 
-use block::BlockContents;
-use options::Options;
+use crate::block::BlockContents;
+use crate::options::Options;
 
 use integer_encoding::{FixedIntWriter, VarIntWriter};
 
@@ -122,7 +122,7 @@ impl BlockBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use options;
+    use crate::options;
 
     fn get_data() -> Vec<(&'static [u8], &'static [u8])> {
         vec![

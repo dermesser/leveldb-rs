@@ -2,8 +2,8 @@ use std::cmp::Ordering;
 
 use std::rc::Rc;
 
-use options::Options;
-use types::LdbIterator;
+use crate::options::Options;
+use crate::types::LdbIterator;
 
 use integer_encoding::FixedInt;
 use integer_encoding::VarInt;
@@ -206,7 +206,7 @@ impl LdbIterator for BlockIter {
             true
         } else {
             #[cfg(debug_assertions)]
-            panic!("parse_entry_and_advance(): couldn't parse entry head at/after {:?}", self.key);
+            panic!("[debug mode panic] parse_entry_and_advance(): couldn't parse entry head at/after {:?}", self.key);
             #[allow(unreachable_code)]
             false
         }
@@ -311,10 +311,10 @@ impl LdbIterator for BlockIter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use block_builder::BlockBuilder;
-    use options;
-    use test_util::{test_iterator_properties, LdbIteratorIter};
-    use types::{current_key_val, LdbIterator};
+    use crate::block_builder::BlockBuilder;
+    use crate::options;
+    use crate::test_util::{test_iterator_properties, LdbIteratorIter};
+    use crate::types::{current_key_val, LdbIterator};
 
     fn get_data() -> Vec<(&'static [u8], &'static [u8])> {
         vec![

@@ -1,5 +1,5 @@
-use cmp::Cmp;
-use types::SequenceNumber;
+use crate::cmp::Cmp;
+use crate::types::SequenceNumber;
 
 use std::cmp::Ordering;
 use std::io::Write;

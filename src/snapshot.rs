@@ -1,5 +1,6 @@
 use std::collections::HashMap;
-use types::{share, SequenceNumber, Shared, MAX_SEQUENCE_NUMBER};
+
+use crate::types::{share, SequenceNumber, Shared, MAX_SEQUENCE_NUMBER};
 
 use std::rc::Rc;
 

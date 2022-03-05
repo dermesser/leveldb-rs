@@ -1,5 +1,5 @@
-use block::BlockContents;
-use filter::BoxedFilterPolicy;
+use crate::block::BlockContents;
+use crate::filter::BoxedFilterPolicy;
 
 use std::rc::Rc;
 
@@ -166,7 +166,7 @@ mod tests {
     use super::get_filter_index;
     use super::FILTER_BASE_LOG2;
     use super::*;
-    use filter::BloomPolicy;
+    use crate::filter::BloomPolicy;
 
     #[test]
     fn test_filter_index() {

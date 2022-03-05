@@ -1,6 +1,6 @@
 //! A collection of fundamental and/or simple types used by other modules
 
-use error::{err, Result, StatusCode};
+use crate::error::{err, Result, StatusCode};
 
 use std::cell::RefCell;
 use std::path::Path;

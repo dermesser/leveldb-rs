@@ -1,7 +1,7 @@
 //! An `env` is an abstraction layer that allows the database to run both on different platforms as
 //! well as persisting data on disk or in memory.
 
-use error::Result;
+use crate::error::Result;
 
 use std::fs::File;
 use std::io::prelude::*;

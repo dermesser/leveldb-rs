@@ -1,8 +1,8 @@
-use cmp::{Cmp, MemtableKeyCmp};
-use key_types::{build_memtable_key, parse_internal_key, parse_memtable_key, ValueType};
-use key_types::{LookupKey, UserKey};
-use skipmap::{SkipMap, SkipMapIter};
-use types::{current_key_val, LdbIterator, SequenceNumber};
+use crate::cmp::{Cmp, MemtableKeyCmp};
+use crate::key_types::{build_memtable_key, parse_internal_key, parse_memtable_key, ValueType};
+use crate::key_types::{LookupKey, UserKey};
+use crate::skipmap::{SkipMap, SkipMapIter};
+use crate::types::{current_key_val, LdbIterator, SequenceNumber};
 
 use std::rc::Rc;
 
@@ -154,9 +154,9 @@ fn shift_left(s: &mut Vec<u8>, mid: usize) {
 #[allow(unused_variables)]
 mod tests {
     use super::*;
-    use key_types::*;
-    use options;
-    use test_util::{test_iterator_properties, LdbIteratorIter};
+    use crate::key_types::{parse_tag, truncate_to_userkey};
+    use crate::options;
+    use crate::test_util::{test_iterator_properties, LdbIteratorIter};
 
     #[test]
     fn test_shift_left() {

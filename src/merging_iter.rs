@@ -1,5 +1,5 @@
-use cmp::Cmp;
-use types::{current_key_val, Direction, LdbIterator};
+use crate::cmp::Cmp;
+use crate::types::{current_key_val, Direction, LdbIterator};
 
 use std::cmp::Ordering;
 use std::rc::Rc;
@@ -197,10 +197,10 @@ impl LdbIterator for MergingIter {
 mod tests {
     use super::*;
 
-    use cmp::DefaultCmp;
-    use skipmap::tests;
-    use test_util::{test_iterator_properties, LdbIteratorIter, TestLdbIter};
-    use types::{current_key_val, LdbIterator};
+    use crate::cmp::DefaultCmp;
+    use crate::skipmap::tests;
+    use crate::test_util::{test_iterator_properties, LdbIteratorIter, TestLdbIter};
+    use crate::types::{current_key_val, LdbIterator};
 
     #[test]
     fn test_merging_one() {

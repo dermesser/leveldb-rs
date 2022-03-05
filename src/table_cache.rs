@@ -2,12 +2,12 @@
 //! read-through cache, meaning that non-present tables are read from disk and cached before being
 //! returned.
 
-use cache::{self, Cache};
-use error::{err, Result, StatusCode};
-use key_types::InternalKey;
-use options::Options;
-use table_reader::Table;
-use types::FileNum;
+use crate::cache::{self, Cache};
+use crate::error::{err, Result, StatusCode};
+use crate::key_types::InternalKey;
+use crate::options::Options;
+use crate::table_reader::Table;
+use crate::types::FileNum;
 
 use integer_encoding::FixedIntWriter;
 
@@ -89,11 +89,11 @@ impl TableCache {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cache;
-    use mem_env::MemEnv;
-    use options;
-    use table_builder::TableBuilder;
-    use test_util::LdbIteratorIter;
+    use crate::cache;
+    use crate::mem_env::MemEnv;
+    use crate::options;
+    use crate::table_builder::TableBuilder;
+    use crate::test_util::LdbIteratorIter;
 
     #[test]
     fn test_table_file_name() {

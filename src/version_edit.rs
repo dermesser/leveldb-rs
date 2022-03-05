@@ -1,6 +1,6 @@
-use error::{err, Result, StatusCode};
-use key_types::InternalKey;
-use types::{FileMetaData, FileNum, SequenceNumber};
+use crate::error::{err, Result, StatusCode};
+use crate::key_types::InternalKey;
+use crate::types::{FileMetaData, FileNum, SequenceNumber};
 
 use integer_encoding::{VarIntReader, VarIntWriter};
 
@@ -299,8 +299,8 @@ mod tests {
     use super::CompactionPointer;
     use super::VersionEdit;
 
-    use cmp::{Cmp, DefaultCmp};
-    use types::FileMetaData;
+    use crate::cmp::{Cmp, DefaultCmp};
+    use crate::types::FileMetaData;
 
     #[test]
     fn test_version_edit_encode_decode() {
