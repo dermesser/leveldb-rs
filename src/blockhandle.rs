@@ -13,16 +13,16 @@ pub struct BlockHandle {
 impl BlockHandle {
     /// Decodes a block handle from `from` and returns a block handle
     /// together with how many bytes were read from the slice.
-    pub fn decode(from: &[u8]) -> (BlockHandle, usize) {
-        let (off, offsize) = usize::decode_var(from);
-        let (sz, szsize) = usize::decode_var(&from[offsize..]);
+    pub fn decode(from: &[u8]) -> Option<(BlockHandle, usize)> {
+        let (off, offsize) = usize::decode_var(from)?;
+        let (sz, szsize) = usize::decode_var(&from[offsize..])?;
 
-        (
+        Some((
             BlockHandle {
                 offset: off,
                 size: sz,
             },
-            offsize + szsize,
+            offsize + szsize)
         )
     }
 
@@ -57,7 +57,7 @@ mod tests {
         let mut dst = [0 as u8; 128];
         let enc_sz = bh.encode_to(&mut dst[..]);
 
-        let (bh2, dec_sz) = BlockHandle::decode(&dst);
+        let (bh2, dec_sz) = BlockHandle::decode(&dst).unwrap();
 
         assert_eq!(enc_sz, dec_sz);
         assert_eq!(bh.size(), bh2.size());

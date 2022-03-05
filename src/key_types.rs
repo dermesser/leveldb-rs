@@ -135,14 +135,14 @@ pub fn build_memtable_key(key: &[u8], value: &[u8], t: ValueType, seq: SequenceN
 /// If the key only contains (keylen, key, tag), the vallen and val offset return values will be
 /// meaningless.
 pub fn parse_memtable_key(mkey: MemtableKey) -> (usize, usize, u64, usize, usize) {
-    let (keylen, mut i): (usize, usize) = VarInt::decode_var(&mkey);
+    let (keylen, mut i): (usize, usize) = VarInt::decode_var(&mkey).unwrap();
     let keyoff = i;
     i += keylen - 8;
 
     if mkey.len() > i {
         let tag = FixedInt::decode_fixed(&mkey[i..i + 8]);
         i += 8;
-        let (vallen, j): (usize, usize) = VarInt::decode_var(&mkey[i..]);
+        let (vallen, j): (usize, usize) = VarInt::decode_var(&mkey[i..]).unwrap();
         i += j;
         let valoff = i;
         (keylen - 8, keyoff, tag, vallen, valoff)
@@ -157,8 +157,8 @@ pub fn cmp_memtable_key<'a, 'b>(
     a: MemtableKey<'a>,
     b: MemtableKey<'b>,
 ) -> Ordering {
-    let (alen, aoff): (usize, usize) = VarInt::decode_var(&a);
-    let (blen, boff): (usize, usize) = VarInt::decode_var(&b);
+    let (alen, aoff): (usize, usize) = VarInt::decode_var(&a).unwrap();
+    let (blen, boff): (usize, usize) = VarInt::decode_var(&b).unwrap();
     let userkey_a = &a[aoff..aoff + alen - 8];
     let userkey_b = &b[boff..boff + blen - 8];
 
@@ -229,7 +229,7 @@ mod tests {
         assert_eq!(lk1.key.capacity(), 14);
 
         assert_eq!(lk1.user_key(), "abcde".as_bytes());
-        assert_eq!(u32::decode_var(lk1.memtable_key()), (13, 1));
+        assert_eq!(u32::decode_var(lk1.memtable_key()).unwrap(), (13, 1));
         assert_eq!(
             lk2.internal_key(),
             vec![120, 121, 97, 98, 120, 121, 1, 97, 0, 0, 0, 0, 0, 0].as_slice()

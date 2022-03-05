@@ -9,12 +9,12 @@ readme = "README.md"
 keywords = ["LevelDB", "key-value", "database", "SSTable", "Google"]
 license = "MIT"
 publish = true
-
+edition = "2015"
 include = ["src/**/*", "src/*", "Cargo.toml", "LICENSE", "README.md"]
 
 [dependencies]
 crc = "1.8"
-integer-encoding = "1.0"
+integer-encoding = "3.0"
 rand = "0.7"
 snap = "1.0"
 errno = "0.2"

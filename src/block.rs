@@ -103,18 +103,19 @@ impl BlockIter {
 
     /// Seek to restart point `ix`. After the seek, current() will return the entry at that restart
     /// point.
-    fn seek_to_restart_point(&mut self, ix: usize) {
+    fn seek_to_restart_point(&mut self, ix: usize) -> Option<()> {
         let off = self.get_restart_point(ix);
 
         self.offset = off;
         self.current_entry_offset = off;
         self.current_restart_ix = ix;
         // advances self.offset to point to the next entry
-        let (shared, non_shared, _, head_len) = self.parse_entry_and_advance();
+        let (shared, non_shared, _, head_len) = self.parse_entry_and_advance()?;
 
         assert_eq!(shared, 0);
         self.assemble_key(off + head_len, shared, non_shared);
         assert!(self.valid());
+        Some(())
     }
 
     /// Return the offset that restart `ix` points to.
@@ -131,21 +132,21 @@ impl BlockIter {
     /// where 'length spec' is the length of the three values in the entry header, as described
     /// above.
     /// Advances self.offset to the beginning of the next entry.
-    fn parse_entry_and_advance(&mut self) -> (usize, usize, usize, usize) {
+    fn parse_entry_and_advance(&mut self) -> Option<(usize, usize, usize, usize)> {
         let mut i = 0;
-        let (shared, sharedlen) = usize::decode_var(&self.block[self.offset..]);
+        let (shared, sharedlen) = usize::decode_var(&self.block[self.offset..])?;
         i += sharedlen;
 
-        let (non_shared, non_sharedlen) = usize::decode_var(&self.block[self.offset + i..]);
+        let (non_shared, non_sharedlen) = usize::decode_var(&self.block[self.offset + i..])?;
         i += non_sharedlen;
 
-        let (valsize, valsizelen) = usize::decode_var(&self.block[self.offset + i..]);
+        let (valsize, valsizelen) = usize::decode_var(&self.block[self.offset + i..])?;
         i += valsizelen;
 
         self.val_offset = self.offset + i + non_shared;
         self.offset = self.val_offset + valsize;
 
-        (shared, non_shared, valsize, i)
+        Some((shared, non_shared, valsize, i))
     }
 
     /// Assemble the current key from shared and non-shared parts (an entry usually contains only
@@ -161,10 +162,10 @@ impl BlockIter {
             .extend_from_slice(&self.block[off..off + non_shared]);
     }
 
-    pub fn seek_to_last(&mut self) {
+    pub fn seek_to_last(&mut self) -> Option<()> {
         if self.number_restarts() > 0 {
             let num_restarts = self.number_restarts();
-            self.seek_to_restart_point(num_restarts - 1);
+            self.seek_to_restart_point(num_restarts - 1)?;
         } else {
             self.reset();
         }
@@ -177,6 +178,7 @@ impl BlockIter {
             self.advance();
         }
         assert!(self.valid());
+        Some(())
     }
 }
 
@@ -191,17 +193,23 @@ impl LdbIterator for BlockIter {
 
         let current_off = self.current_entry_offset;
 
-        let (shared, non_shared, _valsize, entry_head_len) = self.parse_entry_and_advance();
-        self.assemble_key(current_off + entry_head_len, shared, non_shared);
+        if let Some((shared, non_shared, _valsize, entry_head_len)) = self.parse_entry_and_advance() {
+            self.assemble_key(current_off + entry_head_len, shared, non_shared);
 
-        // Adjust current_restart_ix
-        let num_restarts = self.number_restarts();
-        while self.current_restart_ix + 1 < num_restarts
-            && self.get_restart_point(self.current_restart_ix + 1) < self.current_entry_offset
-        {
-            self.current_restart_ix += 1;
+            // Adjust current_restart_ix
+            let num_restarts = self.number_restarts();
+            while self.current_restart_ix + 1 < num_restarts
+                && self.get_restart_point(self.current_restart_ix + 1) < self.current_entry_offset
+                {
+                    self.current_restart_ix += 1;
+                }
+            true
+        } else {
+            #[cfg(debug_assertions)]
+            panic!("parse_entry_and_advance(): couldn't parse entry head at/after {:?}", self.key);
+            #[allow(unreachable_code)]
+            false
         }
-        true
     }
 
     fn reset(&mut self) {

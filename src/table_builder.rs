@@ -45,16 +45,16 @@ impl Footer {
         }
     }
 
-    pub fn decode(from: &[u8]) -> Footer {
+    pub fn decode(from: &[u8]) -> Option<Footer> {
         assert!(from.len() >= FULL_FOOTER_LENGTH);
         assert_eq!(&from[FOOTER_LENGTH..], &MAGIC_FOOTER_ENCODED);
-        let (meta, metalen) = BlockHandle::decode(&from[0..]);
-        let (ix, _) = BlockHandle::decode(&from[metalen..]);
+        let (meta, metalen) = BlockHandle::decode(&from[0..])?;
+        let (ix, _) = BlockHandle::decode(&from[metalen..])?;
 
-        Footer {
+        Some(Footer {
             meta_index: meta,
             index: ix,
-        }
+        })
     }
 
     pub fn encode(&self, to: &mut [u8]) {
@@ -286,7 +286,7 @@ mod tests {
         let mut buf = [0; 48];
         f.encode(&mut buf[..]);
 
-        let f2 = Footer::decode(&buf);
+        let f2 = Footer::decode(&buf).unwrap();
         assert_eq!(f2.meta_index.offset(), 44);
         assert_eq!(f2.meta_index.size(), 4);
         assert_eq!(f2.index.offset(), 55);

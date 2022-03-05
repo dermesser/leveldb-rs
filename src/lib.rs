@@ -34,6 +34,9 @@ extern crate snap;
 #[macro_use]
 extern crate time_test;
 
+#[macro_use]
+mod infolog;
+
 mod block;
 mod block_builder;
 mod blockhandle;
@@ -45,8 +48,6 @@ mod env_common;
 mod error;
 mod filter;
 mod filter_block;
-#[macro_use]
-mod infolog;
 mod key_types;
 mod log;
 mod mem_env;

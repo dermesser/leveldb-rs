@@ -125,13 +125,13 @@ impl<'a> Iterator for WriteBatchIter<'a> {
         let tag = self.batch.entries[self.ix];
         self.ix += 1;
 
-        let (klen, l) = usize::decode_var(&self.batch.entries[self.ix..]);
+        let (klen, l) = usize::decode_var(&self.batch.entries[self.ix..])?;
         self.ix += l;
         let k = &self.batch.entries[self.ix..self.ix + klen];
         self.ix += klen;
 
         if tag == ValueType::TypeValue as u8 {
-            let (vlen, m) = usize::decode_var(&self.batch.entries[self.ix..]);
+            let (vlen, m) = usize::decode_var(&self.batch.entries[self.ix..])?;
             self.ix += m;
             let v = &self.batch.entries[self.ix..self.ix + vlen];
             self.ix += vlen;
