@@ -18,14 +18,15 @@ struct LRUList<T> {
 /// This is likely unstable; more investigation is needed into correct behavior!
 impl<T> LRUList<T> {
     fn new() -> LRUList<T> {
-        LRUList {
+        let l = LRUList {
             head: LRUNode {
                 data: None,
                 next: None,
                 prev: None,
             },
             count: 0,
-        }
+        };
+        l
     }
 
     /// Inserts new element at front (least recently used element)
@@ -90,21 +91,21 @@ impl<T> LRUList<T> {
 
     fn remove(&mut self, node_handle: LRUHandle<T>) -> T {
         unsafe {
+            let d = replace(&mut (*node_handle).data, None).unwrap();
             // If has next
             if let Some(ref mut nextp) = (*node_handle).next {
                 swap(&mut (**nextp).prev, &mut (*node_handle).prev);
             }
             // If has prev
             if let Some(ref mut prevp) = (*node_handle).prev {
-                // swap prev.next
-                // (node_handle will own itself now)
-                swap(&mut (**prevp).next, &mut (*node_handle).next);
+                // swap prev.next with sink. sink will be dropped.
+                let mut sink = (*node_handle).next.take();
+                swap(&mut (**prevp).next, &mut sink);
             }
 
             self.count -= 1;
-            // node_handle now only has references/objects that point to itself,
-            // so it's safe to drop
-            replace(&mut (*node_handle).data, None).unwrap()
+
+            d
         }
     }
 
