@@ -20,26 +20,6 @@ struct Node {
     value: Vec<u8>,
 }
 
-impl Drop for Node {
-    fn drop(&mut self) {
-        // large object should drop
-        if let Some(mut next) = self.next.take() {
-            while let Some(child) = next.next.take() {
-                next = child;
-            }
-        }
-        unsafe {
-            for skip in self.skips.iter_mut() {
-                if let Some(mut next) = skip.take() {
-                    while let Some(child) = (*next).next.take() {
-                        next = Box::into_raw(child);
-                    }
-                }
-            }
-        }
-    }
-}
-
 /// Implements the backing store for a `MemTable`. The important methods are `insert()` and
 /// `contains()`; in order to get full key and value for an entry, use a `SkipMapIter` instance,
 /// `seek()` to the key to look up (this is as fast as any lookup in a skip map), and then call
@@ -253,7 +233,7 @@ impl InnerSkipMap {
         }
 
         // Construct new node
-        let mut new_skips = Vec::with_capacity(new_height);
+        let mut new_skips = Vec::new();
         new_skips.resize(new_height, None);
         let mut new = Box::new(Node {
             skips: new_skips,
