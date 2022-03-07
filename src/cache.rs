@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::mem::{replace, swap};
+use std::mem::swap;
 
 // No clone, no copy! That asserts that an LRUHandle exists only once.
 type LRUHandle<T> = *mut LRUNode<T>;
@@ -43,7 +43,7 @@ impl<T> LRUList<T> {
             // Set up the node after the new one
             self.head.next.as_mut().unwrap().prev = Some(newp);
             // Replace head.next with None and set the new node's next to that
-            new.next = replace(&mut self.head.next, None);
+            new.next = self.head.next.take();
             self.head.next = Some(new);
 
             newp
