@@ -18,15 +18,14 @@ struct LRUList<T> {
 /// This is likely unstable; more investigation is needed into correct behavior!
 impl<T> LRUList<T> {
     fn new() -> LRUList<T> {
-        let l = LRUList {
+        LRUList {
             head: LRUNode {
                 data: None,
                 next: None,
                 prev: None,
             },
             count: 0,
-        };
-        l
+        }
     }
 
     /// Inserts new element at front (least recently used element)
@@ -71,10 +70,7 @@ impl<T> LRUList<T> {
             return None;
         }
         let mut lasto = unsafe {
-            replace(
-                &mut (*((*self.head.prev.unwrap()).prev.unwrap())).next,
-                None,
-            )
+                (*((*self.head.prev.unwrap()).prev.unwrap())).next.take()
         };
 
         assert!(lasto.is_some());
@@ -83,7 +79,7 @@ impl<T> LRUList<T> {
             assert!(self.head.prev.is_some());
             self.head.prev = last.prev;
             self.count -= 1;
-            replace(&mut (*last).data, None)
+            (*last).data.take()
         } else {
             None
         }
@@ -91,17 +87,16 @@ impl<T> LRUList<T> {
 
     fn remove(&mut self, node_handle: LRUHandle<T>) -> T {
         unsafe {
-            let d = replace(&mut (*node_handle).data, None).unwrap();
-            // If has next
-            if let Some(ref mut nextp) = (*node_handle).next {
-                swap(&mut (**nextp).prev, &mut (*node_handle).prev);
+            let d = (*node_handle).data.take().unwrap();
+            // Take ownership of node to be removed.
+            let mut current = (*(*node_handle).prev.unwrap()).next.take().unwrap();
+            let prev = current.prev.unwrap();
+            // Update previous node's successor.
+            if current.next.is_some() {
+                // Update next node's predecessor.
+                current.next.as_mut().unwrap().prev = current.prev.take();
             }
-            // If has prev
-            if let Some(ref mut prevp) = (*node_handle).prev {
-                // swap prev.next with sink. sink will be dropped.
-                let mut sink = (*node_handle).next.take();
-                swap(&mut (**prevp).next, &mut sink);
-            }
+            (*prev).next = current.next.take();
 
             self.count -= 1;
 
