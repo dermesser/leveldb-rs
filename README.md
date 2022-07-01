@@ -16,14 +16,7 @@ I do care, however, about bug reports.
 
 ## Status
 
-* User-facing methods exist: Read/Write/Delete; snapshots; iteration
-* Compaction is supported, including manual ones.
-* Fully synchronous: Efficiency gains by using non-atomic types, but writes may
-  occasionally block during a compaction. In --release mode, an average compaction
-  takes 0.2-0.5 seconds.
-* Compatible with the original implementation. If it isn't (crash/read error/write error), it's a bug and needs to be fixed.
-* Performance is decent; while not quite up to par with the original (we don't use multithreading, for example) it is very much usable.
-* Safe: Many places use asserts though, so you may rarely see a crash -- in which case you should file a bug.
+Working well, with a few rare bugs (see issues).
 
 ## Goals
 
@@ -37,4 +30,4 @@ Some of the goals of this implementation are
 * Clarity; commented code, clear structure (hopefully doing a better job than
   the original implementation).
 * Coming close-ish to the original implementation; clarifying the translation of
-  typical C++ constructs to Rust.
+  typical C++ constructs to Rust, and doing a better job at helping understand the internals.
