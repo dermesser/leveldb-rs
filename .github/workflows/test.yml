@@ -1,0 +1,23 @@
+on: [push, pull_request]
+
+name: Actions CI
+
+jobs:
+  build_and_test:
+    name: leveldb-rs
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        features: [""]
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          default: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --no-default-features --features=${{ matrix.features }}
