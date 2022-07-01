@@ -10,8 +10,6 @@ use crate::table_builder;
 
 use crc::crc32::{self, Hasher32};
 use integer_encoding::FixedInt;
-use snap::read::FrameDecoder;
-use std::io::Read;
 
 /// Reads the data for the specified block handle from a file.
 fn read_bytes(f: &dyn RandomAccess, location: &BlockHandle) -> Result<Vec<u8>> {
@@ -76,8 +74,7 @@ pub fn read_table_block(
         match ctype {
             CompressionType::CompressionNone => Ok(Block::new(opt, buf)),
             CompressionType::CompressionSnappy => {
-                let mut decoded = vec![];
-                FrameDecoder::new(buf.as_slice()).read_to_end(&mut decoded)?;
+                let decoded = snap::raw::Decoder::new().decompress_vec(buf.as_slice())?;
                 Ok(Block::new(opt, decoded))
             }
         }
