@@ -320,7 +320,7 @@ mod tests {
         assert!(b.filter_block.is_some());
 
         let actual = b.finish().unwrap();
-        assert_eq!(275, actual);
+        assert_eq!(223, actual);
     }
 
     #[test]
