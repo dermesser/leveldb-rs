@@ -239,7 +239,9 @@ mod tests {
             for key in get_keys().iter() {
                 assert!(
                     reader.key_may_match(block_offset, key),
-                    "{} {:?} ", block_offset, key
+                    "{} {:?} ",
+                    block_offset,
+                    key
                 );
             }
             for key in unknown_keys.iter() {

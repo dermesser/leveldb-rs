@@ -193,16 +193,17 @@ impl LdbIterator for BlockIter {
 
         let current_off = self.current_entry_offset;
 
-        if let Some((shared, non_shared, _valsize, entry_head_len)) = self.parse_entry_and_advance() {
+        if let Some((shared, non_shared, _valsize, entry_head_len)) = self.parse_entry_and_advance()
+        {
             self.assemble_key(current_off + entry_head_len, shared, non_shared);
 
             // Adjust current_restart_ix
             let num_restarts = self.number_restarts();
             while self.current_restart_ix + 1 < num_restarts
                 && self.get_restart_point(self.current_restart_ix + 1) < self.current_entry_offset
-                {
-                    self.current_restart_ix += 1;
-                }
+            {
+                self.current_restart_ix += 1;
+            }
             true
         } else {
             #[cfg(debug_assertions)]

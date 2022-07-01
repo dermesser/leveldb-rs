@@ -22,8 +22,8 @@ impl BlockHandle {
                 offset: off,
                 size: sz,
             },
-            offsize + szsize)
-        )
+            offsize + szsize,
+        ))
     }
 
     pub fn new(offset: usize, size: usize) -> BlockHandle {

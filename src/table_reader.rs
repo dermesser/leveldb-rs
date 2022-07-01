@@ -23,7 +23,10 @@ fn read_footer(f: &dyn RandomAccess, size: usize) -> Result<Footer> {
     f.read_at(size - table_builder::FULL_FOOTER_LENGTH, &mut buf)?;
     match Footer::decode(&buf) {
         Some(ok) => Ok(ok),
-        None => err(error::StatusCode::Corruption, &format!("Couldn't decode damaged footer {:?}", &buf))
+        None => err(
+            error::StatusCode::Corruption,
+            &format!("Couldn't decode damaged footer {:?}", &buf),
+        ),
     }
 }
 
@@ -80,8 +83,13 @@ impl Table {
         if let Some((_key, val)) = current_key_val(&metaindexiter) {
             let fbl = BlockHandle::decode(&val);
             let filter_block_location = match fbl {
-                None => return err(error::StatusCode::Corruption, &format!("Couldn't decode corrupt blockhandle {:?}", &val)),
-                Some(ok) => ok.0
+                None => {
+                    return err(
+                        error::StatusCode::Corruption,
+                        &format!("Couldn't decode corrupt blockhandle {:?}", &val),
+                    )
+                }
+                Some(ok) => ok.0,
             };
             if filter_block_location.size() > 0 {
                 return Ok(Some(table_block::read_filter_block(
@@ -244,8 +252,13 @@ impl TableIterator {
     // Load the block at `handle` into `self.current_block`
     fn load_block(&mut self, handle: &[u8]) -> Result<()> {
         let (new_block_handle, _) = match BlockHandle::decode(handle) {
-            None => return err(error::StatusCode::Corruption, "Couldn't decode corrupt block handle"),
-            Some(ok) => ok
+            None => {
+                return err(
+                    error::StatusCode::Corruption,
+                    "Couldn't decode corrupt block handle",
+                )
+            }
+            Some(ok) => ok,
         };
         let block = self.table.read_block(&new_block_handle)?;
 
