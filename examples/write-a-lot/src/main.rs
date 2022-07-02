@@ -35,4 +35,6 @@ fn main() {
     let mut db = DB::open("test1", opt).unwrap();
 
     fill_db(&mut db, 32768).unwrap();
+
+    db.close().unwrap();
 }
