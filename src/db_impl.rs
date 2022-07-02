@@ -364,6 +364,13 @@ impl DB {
             Ok(())
         }
     }
+
+    /// Flush data to disk and release lock.
+    pub fn close(&mut self) -> Result<()> {
+        self.flush()?;
+        self.release_lock()?;
+        Ok(())
+    }
 }
 
 impl DB {
