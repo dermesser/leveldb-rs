@@ -67,6 +67,9 @@ impl Status {
         }
         Status { code, err }
     }
+    pub fn annotate<S: AsRef<str>>(self, msg: S) -> Status {
+        Status { code: self.code, err: format!("{}: {}", msg.as_ref(), self.err) }
+    }
 }
 
 /// LevelDB's result type
