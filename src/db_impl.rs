@@ -1202,13 +1202,13 @@ mod tests {
 
             eprintln!(
                 "children after: {:?}",
-                env.children(Path::new("otherdb/")).unwrap()
+                env.children(Path::new("otherdb")).unwrap()
             );
-            assert!(env.exists(Path::new("otherdb/CURRENT")).unwrap());
+            assert!(env.exists(&Path::new("otherdb").join("CURRENT")).unwrap());
             // Database is initialized and initial manifest reused.
-            assert!(!env.exists(Path::new("otherdb/MANIFEST-000001")).unwrap());
-            assert!(env.exists(Path::new("otherdb/MANIFEST-000002")).unwrap());
-            assert!(env.exists(Path::new("otherdb/000003.log")).unwrap());
+            assert!(!env.exists(&Path::new("otherdb").join("MANIFEST-000001")).unwrap());
+            assert!(env.exists(&Path::new("otherdb").join("MANIFEST-000002")).unwrap());
+            assert!(env.exists(&Path::new("otherdb").join("000003.log")).unwrap());
         }
 
         {
@@ -1218,13 +1218,13 @@ mod tests {
 
             eprintln!(
                 "children after: {:?}",
-                env.children(Path::new("db/")).unwrap()
+                env.children(&Path::new("db").join("")).unwrap()
             );
-            assert!(env.exists(Path::new("db/CURRENT")).unwrap());
+            assert!(env.exists(&Path::new("db").join("CURRENT")).unwrap());
             // Database is initialized and initial manifest reused.
-            assert!(env.exists(Path::new("db/MANIFEST-000001")).unwrap());
-            assert!(env.exists(Path::new("db/LOCK")).unwrap());
-            assert!(env.exists(Path::new("db/000003.log")).unwrap());
+            assert!(env.exists(&Path::new("db").join("MANIFEST-000001")).unwrap());
+            assert!(env.exists(&Path::new("db").join("LOCK")).unwrap());
+            assert!(env.exists(&Path::new("db").join("000003.log")).unwrap());
 
             db.put("abc".as_bytes(), "def".as_bytes()).unwrap();
             db.put("abd".as_bytes(), "def".as_bytes()).unwrap();
@@ -1233,7 +1233,7 @@ mod tests {
         {
             eprintln!(
                 "children before: {:?}",
-                env.children(Path::new("db/")).unwrap()
+                env.children(&Path::new("db").join("")).unwrap()
             );
             let mut opt = opt.clone();
             opt.reuse_manifest = false;
@@ -1242,17 +1242,17 @@ mod tests {
 
             eprintln!(
                 "children after: {:?}",
-                env.children(Path::new("db/")).unwrap()
+                env.children(&Path::new("db").join("")).unwrap()
             );
             // Obsolete manifest is deleted.
-            assert!(!env.exists(Path::new("db/MANIFEST-000001")).unwrap());
+            assert!(!env.exists(&Path::new("db").join("MANIFEST-000001")).unwrap());
             // New manifest is created.
-            assert!(env.exists(Path::new("db/MANIFEST-000002")).unwrap());
+            assert!(env.exists(&Path::new("db").join("MANIFEST-000002")).unwrap());
             // Obsolete log file is deleted.
-            assert!(!env.exists(Path::new("db/000003.log")).unwrap());
+            assert!(!env.exists(&Path::new("db").join("000003.log")).unwrap());
             // New L0 table has been added.
-            assert!(env.exists(Path::new("db/000003.ldb")).unwrap());
-            assert!(env.exists(Path::new("db/000004.log")).unwrap());
+            assert!(env.exists(&Path::new("db").join("000003.ldb")).unwrap());
+            assert!(env.exists(&Path::new("db").join("000004.log")).unwrap());
             // Check that entry exists and is correct. Phew, long call chain!
             let current = db.current();
             log!(opt.log, "files: {:?}", current.borrow().files);
@@ -1272,7 +1272,7 @@ mod tests {
         {
             eprintln!(
                 "children before: {:?}",
-                env.children(Path::new("db/")).unwrap()
+                env.children(Path::new("db")).unwrap()
             );
             // reuse_manifest above causes the old manifest to be deleted as obsolete, but no new
             // manifest is written. CURRENT becomes stale.
@@ -1282,14 +1282,14 @@ mod tests {
 
             eprintln!(
                 "children after: {:?}",
-                env.children(Path::new("db/")).unwrap()
+                env.children(Path::new("db")).unwrap()
             );
-            assert!(!env.exists(Path::new("db/MANIFEST-000001")).unwrap());
-            assert!(env.exists(Path::new("db/MANIFEST-000002")).unwrap());
-            assert!(!env.exists(Path::new("db/MANIFEST-000005")).unwrap());
-            assert!(env.exists(Path::new("db/000004.log")).unwrap());
+            assert!(!env.exists(&Path::new("db").join("MANIFEST-000001")).unwrap());
+            assert!(env.exists(&Path::new("db").join("MANIFEST-000002")).unwrap());
+            assert!(!env.exists(&Path::new("db").join("MANIFEST-000005")).unwrap());
+            assert!(env.exists(&Path::new("db").join("000004.log")).unwrap());
             // 000004 should be reused, no new log file should be created.
-            assert!(!env.exists(Path::new("db/000006.log")).unwrap());
+            assert!(!env.exists(&Path::new("db").join("000006.log")).unwrap());
             // Log is reused, so memtable should contain last written entry from above.
             assert_eq!(1, db.mem.len());
             assert_eq!(
@@ -1310,26 +1310,26 @@ mod tests {
 
         eprintln!(
             "children before: {:?}",
-            env.children(Path::new("db/")).unwrap()
+            env.children(&Path::new("db").join("")).unwrap()
         );
         db.compact_range(b"aaa", b"dba").unwrap();
         eprintln!(
             "children after: {:?}",
-            env.children(Path::new("db/")).unwrap()
+            env.children(&Path::new("db").join("")).unwrap()
         );
 
-        assert_eq!(250, opt.env.size_of(Path::new("db/000007.ldb")).unwrap());
-        assert_eq!(200, opt.env.size_of(Path::new("db/000008.ldb")).unwrap());
-        assert_eq!(200, opt.env.size_of(Path::new("db/000009.ldb")).unwrap());
-        assert_eq!(435, opt.env.size_of(Path::new("db/000015.ldb")).unwrap());
+        assert_eq!(250, opt.env.size_of(&Path::new("db").join("000007.ldb")).unwrap());
+        assert_eq!(200, opt.env.size_of(&Path::new("db").join("000008.ldb")).unwrap());
+        assert_eq!(200, opt.env.size_of(&Path::new("db").join("000009.ldb")).unwrap());
+        assert_eq!(435, opt.env.size_of(&Path::new("db").join("000015.ldb")).unwrap());
 
-        assert!(!opt.env.exists(Path::new("db/000001.ldb")).unwrap());
-        assert!(!opt.env.exists(Path::new("db/000002.ldb")).unwrap());
-        assert!(!opt.env.exists(Path::new("db/000004.ldb")).unwrap());
-        assert!(!opt.env.exists(Path::new("db/000005.ldb")).unwrap());
-        assert!(!opt.env.exists(Path::new("db/000006.ldb")).unwrap());
-        assert!(!opt.env.exists(Path::new("db/000013.ldb")).unwrap());
-        assert!(!opt.env.exists(Path::new("db/000014.ldb")).unwrap());
+        assert!(!opt.env.exists(&Path::new("db").join("000001.ldb")).unwrap());
+        assert!(!opt.env.exists(&Path::new("db").join("000002.ldb")).unwrap());
+        assert!(!opt.env.exists(&Path::new("db").join("000004.ldb")).unwrap());
+        assert!(!opt.env.exists(&Path::new("db").join("000005.ldb")).unwrap());
+        assert!(!opt.env.exists(&Path::new("db").join("000006.ldb")).unwrap());
+        assert!(!opt.env.exists(&Path::new("db").join("000013.ldb")).unwrap());
+        assert!(!opt.env.exists(&Path::new("db").join("000014.ldb")).unwrap());
 
         assert_eq!(b"val1".to_vec(), db.get(b"aaa").unwrap());
         assert_eq!(b"val2".to_vec(), db.get(b"cab").unwrap());
@@ -1346,28 +1346,28 @@ mod tests {
 
         eprintln!(
             "children before: {:?}",
-            env.children(Path::new("db/")).unwrap()
+            env.children(Path::new("db")).unwrap()
         );
         db.compact_range(b"aaa", b"dba").unwrap();
         eprintln!(
             "children after: {:?}",
-            env.children(Path::new("db/")).unwrap()
+            env.children(Path::new("db")).unwrap()
         );
 
-        assert_eq!(250, opt.env.size_of(Path::new("db/000007.ldb")).unwrap());
-        assert_eq!(200, opt.env.size_of(Path::new("db/000008.ldb")).unwrap());
-        assert_eq!(200, opt.env.size_of(Path::new("db/000009.ldb")).unwrap());
-        assert_eq!(182, opt.env.size_of(Path::new("db/000014.ldb")).unwrap());
-        assert_eq!(435, opt.env.size_of(Path::new("db/000017.ldb")).unwrap());
+        assert_eq!(250, opt.env.size_of(&Path::new("db").join("000007.ldb")).unwrap());
+        assert_eq!(200, opt.env.size_of(&Path::new("db").join("000008.ldb")).unwrap());
+        assert_eq!(200, opt.env.size_of(&Path::new("db").join("000009.ldb")).unwrap());
+        assert_eq!(182, opt.env.size_of(&Path::new("db").join("000014.ldb")).unwrap());
+        assert_eq!(435, opt.env.size_of(&Path::new("db").join("000017.ldb")).unwrap());
 
-        assert!(!opt.env.exists(Path::new("db/000001.ldb")).unwrap());
-        assert!(!opt.env.exists(Path::new("db/000002.ldb")).unwrap());
-        assert!(!opt.env.exists(Path::new("db/000003.ldb")).unwrap());
-        assert!(!opt.env.exists(Path::new("db/000004.ldb")).unwrap());
-        assert!(!opt.env.exists(Path::new("db/000005.ldb")).unwrap());
-        assert!(!opt.env.exists(Path::new("db/000006.ldb")).unwrap());
-        assert!(!opt.env.exists(Path::new("db/000015.ldb")).unwrap());
-        assert!(!opt.env.exists(Path::new("db/000016.ldb")).unwrap());
+        assert!(!opt.env.exists(&Path::new("db").join("000001.ldb")).unwrap());
+        assert!(!opt.env.exists(&Path::new("db").join("000002.ldb")).unwrap());
+        assert!(!opt.env.exists(&Path::new("db").join("000003.ldb")).unwrap());
+        assert!(!opt.env.exists(&Path::new("db").join("000004.ldb")).unwrap());
+        assert!(!opt.env.exists(&Path::new("db").join("000005.ldb")).unwrap());
+        assert!(!opt.env.exists(&Path::new("db").join("000006.ldb")).unwrap());
+        assert!(!opt.env.exists(&Path::new("db").join("000015.ldb")).unwrap());
+        assert!(!opt.env.exists(&Path::new("db").join("000016.ldb")).unwrap());
 
         assert_eq!(b"val1".to_vec(), db.get(b"aaa").unwrap());
         assert_eq!(b"val2".to_vec(), db.get(b"cab").unwrap());
@@ -1395,7 +1395,7 @@ mod tests {
         let mt = build_memtable();
 
         let f = build_table("db", &opt, mt.iter(), 123).unwrap();
-        let path = Path::new("db/000123.ldb");
+        let path = &Path::new("db").join("000123.ldb");
 
         assert_eq!(
             LookupKey::new("aabc".as_bytes(), 6).internal_key(),
@@ -1554,9 +1554,9 @@ mod tests {
 
         eprintln!(
             "children after: {:?}",
-            db.opt.env.children(Path::new("db/")).unwrap()
+            db.opt.env.children(Path::new("db")).unwrap()
         );
-        assert!(db.opt.env.exists(Path::new("db/000004.ldb")).unwrap());
+        assert!(db.opt.env.exists(&Path::new("db").join("000004.ldb")).unwrap());
 
         {
             let v = db.current();
@@ -1586,9 +1586,9 @@ mod tests {
         // Trigger memtable compaction.
         db.make_room_for_write(true).unwrap();
         assert_eq!(0, db.mem.len());
-        assert!(db.opt.env.exists(Path::new("db/000002.log")).unwrap());
-        assert!(db.opt.env.exists(Path::new("db/000003.ldb")).unwrap());
-        assert_eq!(351, db.opt.env.size_of(Path::new("db/000003.ldb")).unwrap());
+        assert!(db.opt.env.exists(&Path::new("db").join("000002.log")).unwrap());
+        assert!(db.opt.env.exists(&Path::new("db").join("000003.ldb")).unwrap());
+        assert_eq!(351, db.opt.env.size_of(&Path::new("db").join("000003.ldb")).unwrap());
         assert_eq!(
             7,
             LdbIteratorIter::wrap(&mut db.cache.borrow_mut().get_table(3).unwrap().iter()).count()
@@ -1604,9 +1604,9 @@ mod tests {
 
         db.maybe_do_compaction().unwrap();
 
-        assert!(!db.opt.env.exists(Path::new("db/000003.ldb")).unwrap());
-        assert!(db.opt.env.exists(Path::new("db/000013.ldb")).unwrap());
-        assert_eq!(345, db.opt.env.size_of(Path::new("db/000013.ldb")).unwrap());
+        assert!(!db.opt.env.exists(&Path::new("db").join("000003.ldb")).unwrap());
+        assert!(db.opt.env.exists(&Path::new("db").join("000013.ldb")).unwrap());
+        assert_eq!(345, db.opt.env.size_of(&Path::new("db").join("000013.ldb")).unwrap());
 
         // New current version.
         let v = db.current();
@@ -1628,9 +1628,9 @@ mod tests {
 
         db.maybe_do_compaction().unwrap();
 
-        assert!(opt.env.exists(Path::new("db/000006.ldb")).unwrap());
-        assert!(!opt.env.exists(Path::new("db/000010.ldb")).unwrap());
-        assert_eq!(218, opt.env.size_of(Path::new("db/000006.ldb")).unwrap());
+        assert!(opt.env.exists(&Path::new("db").join("000006.ldb")).unwrap());
+        assert!(!opt.env.exists(&Path::new("db").join("000010.ldb")).unwrap());
+        assert_eq!(218, opt.env.size_of(&Path::new("db").join("000006.ldb")).unwrap());
 
         let v = db.current();
         assert_eq!(1, v.borrow().files[2].len());
@@ -1643,7 +1643,7 @@ mod tests {
         let name = "db";
 
         let stuff = "abcdefghijkl".as_bytes();
-        env.open_writable_file(Path::new("db/000001.ldb"))
+        env.open_writable_file(&Path::new("db").join("000001.ldb"))
             .unwrap()
             .write_all(stuff)
             .unwrap();
@@ -1654,7 +1654,7 @@ mod tests {
         cs.outputs = vec![fmd];
         cs.cleanup(&env, name);
 
-        assert!(!env.exists(Path::new("db/000001.ldb")).unwrap());
+        assert!(!env.exists(&Path::new("db").join("000001.ldb")).unwrap());
     }
 
     #[test]
