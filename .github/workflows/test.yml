@@ -5,11 +5,12 @@ name: Actions CI
 jobs:
   build_and_test:
     name: leveldb-rs
-    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         features: [""]
+        platform: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
