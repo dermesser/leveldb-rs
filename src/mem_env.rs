@@ -173,7 +173,6 @@ impl MemFS {
         let fs = self.store.lock()?;
         let mut prefix = path_to_string(p);
         let main_separator_str = std::path::MAIN_SEPARATOR.to_string();
-        #[cfg(unix)]
         if !prefix.ends_with(&main_separator_str) {
             prefix.push(std::path::MAIN_SEPARATOR);
         }

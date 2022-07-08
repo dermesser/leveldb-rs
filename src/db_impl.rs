@@ -1154,21 +1154,21 @@ mod tests {
         let e = MemEnv::new();
         {
             let l = Some(share(open_info_log(&e, "abc")));
-            assert!(e.exists(Path::new("abc/LOG")).unwrap());
+            assert!(e.exists(&Path::new("abc").join("LOG")).unwrap());
             log!(l, "hello {}", "world");
-            assert_eq!(12, e.size_of(Path::new("abc/LOG")).unwrap());
+            assert_eq!(12, e.size_of(&Path::new("abc").join("LOG")).unwrap());
         }
         {
             let l = Some(share(open_info_log(&e, "abc")));
-            assert!(e.exists(Path::new("abc/LOG.old")).unwrap());
-            assert!(e.exists(Path::new("abc/LOG")).unwrap());
-            assert_eq!(12, e.size_of(Path::new("abc/LOG.old")).unwrap());
-            assert_eq!(0, e.size_of(Path::new("abc/LOG")).unwrap());
+            assert!(e.exists(&Path::new("abc").join("LOG.old")).unwrap());
+            assert!(e.exists(&Path::new("abc").join("LOG")).unwrap());
+            assert_eq!(12, e.size_of(&Path::new("abc").join("LOG.old")).unwrap());
+            assert_eq!(0, e.size_of(&Path::new("abc").join("LOG")).unwrap());
             log!(l, "something else");
             log!(l, "and another {}", 1);
 
             let mut s = String::new();
-            let mut r = e.open_sequential_file(Path::new("abc/LOG")).unwrap();
+            let mut r = e.open_sequential_file(&Path::new("abc").join("LOG")).unwrap();
             r.read_to_string(&mut s).unwrap();
             assert_eq!("something else\nand another 1\n", &s);
         }
