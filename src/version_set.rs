@@ -1124,8 +1124,8 @@ mod tests {
             ve.add_file(1, fmd);
             vs.log_and_apply(ve).unwrap();
 
-            assert!(opt.env.exists(Path::new("db/CURRENT")).unwrap());
-            assert!(opt.env.exists(Path::new("db/MANIFEST-000019")).unwrap());
+            assert!(opt.env.exists(&Path::new("db").join("CURRENT")).unwrap());
+            assert!(opt.env.exists(&Path::new("db").join("MANIFEST-000019")).unwrap());
             // next_file_num and last_seq are untouched by log_and_apply
             assert_eq!(21, vs.new_file_number());
             assert_eq!(22, vs.next_file_num);
