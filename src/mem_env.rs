@@ -172,9 +172,12 @@ impl MemFS {
     fn children_of(&self, p: &Path) -> Result<Vec<PathBuf>> {
         let fs = self.store.lock()?;
         let mut prefix = path_to_string(p);
-        if !prefix.ends_with("/") {
-            prefix.push('/');
+        let main_separator_str = std::path::MAIN_SEPARATOR.to_string();
+        #[cfg(unix)]
+        if !prefix.ends_with(&main_separator_str) {
+            prefix.push(std::path::MAIN_SEPARATOR);
         }
+
         let mut children = Vec::new();
         for k in fs.keys() {
             if k.starts_with(&prefix) {
