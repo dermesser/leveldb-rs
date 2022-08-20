@@ -47,7 +47,7 @@ impl Default for Status {
 
 impl Display for Status {
     fn fmt(&self, fmt: &mut Formatter) -> result::Result<(), fmt::Error> {
-        fmt.write_str(&self.to_string())
+        fmt.write_str(&self.err)
     }
 }
 
@@ -68,7 +68,10 @@ impl Status {
         Status { code, err }
     }
     pub fn annotate<S: AsRef<str>>(self, msg: S) -> Status {
-        Status { code: self.code, err: format!("{}: {}", msg.as_ref(), self.err) }
+        Status {
+            code: self.code,
+            err: format!("{}: {}", msg.as_ref(), self.err),
+        }
     }
 }
 
@@ -106,5 +109,15 @@ impl From<snap::Error> for Status {
             code: StatusCode::CompressionError,
             err: e.to_string(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{StatusCode, Status};
+    #[test]
+    fn test_status_to_string() {
+        let s = Status::new(StatusCode::InvalidData, "Invalid data!");
+        assert_eq!("InvalidData: Invalid data!", s.to_string());
     }
 }
