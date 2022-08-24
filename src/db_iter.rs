@@ -289,6 +289,7 @@ mod tests {
     use super::*;
     use crate::db_impl::testutil::*;
     use crate::db_impl::DB;
+    use crate::options;
     use crate::test_util::LdbIteratorIter;
     use crate::types::{current_key_val, Direction};
 
@@ -484,5 +485,14 @@ mod tests {
                 assert!(!non_existing.contains(&k));
             }
         }
+    }
+
+    #[test]
+    fn db_iter_allow_empty_key() {
+        let opt = options::for_test();
+        let mut db = DB::open("db", opt).unwrap();
+        assert!(db.new_iter().unwrap().next().is_none());
+        db.put(&[], &[]).unwrap();
+        assert!(db.new_iter().unwrap().next().is_some());
     }
 }
