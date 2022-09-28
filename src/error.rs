@@ -24,6 +24,7 @@ pub enum StatusCode {
     NotFound,
     NotSupported,
     PermissionDenied,
+    AsyncError,
     Unknown,
     Errno(errno::Errno),
 }

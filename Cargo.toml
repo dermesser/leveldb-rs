@@ -20,6 +20,12 @@ snap = "1.0"
 errno = "0.2"
 fs2 = "0.4.3"
 
+tokio = { optional = true, features = ["rt", "sync"], version = ">= 1.21" }
+
+[features]
+default = ["async"]
+async = ["tokio"]
+
 [dev-dependencies]
 time-test = "0.2"
 bencher = "0.1"
