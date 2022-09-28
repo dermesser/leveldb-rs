@@ -73,6 +73,7 @@ mod write_batch;
 mod db_impl;
 mod db_iter;
 
+#[cfg(feature = "async")]
 pub use asyncdb::AsyncDB;
 
 pub use cmp::{Cmp, DefaultCmp};
