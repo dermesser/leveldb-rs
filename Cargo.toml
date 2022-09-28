@@ -23,7 +23,7 @@ fs2 = "0.4.3"
 tokio = { optional = true, features = ["rt", "sync"], version = ">= 1.21" }
 
 [features]
-default = ["async"]
+default = []
 async = ["tokio"]
 
 [dev-dependencies]
