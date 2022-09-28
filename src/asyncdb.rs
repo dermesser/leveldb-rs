@@ -49,7 +49,65 @@ impl AsyncDB {
         Ok(AsyncDB { jh, send })
     }
 
-    async fn send_request(&self, req: Request) -> Result<Response> {
+    pub async fn close(&self) -> Result<()> {
+        let r = self.process_request(Request::Close).await?;
+        match r {
+            Response::OK => Ok(()),
+            Response::Error(s) => Err(s),
+            _ => Err(Status { code: StatusCode::AsyncError, err: "Wrong response type in AsyncDB.".to_string() }),
+        }
+    }
+
+    pub async fn put(&self, key: Vec<u8>, val: Vec<u8>) -> Result<()> {
+        let r = self.process_request(Request::Put{key, val}).await?;
+        match r {
+            Response::OK => Ok(()),
+            Response::Error(s) => Err(s),
+            _ => Err(Status { code: StatusCode::AsyncError, err: "Wrong response type in AsyncDB.".to_string() }),
+        }
+    }
+    pub async fn delete(&self, key: Vec<u8>) -> Result<()> {
+        let r = self.process_request(Request::Delete{key}).await?;
+        match r {
+            Response::OK => Ok(()),
+            Response::Error(s) => Err(s),
+            _ => Err(Status { code: StatusCode::AsyncError, err: "Wrong response type in AsyncDB.".to_string() }),
+        }
+    }
+    pub async fn write(&self, batch: WriteBatch, sync: bool) -> Result<()> {
+        let r = self.process_request(Request::Write{batch, sync}).await?;
+        match r {
+            Response::OK => Ok(()),
+            Response::Error(s) => Err(s),
+            _ => Err(Status { code: StatusCode::AsyncError, err: "Wrong response type in AsyncDB.".to_string() }),
+        }
+    }
+    pub async fn flush(&self) -> Result<()> {
+        let r = self.process_request(Request::Flush).await?;
+        match r {
+            Response::OK => Ok(()),
+            Response::Error(s) => Err(s),
+            _ => Err(Status { code: StatusCode::AsyncError, err: "Wrong response type in AsyncDB.".to_string() }),
+        }
+    }
+    pub async fn get(&self, key: Vec<u8>) -> Result<Option<Vec<u8>>> {
+        let r = self.process_request(Request::Get { key }).await?;
+        match r {
+            Response::Value(v) => Ok(v),
+            Response::Error(s) => Err(s),
+            _ => Err(Status { code: StatusCode::AsyncError, err: "Wrong response type in AsyncDB.".to_string() }),
+        }
+    }
+    pub async fn compact_range(&self, from: Vec<u8>, to: Vec<u8>) -> Result<()> {
+        let r = self.process_request(Request::CompactRange { from, to }).await?;
+        match r {
+            Response::OK => Ok(()),
+            Response::Error(s) => Err(s),
+            _ => Err(Status { code: StatusCode::AsyncError, err: "Wrong response type in AsyncDB.".to_string() }),
+        }
+    }
+
+    async fn process_request(&self, req: Request) -> Result<Response> {
         let (tx, rx) = oneshot::channel();
         let m = Message { req, resp_channel: tx };
         if let Err(e) = self.send.send(m).await {
@@ -66,7 +124,7 @@ impl AsyncDB {
         while let Some(message) = recv.blocking_recv() {
             match message.req {
                 Request::Close => {
-                    message.resp_channel.send(Response::OK);
+                    message.resp_channel.send(Response::OK).ok();
                     recv.close();
                     return;
                 },

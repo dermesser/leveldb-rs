@@ -73,6 +73,8 @@ mod write_batch;
 mod db_impl;
 mod db_iter;
 
+pub use asyncdb::AsyncDB;
+
 pub use cmp::{Cmp, DefaultCmp};
 pub use db_impl::DB;
 pub use db_iter::DBIterator;
