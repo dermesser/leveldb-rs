@@ -33,6 +33,16 @@ struct InnerSkipMap {
     cmp: Rc<Box<dyn Cmp>>,
 }
 
+impl Drop for InnerSkipMap {
+    // Avoid possible stack overflow caused by dropping many nodes.
+    fn drop(&mut self) {
+        let mut next_node = self.head.next.take();
+        while let Some(mut boxed_node) = next_node {
+            next_node = boxed_node.next.take();
+        }
+    }
+}
+
 pub struct SkipMap {
     map: Rc<RefCell<InnerSkipMap>>,
 }

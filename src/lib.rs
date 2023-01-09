@@ -33,6 +33,7 @@ extern crate snap;
 #[cfg(test)]
 #[macro_use]
 extern crate time_test;
+extern crate core;
 
 #[macro_use]
 mod infolog;
