@@ -635,7 +635,11 @@ mod tests {
     #[test]
     fn test_memenv_all() {
         let me = MemEnv::new();
-        let (p1, p2, p3) = (Path::new("\\a\\b"), Path::new("\\a\\c"), Path::new("\\a\\d"));
+        let (p1, p2, p3) = (
+            Path::new("\\a\\b"),
+            Path::new("\\a\\c"),
+            Path::new("\\a\\d"),
+        );
         let nonexist = Path::new("\\x\\y");
         me.open_writable_file(p2).unwrap();
         me.open_appendable_file(p3).unwrap();

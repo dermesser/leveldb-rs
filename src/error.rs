@@ -115,7 +115,7 @@ impl From<snap::Error> for Status {
 
 #[cfg(test)]
 mod tests {
-    use super::{StatusCode, Status};
+    use super::{Status, StatusCode};
     #[test]
     fn test_status_to_string() {
         let s = Status::new(StatusCode::InvalidData, "Invalid data!");
