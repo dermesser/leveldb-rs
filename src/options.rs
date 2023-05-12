@@ -49,6 +49,8 @@ pub struct Options {
     pub block_cache: Shared<Cache<Block>>,
     pub block_size: usize,
     pub block_restart_interval: usize,
+    /// Note: you have to open a database with the same compression type as it was written to, in
+    /// order to not lose data! (this is a bug and will be fixed)
     pub compression_type: CompressionType,
     pub reuse_logs: bool,
     pub reuse_manifest: bool,
