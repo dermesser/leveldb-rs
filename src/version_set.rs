@@ -676,25 +676,23 @@ impl VersionSet {
                 return false;
             }
             if let Ok(size) = self.opt.env.size_of(Path::new(current_manifest_path)) {
-                if size > self.opt.max_file_size {
+                if size >= self.opt.max_file_size {
                     return false;
                 }
-            } else {
-                return false;
-            }
 
-            assert!(self.descriptor_log.is_none());
-            let s = self
-                .opt
-                .env
-                .open_appendable_file(Path::new(current_manifest_path));
-            if let Ok(f) = s {
-                log!(self.opt.log, "reusing manifest {:?}", current_manifest_path);
-                self.descriptor_log = Some(LogWriter::new(f));
-                self.manifest_num = num;
-                return true;
-            } else {
-                log!(self.opt.log, "reuse_manifest: {}", s.err().unwrap());
+                assert!(self.descriptor_log.is_none());
+                let s = self
+                    .opt
+                    .env
+                    .open_appendable_file(Path::new(current_manifest_path));
+                if let Ok(f) = s {
+                    log!(self.opt.log, "reusing manifest {:?}", current_manifest_path);
+                    self.descriptor_log = Some(LogWriter::new_with_off(f, size));
+                    self.manifest_num = num;
+                    return true;
+                } else {
+                    log!(self.opt.log, "reuse_manifest: {}", s.err().unwrap());
+                }
             }
         }
         false
