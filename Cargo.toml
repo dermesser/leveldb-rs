@@ -1,6 +1,6 @@
 [package]
 name = "rusty-leveldb"
-version = "1.0.6"
+version = "1.0.7"
 authors = ["Lewin Bormann <lbo@spheniscida.de>"]
 description = "A compatible re-implementation of LevelDB in Rust"
 homepage = "https://github.com/dermesser/leveldb-rs"
