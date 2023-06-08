@@ -806,7 +806,7 @@ impl DB {
             // TODO: Do we need to do a memtable compaction here? Probably not, in the sequential
             // case.
             assert!(input.current(&mut key, &mut val));
-            if cs.compaction.should_stop_before(&key) && cs.builder.is_none() {
+            if cs.compaction.should_stop_before(&key) && cs.builder.is_some() {
                 self.finish_compaction_output(cs, key.clone())?;
             }
             let (ktyp, seq, ukey) = parse_internal_key(&key);
