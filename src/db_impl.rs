@@ -807,7 +807,7 @@ impl DB {
             // case.
             assert!(input.current(&mut key, &mut val));
             if cs.compaction.should_stop_before(&key) && cs.builder.is_some() {
-                self.finish_compaction_output(cs, key.clone())?;
+                self.finish_compaction_output(cs)?;
             }
             let (ktyp, seq, ukey) = parse_internal_key(&key);
             if seq == 0 {
@@ -861,17 +861,18 @@ impl DB {
             if cs.builder.as_ref().unwrap().entries() == 0 {
                 cs.current_output().smallest = key.clone();
             }
+            cs.current_output().largest = key.clone();
             cs.builder.as_mut().unwrap().add(&key, &val)?;
             // NOTE: Adjust max file size based on level.
             if cs.builder.as_ref().unwrap().size_estimate() > self.opt.max_file_size {
-                self.finish_compaction_output(cs, key.clone())?;
+                self.finish_compaction_output(cs)?;
             }
 
             input.advance();
         }
 
         if cs.builder.is_some() {
-            self.finish_compaction_output(cs, key)?;
+            self.finish_compaction_output(cs)?;
         }
 
         let mut stats = CompactionStats::default();
@@ -891,7 +892,6 @@ impl DB {
     fn finish_compaction_output(
         &mut self,
         cs: &mut CompactionState,
-        largest: Vec<u8>,
     ) -> Result<()> {
         assert!(cs.builder.is_some());
         let output_num = cs.current_output().num;
@@ -905,7 +905,6 @@ impl DB {
         let bytes = b.finish()?;
         cs.total_bytes += bytes;
 
-        cs.current_output().largest = largest;
         cs.current_output().size = bytes;
 
         if entries > 0 {
