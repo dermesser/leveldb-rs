@@ -20,6 +20,7 @@ pub enum StatusCode {
     IOError,
     InvalidArgument,
     InvalidData,
+    InvalidOption,
     LockError,
     NotFound,
     NotSupported,

@@ -1,5 +1,5 @@
 use rand::distributions::{Alphanumeric, DistString};
-use rusty_leveldb::{Options, DB};
+use rusty_leveldb::{compressor, CompressorId, Options, DB};
 
 const KEY_LEN: usize = 4;
 const VAL_LEN: usize = 8;
@@ -45,7 +45,7 @@ fn main() {
 
     for i in 0..m {
         let mut opt = Options::default();
-        opt.compression_type = rusty_leveldb::CompressionType::CompressionSnappy;
+        opt.compressor = compressor::SnappyCompressor::ID;
         let mut db = DB::open(path, opt).unwrap();
         write(&mut db, N);
         entries += N;

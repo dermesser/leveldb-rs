@@ -1,6 +1,7 @@
 use crate::block::Block;
 use crate::cache::Cache;
 use crate::cmp::{Cmp, DefaultCmp};
+use crate::compressor::Compressor;
 use crate::disk_env;
 use crate::env::Env;
 use crate::filter;
@@ -18,20 +19,6 @@ const BLOCK_MAX_SIZE: usize = 4 * KB;
 const BLOCK_CACHE_CAPACITY: usize = 8 * MB;
 const WRITE_BUFFER_SIZE: usize = 4 * MB;
 const DEFAULT_BITS_PER_KEY: u32 = 10; // NOTE: This may need to be optimized.
-
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub enum CompressionType {
-    CompressionNone = 0,
-    CompressionSnappy = 1,
-}
-
-pub fn int_to_compressiontype(i: u32) -> Option<CompressionType> {
-    match i {
-        0 => Some(CompressionType::CompressionNone),
-        1 => Some(CompressionType::CompressionSnappy),
-        _ => None,
-    }
-}
 
 /// Options contains general parameters for a LevelDB instance. Most of the names are
 /// self-explanatory; the defaults are defined in the `Default` implementation.
@@ -51,7 +38,9 @@ pub struct Options {
     pub block_restart_interval: usize,
     /// Note: you have to open a database with the same compression type as it was written to, in
     /// order to not lose data! (this is a bug and will be fixed)
-    pub compression_type: CompressionType,
+    pub compressor: u8,
+
+    pub compressor_list: Rc<[Option<Box<dyn Compressor>>; 256]>,
     pub reuse_logs: bool,
     pub reuse_manifest: bool,
     pub filter_policy: filter::BoxedFilterPolicy,
@@ -59,6 +48,11 @@ pub struct Options {
 
 impl Default for Options {
     fn default() -> Options {
+        const INIT: Option<Box<dyn Compressor>> = None;
+        let mut compressor_list = [INIT; 256];
+        compressor_list[0] = Some(crate::compressor::NoneCompressor::new());
+        compressor_list[1] = Some(crate::compressor::SnappyCompressor::new());
+
         Options {
             cmp: Rc::new(Box::new(DefaultCmp)),
             env: Rc::new(Box::new(disk_env::PosixDiskEnv::new())),
@@ -75,7 +69,8 @@ impl Default for Options {
             block_restart_interval: 16,
             reuse_logs: true,
             reuse_manifest: true,
-            compression_type: CompressionType::CompressionNone,
+            compressor: 0,
+            compressor_list: Rc::new(compressor_list),
             filter_policy: Rc::new(Box::new(filter::BloomPolicy::new(DEFAULT_BITS_PER_KEY))),
         }
     }

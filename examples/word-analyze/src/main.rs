@@ -1,3 +1,4 @@
+use leveldb::CompressorId;
 use rusty_leveldb as leveldb;
 
 use std::fs::OpenOptions;
@@ -35,7 +36,7 @@ fn run(mut db: leveldb::DB) -> io::Result<()> {
 
 fn main() {
     let mut opts = leveldb::Options::default();
-    opts.compression_type = leveldb::CompressionType::CompressionNone;
+    opts.compressor = leveldb::compressor::NoneCompressor::ID;
     let db = leveldb::DB::open("wordsdb", opts).unwrap();
 
     run(db).unwrap();

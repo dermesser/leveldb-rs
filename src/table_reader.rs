@@ -374,12 +374,13 @@ impl LdbIterator for TableIterator {
 
 #[cfg(test)]
 mod tests {
+    use crate::compressor::CompressorId;
     use crate::filter::BloomPolicy;
     use crate::key_types::LookupKey;
-    use crate::options::{self, CompressionType};
     use crate::table_builder::TableBuilder;
     use crate::test_util::{test_iterator_properties, LdbIteratorIter};
     use crate::types::{current_key_val, LdbIterator};
+    use crate::{compressor, options};
 
     use super::*;
 
@@ -405,7 +406,7 @@ mod tests {
         let mut opt = options::for_test();
         opt.block_restart_interval = 2;
         opt.block_size = 32;
-        opt.compression_type = CompressionType::CompressionSnappy;
+        opt.compressor = compressor::SnappyCompressor::ID;
 
         {
             // Uses the standard comparator in opt.
