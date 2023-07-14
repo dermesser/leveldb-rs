@@ -418,8 +418,10 @@ impl DB {
 
     /// flush makes sure that all pending changes (e.g. from put()) are stored on disk.
     pub fn flush(&mut self) -> Result<()> {
-        assert!(self.log.is_some());
-        self.log.as_mut().unwrap().flush()
+        if let Some(ref mut log) = self.log.as_mut() {
+            log.flush()?;
+        }
+        Ok(())
     }
 }
 
@@ -565,9 +567,7 @@ impl DB {
     /// make_room_for_write checks if the memtable has become too large, and triggers a compaction
     /// if it's the case.
     fn make_room_for_write(&mut self, force: bool) -> Result<()> {
-        if !force && self.mem.approx_mem_usage() < self.opt.write_buffer_size {
-            Ok(())
-        } else if self.mem.len() == 0 {
+        if !force && self.mem.approx_mem_usage() < self.opt.write_buffer_size || self.mem.len() == 0 {
             Ok(())
         } else {
             // Create new memtable.
@@ -594,8 +594,9 @@ impl DB {
     /// maybe_do_compaction starts a blocking compaction if it makes sense.
     fn maybe_do_compaction(&mut self) -> Result<()> {
         if self.imm.is_some() {
-            self.compact_memtable()
-        } else if self.vset.borrow().needs_compaction() {
+            self.compact_memtable()?;
+        }
+        if self.vset.borrow().needs_compaction() {
             let c = self.vset.borrow_mut().pick_compaction();
             if let Some(c) = c {
                 self.start_compaction(c)
@@ -719,9 +720,6 @@ impl DB {
         }
         ve.set_log_num(self.log_num.unwrap_or(0));
         self.vset.borrow_mut().log_and_apply(ve)?;
-        if let Err(e) = self.maybe_do_compaction() {
-            log!(self.opt.log, "Wanted to do compaction, but failed: {}", e);
-        }
         if let Err(e) = self.delete_obsolete_files() {
             log!(self.opt.log, "Error deleting obsolete files: {}", e);
         }
