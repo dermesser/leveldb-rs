@@ -719,6 +719,9 @@ impl DB {
         }
         ve.set_log_num(self.log_num.unwrap_or(0));
         self.vset.borrow_mut().log_and_apply(ve)?;
+        if let Err(e) = self.maybe_do_compaction() {
+            log!(self.opt.log, "Wanted to do compaction, but failed: {}", e);
+        }
         if let Err(e) = self.delete_obsolete_files() {
             log!(self.opt.log, "Error deleting obsolete files: {}", e);
         }
@@ -949,6 +952,7 @@ impl DB {
 
 impl Drop for DB {
     fn drop(&mut self) {
+        self.flush().ok();
         let _ = self.release_lock();
     }
 }
