@@ -7,7 +7,8 @@
 /// pub struct CustomCompressor;
 ///
 /// impl CompressorId for CustomCompressor {
-///     const ID: u8 = 0;
+///     // a unique id to identify what compressor should DB use
+///     const ID: u8 = 42;
 /// }
 ///
 /// impl Compressor for CustomCompressor {

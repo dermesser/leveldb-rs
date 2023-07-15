@@ -110,7 +110,7 @@ impl CompressorList {
 
     pub fn get(&self, id: u8) -> Result<&Box<dyn Compressor + 'static>> {
         self.0[id as usize].as_ref().ok_or_else(|| Status {
-            code: StatusCode::InvalidData,
+            code: StatusCode::NotSupported,
             err: format!("invalid compression id `{}`", id),
         })
     }

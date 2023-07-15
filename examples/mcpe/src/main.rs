@@ -1,6 +1,6 @@
 use miniz_oxide::deflate::{compress_to_vec, compress_to_vec_zlib};
 use miniz_oxide::inflate::{decompress_to_vec, decompress_to_vec_zlib};
-use rusty_leveldb::{Compressor, CompressorList, Options};
+use rusty_leveldb::{Compressor, CompressorList, Options, DB};
 use std::rc::Rc;
 
 struct ZlibCompressor(u8);
@@ -60,10 +60,11 @@ pub fn mcpe_options(compression_level: u8) -> Options {
 }
 
 fn main() {
-    // let path = "path here";
-    // let compression_level = 10;
-    // let opt = mcpe_options(compression_level);
-    // DB::open(path, opt)
-
-    // Do something
+    let path = "mcpe_db";
+    let compression_level = 10;
+    let opt = mcpe_options(compression_level);
+    let mut db = DB::open(path, opt).unwrap();
+    db.put(b"~local_player", b"NBT data goes here").unwrap();
+    let value = db.get(b"~local_player").unwrap();
+    assert_eq!(&value, b"NBT data goes here")
 }
