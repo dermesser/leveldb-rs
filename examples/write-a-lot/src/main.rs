@@ -2,9 +2,7 @@ extern crate rand;
 extern crate rusty_leveldb;
 
 use rand::Rng;
-use rusty_leveldb::CompressionType;
-use rusty_leveldb::Options;
-use rusty_leveldb::DB;
+use rusty_leveldb::{compressor, CompressorId, Options, DB};
 
 use std::error::Error;
 use std::iter::FromIterator;
@@ -31,7 +29,7 @@ fn fill_db(db: &mut DB, entries: usize) -> Result<(), Box<dyn Error>> {
 
 fn main() {
     let mut opt = Options::default();
-    opt.compression_type = CompressionType::CompressionSnappy;
+    opt.compressor = compressor::SnappyCompressor::ID;
     let mut db = DB::open("test1", opt).unwrap();
 
     fill_db(&mut db, 32768).unwrap();

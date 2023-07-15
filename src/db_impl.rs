@@ -890,10 +890,7 @@ impl DB {
         Ok(())
     }
 
-    fn finish_compaction_output(
-        &mut self,
-        cs: &mut CompactionState,
-    ) -> Result<()> {
+    fn finish_compaction_output(&mut self, cs: &mut CompactionState) -> Result<()> {
         assert!(cs.builder.is_some());
         let output_num = cs.current_output().num;
         assert!(output_num > 0);

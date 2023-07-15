@@ -5,7 +5,7 @@ use crate::error::{err, Result, StatusCode};
 use crate::filter;
 use crate::filter_block::FilterBlockReader;
 use crate::log::unmask_crc;
-use crate::options::{self, CompressionType, Options};
+use crate::options::Options;
 use crate::table_builder;
 
 use crc::crc32::{self, Hasher32};
@@ -69,18 +69,12 @@ pub fn read_table_block(
             ),
         );
     }
+    let compressor_list = opt.compressor_list.clone();
 
-    if let Some(ctype) = options::int_to_compressiontype(compress[0] as u32) {
-        match ctype {
-            CompressionType::CompressionNone => Ok(Block::new(opt, buf)),
-            CompressionType::CompressionSnappy => {
-                let decoded = snap::raw::Decoder::new().decompress_vec(buf.as_slice())?;
-                Ok(Block::new(opt, decoded))
-            }
-        }
-    } else {
-        err(StatusCode::InvalidData, "invalid compression type")
-    }
+    Ok(Block::new(
+        opt,
+        compressor_list.get(compress[0])?.decode(buf)?,
+    ))
 }
 
 /// Verify checksum of block
