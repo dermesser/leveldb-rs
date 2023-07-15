@@ -36,5 +36,11 @@ harness = false
 path = "src/benches/maps_bench.rs"
 
 [workspace]
-members = ["examples/write-a-lot", "examples/leveldb-tool", "examples/word-analyze",  "examples/stresstest", "examples/asyncdb"]
-
+members = [
+    "examples/write-a-lot",
+    "examples/leveldb-tool",
+    "examples/word-analyze",
+    "examples/stresstest",
+    "examples/asyncdb",
+    "examples/mcpe",
+]
