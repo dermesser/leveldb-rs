@@ -70,11 +70,11 @@ pub fn read_table_block(
         );
     }
     let compressor_list = opt.compressor_list.clone();
-    if let Some(compressor) = compressor_list[compress[0] as usize].as_ref() {
-        Ok(Block::new(opt, compressor.decode(buf)?))
-    } else {
-        err(StatusCode::InvalidData, "invalid compression type")
-    }
+
+    Ok(Block::new(
+        opt,
+        compressor_list.get(compress[0])?.decode(buf)?,
+    ))
 }
 
 /// Verify checksum of block

@@ -12,7 +12,7 @@ fn gen_string(n: usize) -> String {
 
 fn write(db: &mut DB, n: usize) {
     time_test::time_test!("write");
-    for i in 0..n {
+    for _ in 0..n {
         let (k, v) = (gen_string(KEY_LEN), gen_string(VAL_LEN));
 
         db.put(k.as_bytes(), v.as_bytes()).unwrap();
@@ -27,10 +27,10 @@ fn write(db: &mut DB, n: usize) {
 fn read(db: &mut DB, n: usize) -> usize {
     let mut succ = 0;
     time_test::time_test!("read");
-    for i in 0..n {
+    for _ in 0..n {
         let k = gen_string(KEY_LEN);
 
-        if let Some(v) = db.get(k.as_bytes()) {
+        if let Some(_) = db.get(k.as_bytes()) {
             succ += 1;
         }
     }
@@ -38,7 +38,7 @@ fn read(db: &mut DB, n: usize) -> usize {
 }
 
 fn main() {
-    let N = 100_000;
+    let n = 100_000;
     let m = 10;
     let path = "stresstestdb";
     let mut entries = 0;
@@ -47,11 +47,11 @@ fn main() {
         let mut opt = Options::default();
         opt.compressor = compressor::SnappyCompressor::ID;
         let mut db = DB::open(path, opt).unwrap();
-        write(&mut db, N);
-        entries += N;
+        write(&mut db, n);
+        entries += n;
         println!("Wrote {} entries ({}/{})", entries, i + 1, m);
 
-        let s = read(&mut db, N);
-        println!("Read back {} entries (found {}) ({}/{})", N, s, i + 1, m);
+        let s = read(&mut db, n);
+        println!("Read back {} entries (found {}) ({}/{})", n, s, i + 1, m);
     }
 }

@@ -110,9 +110,6 @@ impl DB {
     /// depends on the options set (`create_if_missing`, `error_if_exists`).
     pub fn open<P: AsRef<Path>>(name: P, opt: Options) -> Result<DB> {
         let name = name.as_ref();
-        if opt.compressor_list[opt.compressor as usize].is_none() {
-            err(StatusCode::InvalidOption, "need set compressor")?;
-        }
         let mut db = DB::new(name, opt);
         let mut ve = VersionEdit::new();
         let save_manifest = db.recover(&mut ve)?;

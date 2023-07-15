@@ -180,9 +180,7 @@ impl<Dst: Write> TableBuilder<Dst> {
         let contents = block.finish();
 
         let compressor_list = self.opt.compressor_list.clone();
-        let compressor = compressor_list[self.opt.compressor as usize]
-            .as_ref()
-            .unwrap();
+        let compressor = compressor_list.get(self.opt.compressor)?;
 
         let handle = self.write_block(contents, (self.opt.compressor, compressor))?;
 
@@ -232,9 +230,7 @@ impl<Dst: Write> TableBuilder<Dst> {
         let compressor_list = self.opt.compressor_list.clone();
         let compressor_id_pair = (
             self.opt.compressor,
-            compressor_list[self.opt.compressor as usize]
-                .as_ref()
-                .unwrap(),
+            compressor_list.get(self.opt.compressor)?,
         );
 
         // If there's a pending data block, write it
@@ -259,7 +255,7 @@ impl<Dst: Write> TableBuilder<Dst> {
                 fblock_data,
                 (
                     compressor::NoneCompressor::ID,
-                    &compressor::NoneCompressor::new(),
+                    &(Box::new(compressor::NoneCompressor) as Box<dyn Compressor>),
                 ),
             )?;
 

@@ -1,6 +1,6 @@
 extern crate rusty_leveldb;
 
-use rusty_leveldb::{CompressorId, LdbIterator, Options, DB};
+use rusty_leveldb::{compressor, CompressorId, LdbIterator, Options, DB};
 
 use std::env::args;
 use std::io::{self, Write};
@@ -59,7 +59,7 @@ fn main() {
     let mut opt = Options::default();
     opt.reuse_logs = false;
     opt.reuse_manifest = false;
-    opt.compressor = rusty_leveldb::compressor::SnappyCompressor::ID;
+    opt.compressor = compressor::SnappyCompressor::ID;
     let mut db = DB::open("tooldb", opt).unwrap();
 
     match args[1].as_str() {
