@@ -1,7 +1,7 @@
 use rand::distributions::{Alphanumeric, DistString};
-use rusty_leveldb::{compressor, CompressorId, Options, DB};
+use rusty_leveldb::{Options, DB};
 
-const KEY_LEN: usize = 4;
+const KEY_LEN: usize = 5;
 const VAL_LEN: usize = 8;
 
 fn gen_string(n: usize) -> String {
@@ -16,6 +16,10 @@ fn write(db: &mut DB, n: usize) {
         let (k, v) = (gen_string(KEY_LEN), gen_string(VAL_LEN));
 
         db.put(k.as_bytes(), v.as_bytes()).unwrap();
+        if i % (n/100) == 0 {
+            println!("{}/100 ...", i * 100 / n);
+            db.flush().unwrap();
+        }
     }
 
     {

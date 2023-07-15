@@ -596,6 +596,8 @@ impl DB {
         if self.imm.is_some() {
             self.compact_memtable()?;
         }
+        // Issue #34 PR #36: after compacting a memtable into an L0 file, it is possible that the
+        // L0 files need to be merged and promoted.
         if self.vset.borrow().needs_compaction() {
             let c = self.vset.borrow_mut().pick_compaction();
             if let Some(c) = c {
