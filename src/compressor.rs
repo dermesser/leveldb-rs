@@ -2,7 +2,7 @@
 ///
 /// ```
 /// # use rusty_leveldb::{Compressor, CompressorId};
-/// 
+///
 /// #[derive(Debug, Clone, Copy, Default)]
 /// pub struct CustomCompressor;
 ///

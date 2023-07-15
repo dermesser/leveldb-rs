@@ -64,6 +64,6 @@ fn main() {
     // let compression_level = 10;
     // let opt = mcpe_options(compression_level);
     // DB::open(path, opt)
-    
+
     // Do something
 }
