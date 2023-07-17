@@ -1,8 +1,6 @@
 # leveldb-rs
 
 [![crates.io](https://img.shields.io/crates/v/rusty-leveldb.svg)](https://crates.io/crates/rusty-leveldb)
-[![Travis
-CI](https://api.travis-ci.org/dermesser/leveldb-rs.svg?branch=master)](https://travis-ci.org/dermesser/leveldb-rs)
 
 A fully compatible implementation of LevelDB in Rust. (any incompatibility is a
 bug!)
@@ -16,7 +14,7 @@ I do care, however, about bug reports.
 
 ## Status
 
-Working well, with a few rare bugs (see issues).
+Working fairly well. Please file an issue if you encounter problems.
 
 ## Goals
 
