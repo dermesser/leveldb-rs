@@ -1,5 +1,5 @@
 use rand::distributions::{Alphanumeric, DistString};
-use rusty_leveldb::{Options, DB};
+use rusty_leveldb::{compressor, CompressorId, Options, DB};
 
 const KEY_LEN: usize = 5;
 const VAL_LEN: usize = 8;
@@ -12,7 +12,7 @@ fn gen_string(n: usize) -> String {
 
 fn write(db: &mut DB, n: usize) {
     time_test::time_test!("write");
-    for _ in 0..n {
+    for i in 0..n {
         let (k, v) = (gen_string(KEY_LEN), gen_string(VAL_LEN));
 
         db.put(k.as_bytes(), v.as_bytes()).unwrap();
@@ -42,7 +42,7 @@ fn read(db: &mut DB, n: usize) -> usize {
 }
 
 fn main() {
-    let n = 100_000;
+    let n = 1_000_000;
     let m = 10;
     let path = "stresstestdb";
     let mut entries = 0;
