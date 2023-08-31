@@ -43,4 +43,5 @@ members = [
     "examples/stresstest",
     "examples/asyncdb",
     "examples/mcpe",
+    "examples/kvserver",
 ]
