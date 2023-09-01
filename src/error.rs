@@ -5,7 +5,9 @@ use std::io;
 use std::result;
 use std::sync;
 
+#[cfg(feature = "fs")]
 use errno;
+
 use snap;
 
 /// StatusCode describes various failure modes of database operations.
@@ -26,6 +28,7 @@ pub enum StatusCode {
     PermissionDenied,
     AsyncError,
     Unknown,
+    #[cfg(feature = "fs")]
     Errno(errno::Errno),
 }
 

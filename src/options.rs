@@ -6,7 +6,7 @@ use crate::env::Env;
 use crate::infolog::{self, Logger};
 use crate::mem_env::MemEnv;
 use crate::types::{share, Shared};
-use crate::{disk_env, Result};
+use crate::Result;
 use crate::{filter, Status, StatusCode};
 
 use std::default::Default;
@@ -48,11 +48,17 @@ pub struct Options {
     pub filter_policy: filter::BoxedFilterPolicy,
 }
 
+#[cfg(feature = "fs")]
+type CurrentEnv = crate::disk_env::PosixDiskEnv;
+
+#[cfg(not(feature = "fs"))]
+type CurrentEnv = crate::mem_env::MemEnv;
+
 impl Default for Options {
     fn default() -> Options {
         Options {
             cmp: Rc::new(Box::new(DefaultCmp)),
-            env: Rc::new(Box::new(disk_env::PosixDiskEnv::new())),
+            env: Rc::new(Box::new(CurrentEnv::new())),
             log: None,
             create_if_missing: true,
             error_if_exists: false,
