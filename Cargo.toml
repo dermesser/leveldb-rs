@@ -18,7 +18,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 crc = "1.8"
 integer-encoding = "3.0"
-rand = "0.7"
+rand = "0.8.5"
 getrandom = { optional = true, version = "0.2.10", features = ["js"] }
 snap = "1.0"
 
