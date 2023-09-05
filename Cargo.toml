@@ -19,6 +19,7 @@ crate-type = ["cdylib", "rlib"]
 crc = "1.8"
 integer-encoding = "3.0"
 rand = "0.7"
+getrandom = { optional = true, version = "0.2.10", features = ["js"] }
 snap = "1.0"
 
 errno = { optional = true, version = "0.2" }
@@ -28,6 +29,7 @@ tokio = { optional = true, features = ["rt", "sync"], version = ">= 1.21" }
 
 [features]
 default = ["fs"]
+wasm = ["getrandom"]
 async = ["tokio"]
 fs = ["errno", "fs2"]
 
