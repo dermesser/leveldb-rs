@@ -94,7 +94,7 @@ pub use db_iter::DBIterator;
 #[cfg(feature = "fs")]
 pub use disk_env::PosixDiskEnv;
 
-pub use env::Env;
+pub use env::{Env, FileLock, RandomAccess, Logger};
 pub use error::{Result, Status, StatusCode};
 pub use filter::{BloomPolicy, FilterPolicy};
 pub use mem_env::MemEnv;
