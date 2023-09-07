@@ -49,16 +49,16 @@ pub struct Options {
 }
 
 #[cfg(feature = "fs")]
-type CurrentEnv = crate::disk_env::PosixDiskEnv;
+type DefaultEnv = crate::disk_env::PosixDiskEnv;
 
 #[cfg(not(feature = "fs"))]
-type CurrentEnv = crate::mem_env::MemEnv;
+type DefaultEnv = crate::mem_env::MemEnv;
 
 impl Default for Options {
     fn default() -> Options {
         Options {
             cmp: Rc::new(Box::new(DefaultCmp)),
-            env: Rc::new(Box::new(CurrentEnv::new())),
+            env: Rc::new(Box::new(DefaultEnv::new())),
             log: None,
             create_if_missing: true,
             error_if_exists: false,

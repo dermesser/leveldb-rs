@@ -54,7 +54,6 @@ mod cmp;
 #[cfg(feature = "fs")]
 mod disk_env;
 
-mod env;
 mod env_common;
 mod error;
 mod filter;
@@ -81,6 +80,7 @@ mod write_batch;
 mod db_impl;
 mod db_iter;
 
+pub mod env;
 pub mod compressor;
 
 #[cfg(feature = "async")]
@@ -94,7 +94,6 @@ pub use db_iter::DBIterator;
 #[cfg(feature = "fs")]
 pub use disk_env::PosixDiskEnv;
 
-pub use env::{Env, FileLock, RandomAccess, Logger};
 pub use error::{Result, Status, StatusCode};
 pub use filter::{BloomPolicy, FilterPolicy};
 pub use mem_env::MemEnv;
