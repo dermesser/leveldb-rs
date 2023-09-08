@@ -1,5 +1,6 @@
 use std::collections::hash_map::HashMap;
 use std::path::Path;
+use std::sync::Arc;
 
 use crate::{Options, Result, Status, StatusCode, WriteBatch, DB};
 
@@ -45,8 +46,9 @@ struct Message {
 ///
 /// TODO: Make it work in other runtimes as well. This is a matter of adapting the blocking thread
 /// mechanism as well as the channel types.
+#[derive(Clone)]
 pub struct AsyncDB {
-    jh: JoinHandle<()>,
+    jh: Arc<JoinHandle<()>>,
     send: mpsc::Sender<Message>,
 }
 
@@ -56,7 +58,10 @@ impl AsyncDB {
         let db = DB::open(name, opts)?;
         let (send, recv) = mpsc::channel(CHANNEL_BUFFER_SIZE);
         let jh = spawn_blocking(move || AsyncDB::run_server(db, recv));
-        Ok(AsyncDB { jh, send })
+        Ok(AsyncDB {
+            jh: Arc::new(jh),
+            send,
+        })
     }
 
     pub async fn close(&self) -> Result<()> {
