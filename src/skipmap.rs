@@ -271,9 +271,9 @@ impl InnerSkipMap {
 
         // Insert new node by first replacing the previous element's next field with None and
         // assigning its value to new.next...
-        new.next = unsafe { replace(&mut (*current).next, None) };
+        new.next = unsafe { (*current).next.take() };
         // ...and then setting the previous element's next field to the new node
-        unsafe { replace(&mut (*current).next, Some(new)) };
+        unsafe { let _ = replace(&mut (*current).next, Some(new)); };
     }
     /// Runs through the skipmap and prints everything including addresses
     fn dbg_print(&self) {
@@ -287,7 +287,7 @@ impl InnerSkipMap {
                     (*current).value,
                     (*current).skips
                 );
-                if let Some(next) = (*current).skips[0].clone() {
+                if let Some(next) = (*current).skips[0] {
                     current = next;
                 } else {
                     break;

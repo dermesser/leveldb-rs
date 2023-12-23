@@ -179,7 +179,7 @@ impl Version {
                     let overlaps = self.overlapping_inputs(
                         level + 2,
                         start.internal_key(),
-                        &limit.internal_key(),
+                        limit.internal_key(),
                     );
                     let size = total_size(overlaps.iter());
                     if size > 10 * (2 << 20) {
@@ -195,20 +195,19 @@ impl Version {
     /// record_read_sample returns true if there is a new file to be compacted. It counts the
     /// number of files overlapping a key, and which level contains the first overlap.
     #[allow(unused_assignments)]
-    pub fn record_read_sample<'a>(&mut self, key: InternalKey<'a>) -> bool {
-        let levels = self.get_overlapping(key);
+    pub fn record_read_sample(&mut self, key: InternalKey<'_>) -> bool {
         let mut contained_in = 0;
         let mut i = 0;
         let mut first_file = None;
         let mut first_file_level = None;
-        for level in &levels {
+        self.get_overlapping(key).iter().for_each(|level| {
             if !level.is_empty() && first_file.is_none() && first_file_level.is_none() {
                 first_file = Some(level[0].clone());
                 first_file_level = Some(i);
             }
             contained_in += level.len();
             i += 1;
-        }
+        });
 
         if contained_in > 1 {
             self.update_stats(GetStats {
