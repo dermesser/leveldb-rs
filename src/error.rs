@@ -5,11 +5,6 @@ use std::io;
 use std::result;
 use std::sync;
 
-#[cfg(feature = "fs")]
-use errno;
-
-use snap;
-
 /// StatusCode describes various failure modes of database operations.
 #[derive(Clone, Debug, PartialEq)]
 #[allow(dead_code)]
@@ -63,12 +58,10 @@ impl Error for Status {
 
 impl Status {
     pub fn new(code: StatusCode, msg: &str) -> Status {
-        let err;
-        if msg.is_empty() {
-            err = format!("{:?}", code)
-        } else {
-            err = format!("{:?}: {}", code, msg);
-        }
+        let err = match msg.is_empty() {
+            true => format!("{:?}", code),
+            false => format!("{:?}: {}", code, msg),
+        };
         Status { code, err }
     }
     pub fn annotate<S: AsRef<str>>(self, msg: S) -> Status {

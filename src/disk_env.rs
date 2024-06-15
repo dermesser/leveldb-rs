@@ -17,6 +17,12 @@ pub struct PosixDiskEnv {
     locks: Arc<Mutex<HashMap<String, File>>>,
 }
 
+impl Default for PosixDiskEnv {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PosixDiskEnv {
     pub fn new() -> PosixDiskEnv {
         PosixDiskEnv {
@@ -44,19 +50,20 @@ impl Env for PosixDiskEnv {
         ))
     }
     fn open_random_access_file(&self, p: &Path) -> Result<Box<dyn RandomAccess>> {
-        Ok(fs::OpenOptions::new()
+        fs::OpenOptions::new()
             .read(true)
             .open(p)
             .map(|f| {
                 let b: Box<dyn RandomAccess> = Box::new(f);
                 b
             })
-            .map_err(|e| map_err_with_name("open (randomaccess)", p, e))?)
+            .map_err(|e| map_err_with_name("open (randomaccess)", p, e))
     }
     fn open_writable_file(&self, p: &Path) -> Result<Box<dyn Write>> {
         Ok(Box::new(
             fs::OpenOptions::new()
                 .create(true)
+                .truncate(true)
                 .write(true)
                 .append(false)
                 .open(p)
@@ -67,7 +74,6 @@ impl Env for PosixDiskEnv {
         Ok(Box::new(
             fs::OpenOptions::new()
                 .create(true)
-                .write(true)
                 .append(true)
                 .open(p)
                 .map_err(|e| map_err_with_name("open (append)", p, e))?,
@@ -96,27 +102,28 @@ impl Env for PosixDiskEnv {
     }
 
     fn delete(&self, p: &Path) -> Result<()> {
-        Ok(fs::remove_file(p).map_err(|e| map_err_with_name("delete", p, e))?)
+        fs::remove_file(p).map_err(|e| map_err_with_name("delete", p, e))
     }
     fn mkdir(&self, p: &Path) -> Result<()> {
-        Ok(fs::create_dir_all(p).map_err(|e| map_err_with_name("mkdir", p, e))?)
+        fs::create_dir_all(p).map_err(|e| map_err_with_name("mkdir", p, e))
     }
     fn rmdir(&self, p: &Path) -> Result<()> {
-        Ok(fs::remove_dir_all(p).map_err(|e| map_err_with_name("rmdir", p, e))?)
+        fs::remove_dir_all(p).map_err(|e| map_err_with_name("rmdir", p, e))
     }
     fn rename(&self, old: &Path, new: &Path) -> Result<()> {
-        Ok(fs::rename(old, new).map_err(|e| map_err_with_name("rename", old, e))?)
+        fs::rename(old, new).map_err(|e| map_err_with_name("rename", old, e))
     }
 
     fn lock(&self, p: &Path) -> Result<FileLock> {
         let mut locks = self.locks.lock().unwrap();
 
-        if locks.contains_key(&p.to_str().unwrap().to_string()) {
-            Err(Status::new(StatusCode::AlreadyExists, "Lock is held"))
-        } else {
+        if let std::collections::hash_map::Entry::Vacant(e) =
+            locks.entry(p.to_str().unwrap().to_string())
+        {
             let f = fs::OpenOptions::new()
                 .write(true)
                 .create(true)
+                .truncate(true)
                 .open(p)
                 .map_err(|e| map_err_with_name("lock", p, e))?;
 
@@ -136,11 +143,13 @@ impl Env for PosixDiskEnv {
                 _ => (),
             };
 
-            locks.insert(p.to_str().unwrap().to_string(), f);
+            e.insert(f);
             let lock = FileLock {
                 id: p.to_str().unwrap().to_string(),
             };
             Ok(lock)
+        } else {
+            Err(Status::new(StatusCode::AlreadyExists, "Lock is held"))
         }
     }
     fn unlock(&self, l: FileLock) -> Result<()> {

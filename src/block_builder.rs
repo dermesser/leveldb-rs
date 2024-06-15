@@ -73,7 +73,7 @@ impl BlockBuilder {
             }
         } else {
             self.restarts.push(self.buffer.len() as u32);
-            self.last_key.resize(0, 0);
+            self.last_key.clear();
             self.restart_counter = 0;
         }
 
@@ -105,7 +105,7 @@ impl BlockBuilder {
         // 1. Append RESTARTS
         for r in self.restarts.iter() {
             self.buffer
-                .write_fixedint(*r as u32)
+                .write_fixedint(*r)
                 .expect("write to buffer failed");
         }
 

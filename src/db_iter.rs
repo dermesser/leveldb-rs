@@ -9,8 +9,6 @@ use std::cmp::Ordering;
 use std::mem;
 use std::rc::Rc;
 
-use rand;
-
 const READ_BYTES_PERIOD: isize = 1048576;
 
 /// DBIterator is an iterator over the contents of a database.
@@ -464,18 +462,14 @@ mod tests {
             // xx5 should not be visible.
             db.put(b"xx5", b"223").unwrap();
 
-            let expected: HashMap<Vec<u8>, Vec<u8>> = HashMap::from_iter(
-                vec![
-                    (b"xx1".to_vec(), b"111".to_vec()),
-                    (b"xx4".to_vec(), b"222".to_vec()),
-                    (b"aaa".to_vec(), b"val1".to_vec()),
-                    (b"cab".to_vec(), b"val2".to_vec()),
-                ]
-                .into_iter(),
-            );
-            let non_existing: HashSet<Vec<u8>> = HashSet::from_iter(
-                vec![b"gca".to_vec(), b"xx2".to_vec(), b"xx5".to_vec()].into_iter(),
-            );
+            let expected: HashMap<Vec<u8>, Vec<u8>> = HashMap::from_iter(vec![
+                (b"xx1".to_vec(), b"111".to_vec()),
+                (b"xx4".to_vec(), b"222".to_vec()),
+                (b"aaa".to_vec(), b"val1".to_vec()),
+                (b"cab".to_vec(), b"val2".to_vec()),
+            ]);
+            let non_existing: HashSet<Vec<u8>> =
+                HashSet::from_iter(vec![b"gca".to_vec(), b"xx2".to_vec(), b"xx5".to_vec()]);
 
             let mut iter = db.new_iter_at(ss.clone()).unwrap();
             for (k, v) in LdbIteratorIter::wrap(&mut iter) {

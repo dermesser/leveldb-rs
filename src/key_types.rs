@@ -111,11 +111,8 @@ pub fn build_memtable_key(key: &[u8], value: &[u8], t: ValueType, seq: SequenceN
 
     let keysize = key.len() + U64_SPACE;
     let valsize = value.len();
-    let mut buf = Vec::new();
-    buf.resize(
-        keysize + valsize + keysize.required_space() + valsize.required_space(),
-        0,
-    );
+    let mut buf =
+        vec![0_u8; keysize + valsize + keysize.required_space() + valsize.required_space()];
 
     {
         let mut writer = buf.as_mut_slice();
@@ -135,7 +132,7 @@ pub fn build_memtable_key(key: &[u8], value: &[u8], t: ValueType, seq: SequenceN
 /// If the key only contains (keylen, key, tag), the vallen and val offset return values will be
 /// meaningless.
 pub fn parse_memtable_key(mkey: MemtableKey) -> (usize, usize, u64, usize, usize) {
-    let (keylen, mut i): (usize, usize) = VarInt::decode_var(&mkey).unwrap();
+    let (keylen, mut i): (usize, usize) = VarInt::decode_var(mkey).unwrap();
     let keyoff = i;
     i += keylen - 8;
 
@@ -152,13 +149,9 @@ pub fn parse_memtable_key(mkey: MemtableKey) -> (usize, usize, u64, usize, usize
 }
 
 /// cmp_memtable_key efficiently compares two memtable keys by only parsing what's actually needed.
-pub fn cmp_memtable_key<'a, 'b>(
-    ucmp: &dyn Cmp,
-    a: MemtableKey<'a>,
-    b: MemtableKey<'b>,
-) -> Ordering {
-    let (alen, aoff): (usize, usize) = VarInt::decode_var(&a).unwrap();
-    let (blen, boff): (usize, usize) = VarInt::decode_var(&b).unwrap();
+pub fn cmp_memtable_key(ucmp: &dyn Cmp, a: MemtableKey<'_>, b: MemtableKey<'_>) -> Ordering {
+    let (alen, aoff): (usize, usize) = VarInt::decode_var(a).unwrap();
+    let (blen, boff): (usize, usize) = VarInt::decode_var(b).unwrap();
     let userkey_a = &a[aoff..aoff + alen - 8];
     let userkey_b = &b[boff..boff + blen - 8];
 
@@ -189,11 +182,7 @@ pub fn parse_internal_key(ikey: InternalKey) -> (ValueType, SequenceNumber, User
 
 /// cmp_internal_key efficiently compares keys in InternalKey format by only parsing the parts that
 /// are actually needed for a comparison.
-pub fn cmp_internal_key<'a, 'b>(
-    ucmp: &dyn Cmp,
-    a: InternalKey<'a>,
-    b: InternalKey<'b>,
-) -> Ordering {
+pub fn cmp_internal_key(ucmp: &dyn Cmp, a: InternalKey<'_>, b: InternalKey<'_>) -> Ordering {
     match ucmp.cmp(&a[0..a.len() - 8], &b[0..b.len() - 8]) {
         Ordering::Less => Ordering::Less,
         Ordering::Greater => Ordering::Greater,

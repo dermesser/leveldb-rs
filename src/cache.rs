@@ -77,7 +77,7 @@ impl<T> LRUList<T> {
             assert!(self.head.prev.is_some());
             self.head.prev = last.prev;
             self.count -= 1;
-            (*last).data.take()
+            last.data.take()
         } else {
             None
         }
@@ -214,7 +214,7 @@ impl<T> Cache<T> {
     pub fn get<'a>(&'a mut self, key: &CacheKey) -> Option<&'a T> {
         match self.map.get(key) {
             None => None,
-            Some(&(ref elem, ref lru_handle)) => {
+            Some((elem, lru_handle)) => {
                 self.list.reinsert_front(*lru_handle);
                 Some(elem)
             }
@@ -347,19 +347,19 @@ mod tests {
         let handle2 = lru.insert(22);
         let handle3 = lru.insert(244);
 
-        assert_eq!(lru._testing_head_ref().map(|r| (*r)).unwrap(), 244);
+        assert_eq!(lru._testing_head_ref().copied().unwrap(), 244);
 
         lru.reinsert_front(handle1);
 
-        assert_eq!(lru._testing_head_ref().map(|r| (*r)).unwrap(), 56);
+        assert_eq!(lru._testing_head_ref().copied().unwrap(), 56);
 
         lru.reinsert_front(handle3);
 
-        assert_eq!(lru._testing_head_ref().map(|r| (*r)).unwrap(), 244);
+        assert_eq!(lru._testing_head_ref().copied().unwrap(), 244);
 
         lru.reinsert_front(handle2);
 
-        assert_eq!(lru._testing_head_ref().map(|r| (*r)).unwrap(), 22);
+        assert_eq!(lru._testing_head_ref().copied().unwrap(), 22);
 
         assert_eq!(lru.remove_last(), Some(56));
         assert_eq!(lru.remove_last(), Some(244));
@@ -370,7 +370,7 @@ mod tests {
     fn test_blockcache_lru_reinsert_2() {
         let mut lru = LRUList::<usize>::new();
 
-        let handles = vec![
+        let handles = [
             lru.insert(0),
             lru.insert(1),
             lru.insert(2),
@@ -382,10 +382,10 @@ mod tests {
             lru.insert(8),
         ];
 
-        for i in 0..9 {
+        (0..9).for_each(|i| {
             lru.reinsert_front(handles[i]);
-            assert_eq!(lru._testing_head_ref().map(|x| *x), Some(i));
-        }
+            assert_eq!(lru._testing_head_ref().copied(), Some(i));
+        });
     }
 
     #[test]
@@ -395,7 +395,7 @@ mod tests {
         let handle = lru.insert(3);
 
         lru.reinsert_front(handle);
-        assert_eq!(lru._testing_head_ref().map(|x| *x), Some(3));
+        assert_eq!(lru._testing_head_ref().copied(), Some(3));
         assert_eq!(lru.remove_last(), Some(3));
         assert_eq!(lru.remove_last(), None);
         assert_eq!(lru.remove_last(), None);

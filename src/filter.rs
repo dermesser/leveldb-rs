@@ -104,11 +104,8 @@ impl BloomPolicy {
         assert!(limit - ix < 4);
 
         if limit - ix > 0 {
-            let mut i = 0;
-
-            for b in data[ix..].iter() {
+            for (i, b) in data[ix..].iter().enumerate() {
                 h = h.overflowing_add((*b as u32) << (8 * i)).0;
-                i += 1;
             }
 
             h = (h as u64 * m as u64) as u32;
@@ -276,9 +273,8 @@ mod tests {
             intoffs.push(intdata.len());
             intdata.extend_from_slice(ikey.internal_key());
         });
-        let filter = fpol.create_filter(&intdata, &intoffs);
 
-        filter
+        fpol.create_filter(&intdata, &intoffs)
     }
 
     #[test]

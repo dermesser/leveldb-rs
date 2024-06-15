@@ -44,10 +44,10 @@ impl TableCache {
         }
     }
 
-    pub fn get<'a>(
+    pub fn get(
         &mut self,
         file_num: FileNum,
-        key: InternalKey<'a>,
+        key: InternalKey<'_>,
     ) -> Result<Option<(Vec<u8>, Vec<u8>)>> {
         let tbl = self.get_table(file_num)?;
         tbl.get(key)
@@ -66,11 +66,11 @@ impl TableCache {
     fn open_table(&mut self, file_num: FileNum) -> Result<Table> {
         let name = table_file_name(&self.dbname, file_num);
         let path = Path::new(&name);
-        let file_size = self.opts.env.size_of(&path)?;
+        let file_size = self.opts.env.size_of(path)?;
         if file_size == 0 {
             return err(StatusCode::InvalidData, "file is empty");
         }
-        let file = Rc::new(self.opts.env.open_random_access_file(&path)?);
+        let file = Rc::new(self.opts.env.open_random_access_file(path)?);
         // No SSTable file name compatibility.
         let table = Table::new(self.opts.clone(), file, file_size)?;
         self.cache.insert(&filenum_to_key(file_num), table.clone());
@@ -119,7 +119,7 @@ mod tests {
         let w = o.env.open_writable_file(p).unwrap();
         let mut b = TableBuilder::new_raw(o, w);
 
-        let data = vec![
+        let data = [
             ("abc", "def"),
             ("abd", "dee"),
             ("bcd", "asa"),

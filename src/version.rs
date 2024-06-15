@@ -57,7 +57,7 @@ impl Version {
     /// get returns the value for the specified key using the persistent tables contained in this
     /// Version.
     #[allow(unused_assignments)]
-    pub fn get<'a>(&self, key: InternalKey<'a>) -> Result<Option<(Vec<u8>, GetStats)>> {
+    pub fn get(&self, key: InternalKey<'_>) -> Result<Option<(Vec<u8>, GetStats)>> {
         let levels = self.get_overlapping(key);
         let ikey = key;
         let ukey = parse_internal_key(ikey).2;
@@ -67,13 +67,12 @@ impl Version {
             level: 0,
         };
 
-        for level in 0..levels.len() {
-            let files = &levels[level];
+        for (level, files) in levels.iter().enumerate() {
             let mut last_read = None;
             let mut last_read_level: usize = 0;
             for f in files {
                 if last_read.is_some() && stats.file.is_none() {
-                    stats.file = last_read.clone();
+                    stats.file.clone_from(&last_read);
                     stats.level = last_read_level;
                 }
                 last_read_level = level;
@@ -101,7 +100,7 @@ impl Version {
     }
 
     /// get_overlapping returns the files overlapping key in each level.
-    fn get_overlapping<'a>(&self, key: InternalKey<'a>) -> [Vec<FileMetaHandle>; NUM_LEVELS] {
+    fn get_overlapping(&self, key: InternalKey<'_>) -> [Vec<FileMetaHandle>; NUM_LEVELS] {
         let mut levels: [Vec<FileMetaHandle>; NUM_LEVELS] = Default::default();
         let ikey = key;
         let ukey = parse_internal_key(key).2;
@@ -124,7 +123,7 @@ impl Version {
         levels[0].sort_by(|a, b| b.borrow().num.cmp(&a.borrow().num));
 
         let icmp = InternalKeyCmp(self.user_cmp.clone());
-        for level in 1..NUM_LEVELS {
+        (1..NUM_LEVELS).for_each(|level| {
             let files = &self.files[level];
             if let Some(ix) = find_file(&icmp, files, ikey) {
                 let f = files[ix].borrow();
@@ -133,7 +132,7 @@ impl Version {
                     levels[level].push(files[ix].clone());
                 }
             }
-        }
+        });
 
         levels
     }
@@ -162,7 +161,7 @@ impl Version {
         acc
     }
 
-    pub fn pick_memtable_output_level<'a, 'b>(&self, min: UserKey<'a>, max: UserKey<'b>) -> usize {
+    pub fn pick_memtable_output_level(&self, min: UserKey<'_>, max: UserKey<'_>) -> usize {
         let mut level = 0;
         if !self.overlap_in_level(0, min, max) {
             // Go to next level as long as there is no overlap in that level and a limited overlap
@@ -278,11 +277,11 @@ impl Version {
     }
 
     /// overlapping_inputs returns all files that may contain keys between begin and end.
-    pub fn overlapping_inputs<'a, 'b>(
+    pub fn overlapping_inputs(
         &self,
         level: usize,
-        begin: InternalKey<'a>,
-        end: InternalKey<'b>,
+        begin: InternalKey<'_>,
+        end: InternalKey<'_>,
     ) -> Vec<FileMetaHandle> {
         assert!(level < NUM_LEVELS);
         let (mut ubegin, mut uend) = (
@@ -498,14 +497,14 @@ pub fn total_size<'a, I: Iterator<Item = &'a FileMetaHandle>>(files: I) -> usize
 }
 
 /// key_is_after_file returns true if the given user key is larger than the largest key in f.
-fn key_is_after_file<'a>(cmp: &InternalKeyCmp, key: UserKey<'a>, f: &FileMetaHandle) -> bool {
+fn key_is_after_file(cmp: &InternalKeyCmp, key: UserKey<'_>, f: &FileMetaHandle) -> bool {
     let f = f.borrow();
     let ulargest = parse_internal_key(&f.largest).2;
     !key.is_empty() && cmp.cmp_inner(key, ulargest) == Ordering::Greater
 }
 
 /// key_is_before_file returns true if the given user key is larger than the largest key in f.
-fn key_is_before_file<'a>(cmp: &InternalKeyCmp, key: UserKey<'a>, f: &FileMetaHandle) -> bool {
+fn key_is_before_file(cmp: &InternalKeyCmp, key: UserKey<'_>, f: &FileMetaHandle) -> bool {
     let f = f.borrow();
     let usmallest = parse_internal_key(&f.smallest).2;
     !key.is_empty() && cmp.cmp_inner(key, usmallest) == Ordering::Less
@@ -514,10 +513,10 @@ fn key_is_before_file<'a>(cmp: &InternalKeyCmp, key: UserKey<'a>, f: &FileMetaHa
 /// find_file returns the index of the file in files that potentially contains the internal key
 /// key. files must not overlap and be ordered ascendingly. If no file can contain the key, None is
 /// returned.
-fn find_file<'a>(
+fn find_file(
     cmp: &InternalKeyCmp,
     files: &[FileMetaHandle],
-    key: InternalKey<'a>,
+    key: InternalKey<'_>,
 ) -> Option<usize> {
     let (mut left, mut right) = (0, files.len());
     while left < right {
@@ -537,11 +536,11 @@ fn find_file<'a>(
 
 /// some_file_overlaps_range_disjoint returns true if any of the given disjoint files (i.e. level >
 /// 1) contain keys in the range defined by the user keys [smallest; largest].
-fn some_file_overlaps_range_disjoint<'a, 'b>(
+fn some_file_overlaps_range_disjoint(
     cmp: &InternalKeyCmp,
     files: &[FileMetaHandle],
-    smallest: UserKey<'a>,
-    largest: UserKey<'b>,
+    smallest: UserKey<'_>,
+    largest: UserKey<'_>,
 ) -> bool {
     let ikey = LookupKey::new(smallest, MAX_SEQUENCE_NUMBER);
     if let Some(ix) = find_file(cmp, files, ikey.internal_key()) {
@@ -553,11 +552,11 @@ fn some_file_overlaps_range_disjoint<'a, 'b>(
 
 /// some_file_overlaps_range returns true if any of the given possibly overlapping files contains
 /// keys in the range [smallest; largest].
-fn some_file_overlaps_range<'a, 'b>(
+fn some_file_overlaps_range(
     cmp: &InternalKeyCmp,
     files: &[FileMetaHandle],
-    smallest: UserKey<'a>,
-    largest: UserKey<'b>,
+    smallest: UserKey<'_>,
+    largest: UserKey<'_>,
 ) -> bool {
     for f in files {
         if !(key_is_after_file(cmp, smallest, f) || key_is_before_file(cmp, largest, f)) {
@@ -599,7 +598,7 @@ pub mod testutil {
     /// write_table creates a table with the given number and contents (must be sorted!) in the
     /// memenv. The sequence numbers given to keys start with startseq.
     pub fn write_table(
-        me: &Box<dyn Env>,
+        me: &dyn Env,
         contents: &[(&[u8], &[u8], ValueType)],
         startseq: u64,
         num: FileNum,
@@ -650,40 +649,40 @@ pub mod testutil {
             ("bab".as_bytes(), "val4".as_bytes(), ValueType::TypeValue),
             ("bba".as_bytes(), "val5".as_bytes(), ValueType::TypeValue),
         ];
-        let t2 = write_table(&env, f2, 26, 2);
+        let t2 = write_table(env.as_ref().as_ref(), f2, 26, 2);
         let f1: &[(&[u8], &[u8], ValueType)] = &[
             ("aaa".as_bytes(), "val1".as_bytes(), ValueType::TypeValue),
             ("aab".as_bytes(), "val2".as_bytes(), ValueType::TypeValue),
             ("aac".as_bytes(), "val3".as_bytes(), ValueType::TypeValue),
             ("aba".as_bytes(), "val4".as_bytes(), ValueType::TypeValue),
         ];
-        let t1 = write_table(&env, f1, 22, 1);
+        let t1 = write_table(env.as_ref().as_ref(), f1, 22, 1);
         // Level 1
         let f3: &[(&[u8], &[u8], ValueType)] = &[
             ("aaa".as_bytes(), "val0".as_bytes(), ValueType::TypeValue),
             ("cab".as_bytes(), "val2".as_bytes(), ValueType::TypeValue),
             ("cba".as_bytes(), "val3".as_bytes(), ValueType::TypeValue),
         ];
-        let t3 = write_table(&env, f3, 19, 3);
+        let t3 = write_table(env.as_ref().as_ref(), f3, 19, 3);
         let f4: &[(&[u8], &[u8], ValueType)] = &[
             ("daa".as_bytes(), "val1".as_bytes(), ValueType::TypeValue),
             ("dab".as_bytes(), "val2".as_bytes(), ValueType::TypeValue),
             ("dba".as_bytes(), "val3".as_bytes(), ValueType::TypeValue),
         ];
-        let t4 = write_table(&env, f4, 16, 4);
+        let t4 = write_table(env.as_ref().as_ref(), f4, 16, 4);
         let f5: &[(&[u8], &[u8], ValueType)] = &[
             ("eaa".as_bytes(), "val1".as_bytes(), ValueType::TypeValue),
             ("eab".as_bytes(), "val2".as_bytes(), ValueType::TypeValue),
             ("fab".as_bytes(), "val3".as_bytes(), ValueType::TypeValue),
         ];
-        let t5 = write_table(&env, f5, 13, 5);
+        let t5 = write_table(env.as_ref().as_ref(), f5, 13, 5);
         // Level 2
         let f6: &[(&[u8], &[u8], ValueType)] = &[
             ("cab".as_bytes(), "val1".as_bytes(), ValueType::TypeValue),
             ("fab".as_bytes(), "val2".as_bytes(), ValueType::TypeValue),
             ("fba".as_bytes(), "val3".as_bytes(), ValueType::TypeValue),
         ];
-        let t6 = write_table(&env, f6, 10, 6);
+        let t6 = write_table(env.as_ref().as_ref(), f6, 10, 6);
         let f7: &[(&[u8], &[u8], ValueType)] = &[
             ("gaa".as_bytes(), "val1".as_bytes(), ValueType::TypeValue),
             ("gab".as_bytes(), "val2".as_bytes(), ValueType::TypeValue),
@@ -691,18 +690,18 @@ pub mod testutil {
             ("gca".as_bytes(), "val4".as_bytes(), ValueType::TypeDeletion),
             ("gda".as_bytes(), "val5".as_bytes(), ValueType::TypeValue),
         ];
-        let t7 = write_table(&env, f7, 5, 7);
+        let t7 = write_table(env.as_ref().as_ref(), f7, 5, 7);
         // Level 3 (2 * 2 entries, for iterator behavior).
         let f8: &[(&[u8], &[u8], ValueType)] = &[
             ("haa".as_bytes(), "val1".as_bytes(), ValueType::TypeValue),
             ("hba".as_bytes(), "val2".as_bytes(), ValueType::TypeValue),
         ];
-        let t8 = write_table(&env, f8, 3, 8);
+        let t8 = write_table(env.as_ref().as_ref(), f8, 3, 8);
         let f9: &[(&[u8], &[u8], ValueType)] = &[
             ("iaa".as_bytes(), "val1".as_bytes(), ValueType::TypeValue),
             ("iba".as_bytes(), "val2".as_bytes(), ValueType::TypeValue),
         ];
-        let t9 = write_table(&env, f9, 1, 9);
+        let t9 = write_table(env.as_ref().as_ref(), f9, 1, 9);
 
         let cache = TableCache::new("db", opts.clone(), 100);
         let mut v = Version::new(share(cache), Rc::new(Box::new(DefaultCmp)));
@@ -730,11 +729,11 @@ mod tests {
         let v = make_version().0;
 
         let expected_entries = vec![0, 9, 8, 4];
-        for l in 1..4 {
+        (1..4).for_each(|l| {
             let mut iter = v.new_concat_iter(l);
             let iter = LdbIteratorIter::wrap(&mut iter);
             assert_eq!(iter.count(), expected_entries[l]);
-        }
+        });
     }
 
     #[test]
@@ -800,7 +799,7 @@ mod tests {
             ("gbb".as_bytes(), 100, Ok(None)),
         ];
 
-        for ref c in cases {
+        for c in cases {
             match v.get(LookupKey::new(c.0, c.1).internal_key()) {
                 Ok(Some((val, _))) => assert_eq!(c.2.as_ref().unwrap().as_ref().unwrap(), &val),
                 Ok(None) => assert!(c.2.as_ref().unwrap().as_ref().is_none()),
@@ -825,9 +824,9 @@ mod tests {
         assert_eq!(6, ol[2][0].borrow().num);
 
         let ol = v.get_overlapping(LookupKey::new(b"x", 50).internal_key());
-        for i in 0..NUM_LEVELS {
+        (0..NUM_LEVELS).for_each(|i| {
             assert!(ol[i].is_empty());
-        }
+        });
     }
 
     #[test]

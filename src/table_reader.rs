@@ -182,7 +182,7 @@ impl Table {
     /// This is done this way because some key types, like internal keys, will not result in an
     /// exact match; it depends on other comparators than the one that the table reader knows
     /// whether a match is acceptable.
-    pub fn get<'a>(&self, key: InternalKey<'a>) -> Result<Option<(Vec<u8>, Vec<u8>)>> {
+    pub fn get(&self, key: InternalKey<'_>) -> Result<Option<(Vec<u8>, Vec<u8>)>> {
         let mut index_iter = self.indexblock.iter();
         index_iter.seek(key);
 
@@ -431,7 +431,7 @@ mod tests {
         opt.block_size = 32;
         opt.filter_policy = Rc::new(Box::new(BloomPolicy::new(4)));
 
-        let mut i = 1 as u64;
+        let mut i = 1_u64;
         let data: Vec<(Vec<u8>, &'static str)> = build_data()
             .into_iter()
             .map(|(k, v)| {
@@ -444,7 +444,7 @@ mod tests {
             // Uses InternalKeyCmp
             let mut b = TableBuilder::new(opt, &mut d);
 
-            for &(ref k, ref v) in data.iter() {
+            for (k, v) in data.iter() {
                 b.add(k.as_slice(), v.as_bytes()).unwrap();
             }
 
@@ -468,11 +468,9 @@ mod tests {
         let table = Table::new_raw(opt, wrap_buffer(src), size).unwrap();
         let mut iter = table.iter();
 
-        let expected_offsets = vec![0, 0, 0, 44, 44, 44, 89];
-        let mut i = 0;
-        for (k, _) in LdbIteratorIter::wrap(&mut iter) {
+        let expected_offsets = [0, 0, 0, 44, 44, 44, 89];
+        for (i, (k, _)) in LdbIteratorIter::wrap(&mut iter).enumerate() {
             assert_eq!(expected_offsets[i], table.approx_offset_of(&k));
-            i += 1;
         }
 
         // Key-past-last returns offset of metaindex block.
@@ -559,14 +557,9 @@ mod tests {
         assert!(table.filters.is_some());
         let filter_reader = table.filters.clone().unwrap();
         let mut iter = table.iter();
-
-        loop {
-            if let Some((k, _)) = iter.next() {
-                assert!(filter_reader.key_may_match(iter.current_block_off, &k));
-                assert!(!filter_reader.key_may_match(iter.current_block_off, b"somerandomkey"));
-            } else {
-                break;
-            }
+        while let Some((k, _)) = iter.next() {
+            assert!(filter_reader.key_may_match(iter.current_block_off, &k));
+            assert!(!filter_reader.key_may_match(iter.current_block_off, b"somerandomkey"));
         }
     }
 
@@ -726,16 +719,12 @@ mod tests {
 
         let mut iter = table.iter();
 
-        loop {
-            if let Some((k, _)) = iter.next() {
-                let lk = LookupKey::new(&k, 123);
-                let userkey = lk.user_key();
+        while let Some((k, _)) = iter.next() {
+            let lk = LookupKey::new(&k, 123);
+            let userkey = lk.user_key();
 
-                assert!(filter_reader.key_may_match(iter.current_block_off, userkey));
-                assert!(!filter_reader.key_may_match(iter.current_block_off, b"somerandomkey"));
-            } else {
-                break;
-            }
+            assert!(filter_reader.key_may_match(iter.current_block_off, userkey));
+            assert!(!filter_reader.key_may_match(iter.current_block_off, b"somerandomkey"));
         }
     }
 

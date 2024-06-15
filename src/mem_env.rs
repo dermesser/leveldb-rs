@@ -25,7 +25,7 @@ impl RandomAccess for BufferBackedFile {
         } else {
             dst.len()
         };
-        (&mut dst[0..to_read]).copy_from_slice(&self[off..off + to_read]);
+        dst[0..to_read].copy_from_slice(&self[off..off + to_read]);
         Ok(to_read)
     }
 }
@@ -67,7 +67,7 @@ impl Read for MemFileReader {
             dst.len()
         };
 
-        (&mut dst[0..to_read]).copy_from_slice(&buf[self.1..self.1 + to_read]);
+        dst[0..to_read].copy_from_slice(&buf[self.1..self.1 + to_read]);
         self.1 += to_read;
         Ok(to_read)
     }
@@ -94,10 +94,10 @@ impl Write for MemFileWriter {
             let remaining = buf.len() - self.1;
             if src.len() <= remaining {
                 // src fits into buffer.
-                (&mut buf[self.1..self.1 + src.len()]).copy_from_slice(src);
+                buf[self.1..self.1 + src.len()].copy_from_slice(src);
             } else {
                 // src doesn't fit; first copy what fits, then append the rest/
-                (&mut buf[self.1..self.1 + remaining]).copy_from_slice(&src[0..remaining]);
+                buf[self.1..self.1 + remaining].copy_from_slice(&src[0..remaining]);
                 buf.extend_from_slice(&src[remaining..src.len()]);
             }
         }
@@ -180,7 +180,7 @@ impl MemFS {
         let mut children = Vec::new();
         for k in fs.keys() {
             if k.starts_with(&prefix) {
-                children.push(Path::new(k.strip_prefix(&prefix).unwrap_or(&k)).to_owned());
+                children.push(Path::new(k.strip_prefix(&prefix).unwrap_or(k)).to_owned());
             }
         }
         Ok(children)
@@ -275,6 +275,12 @@ impl MemFS {
 /// MemEnv is an in-memory environment that can be used for testing or ephemeral databases. The
 /// performance will be better than what a disk environment delivers.
 pub struct MemEnv(MemFS);
+
+impl Default for MemEnv {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl MemEnv {
     pub fn new() -> MemEnv {
@@ -414,26 +420,26 @@ mod tests {
         let path = Path::new("/a/b/hello.txt");
 
         {
-            let mut w = fs.open_w(&path, false, false).unwrap();
+            let mut w = fs.open_w(path, false, false).unwrap();
             write!(w, "Hello").unwrap();
             // Append.
-            let mut w2 = fs.open_w(&path, true, false).unwrap();
+            let mut w2 = fs.open_w(path, true, false).unwrap();
             write!(w2, "World").unwrap();
         }
         {
-            let mut r = MemFileReader::new(fs.open(&path, false).unwrap(), 0);
+            let mut r = MemFileReader::new(fs.open(path, false).unwrap(), 0);
             let mut s = String::new();
             assert_eq!(r.read_to_string(&mut s).unwrap(), 10);
             assert_eq!(s, "HelloWorld");
 
-            let mut r2 = MemFileReader::new(fs.open(&path, false).unwrap(), 2);
+            let mut r2 = MemFileReader::new(fs.open(path, false).unwrap(), 2);
             s.clear();
             assert_eq!(r2.read_to_string(&mut s).unwrap(), 8);
             assert_eq!(s, "lloWorld");
         }
-        assert_eq!(fs.size_of_(&path).unwrap(), 10);
-        assert!(fs.exists_(&path).unwrap());
-        assert!(!fs.exists_(&Path::new("/non/existing/path")).unwrap());
+        assert_eq!(fs.size_of_(path).unwrap(), 10);
+        assert!(fs.exists_(path).unwrap());
+        assert!(!fs.exists_(Path::new("/non/existing/path")).unwrap());
     }
 
     #[test]
@@ -442,28 +448,28 @@ mod tests {
         let path = Path::new("/a/b/hello.txt");
 
         {
-            let mut w0 = fs.open_w(&path, false, true).unwrap();
+            let mut w0 = fs.open_w(path, false, true).unwrap();
             write!(w0, "Garbage").unwrap();
 
             // Truncate.
-            let mut w = fs.open_w(&path, false, true).unwrap();
+            let mut w = fs.open_w(path, false, true).unwrap();
             write!(w, "Xyz").unwrap();
             // Write to the beginning.
-            let mut w2 = fs.open_w(&path, false, false).unwrap();
+            let mut w2 = fs.open_w(path, false, false).unwrap();
             write!(w2, "OverwritingEverythingWithGarbage").unwrap();
             // Overwrite the overwritten stuff.
             write!(w, "Xyz").unwrap();
             assert!(w.flush().is_ok());
         }
         {
-            let mut r = MemFileReader::new(fs.open(&path, false).unwrap(), 0);
+            let mut r = MemFileReader::new(fs.open(path, false).unwrap(), 0);
             let mut s = String::new();
             assert_eq!(r.read_to_string(&mut s).unwrap(), 32);
             assert_eq!(s, "OveXyzitingEverythingWithGarbage");
         }
-        assert!(fs.exists_(&path).unwrap());
-        assert_eq!(fs.size_of_(&path).unwrap(), 32);
-        assert!(!fs.exists_(&Path::new("/non/existing/path")).unwrap());
+        assert!(fs.exists_(path).unwrap());
+        assert_eq!(fs.size_of_(path).unwrap(), 32);
+        assert!(!fs.exists_(Path::new("/non/existing/path")).unwrap());
     }
 
     #[test]
@@ -475,33 +481,33 @@ mod tests {
 
         // Make file/remove file.
         {
-            let mut w = fs.open_w(&path, false, false).unwrap();
+            let mut w = fs.open_w(path, false, false).unwrap();
             write!(w, "Hello").unwrap();
         }
-        assert!(fs.exists_(&path).unwrap());
-        assert_eq!(fs.size_of_(&path).unwrap(), 5);
-        fs.delete_(&path).unwrap();
-        assert!(!fs.exists_(&path).unwrap());
-        assert!(fs.delete_(&nonexist).is_err());
+        assert!(fs.exists_(path).unwrap());
+        assert_eq!(fs.size_of_(path).unwrap(), 5);
+        fs.delete_(path).unwrap();
+        assert!(!fs.exists_(path).unwrap());
+        assert!(fs.delete_(nonexist).is_err());
 
         // rename_ file.
         {
-            let mut w = fs.open_w(&path, false, false).unwrap();
+            let mut w = fs.open_w(path, false, false).unwrap();
             write!(w, "Hello").unwrap();
         }
-        assert!(fs.exists_(&path).unwrap());
-        assert!(!fs.exists_(&newpath).unwrap());
-        assert_eq!(fs.size_of_(&path).unwrap(), 5);
-        assert!(fs.size_of_(&newpath).is_err());
+        assert!(fs.exists_(path).unwrap());
+        assert!(!fs.exists_(newpath).unwrap());
+        assert_eq!(fs.size_of_(path).unwrap(), 5);
+        assert!(fs.size_of_(newpath).is_err());
 
-        fs.rename_(&path, &newpath).unwrap();
+        fs.rename_(path, newpath).unwrap();
 
-        assert!(!fs.exists_(&path).unwrap());
-        assert!(fs.exists_(&newpath).unwrap());
-        assert_eq!(fs.size_of_(&newpath).unwrap(), 5);
-        assert!(fs.size_of_(&path).is_err());
+        assert!(!fs.exists_(path).unwrap());
+        assert!(fs.exists_(newpath).unwrap());
+        assert_eq!(fs.size_of_(newpath).unwrap(), 5);
+        assert!(fs.size_of_(path).is_err());
 
-        assert!(fs.rename_(&nonexist, &path).is_err());
+        assert!(fs.rename_(nonexist, path).is_err());
     }
 
     fn s2p(x: &str) -> PathBuf {
@@ -519,14 +525,14 @@ mod tests {
         );
 
         for p in &[&path1, &path2, &path3] {
-            fs.open_w(*p, false, false).unwrap();
+            fs.open_w(p, false, false).unwrap();
         }
-        let children = fs.children_of(&Path::new("/a")).unwrap();
+        let children = fs.children_of(Path::new("/a")).unwrap();
         assert!(
             (children == vec![s2p("1.txt"), s2p("2.txt")])
                 || (children == vec![s2p("2.txt"), s2p("1.txt")])
         );
-        let children = fs.children_of(&Path::new("/a/")).unwrap();
+        let children = fs.children_of(Path::new("/a/")).unwrap();
         assert!(
             (children == vec![s2p("1.txt"), s2p("2.txt")])
                 || (children == vec![s2p("2.txt"), s2p("1.txt")])
@@ -565,7 +571,7 @@ mod tests {
 
         {
             let mut f = fs.open_w(p, true, true).unwrap();
-            f.write("abcdef".as_bytes()).expect("write failed");
+            f.write_all("abcdef".as_bytes()).expect("write failed");
         }
 
         // Locking on new file.

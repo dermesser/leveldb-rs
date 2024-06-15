@@ -62,12 +62,12 @@ impl Footer {
         let s1 = self.meta_index.encode_to(to);
         let s2 = self.index.encode_to(&mut to[s1..]);
 
-        for i in s1 + s2..FOOTER_LENGTH {
+        (s1 + s2..FOOTER_LENGTH).for_each(|i| {
             to[i] = 0;
-        }
-        for i in FOOTER_LENGTH..FULL_FOOTER_LENGTH {
+        });
+        (FOOTER_LENGTH..FULL_FOOTER_LENGTH).for_each(|i| {
             to[i] = MAGIC_FOOTER_ENCODED[i - FOOTER_LENGTH];
-        }
+        });
     }
 }
 
@@ -145,7 +145,7 @@ impl<Dst: Write> TableBuilder<Dst> {
     }
 
     /// Add a key to the table. The key as to be lexically greater or equal to the last one added.
-    pub fn add<'a>(&mut self, key: InternalKey<'a>, val: &[u8]) -> Result<()> {
+    pub fn add(&mut self, key: InternalKey<'_>, val: &[u8]) -> Result<()> {
         assert!(self.data_block.is_some());
 
         if !self.prev_block_last_key.is_empty() {
@@ -170,11 +170,11 @@ impl<Dst: Write> TableBuilder<Dst> {
     /// Writes an index entry for the current data_block where `next_key` is the first key of the
     /// next block.
     /// Calls write_block() for writing the block to disk.
-    fn write_data_block<'b>(&mut self, next_key: InternalKey<'b>) -> Result<()> {
+    fn write_data_block(&mut self, next_key: InternalKey<'_>) -> Result<()> {
         assert!(self.data_block.is_some());
 
         let block = self.data_block.take().unwrap();
-        let sep = self.opt.cmp.find_shortest_sep(&block.last_key(), next_key);
+        let sep = self.opt.cmp.find_shortest_sep(block.last_key(), next_key);
         self.prev_block_last_key = Vec::from(block.last_key());
         let contents = block.finish();
 
@@ -183,7 +183,7 @@ impl<Dst: Write> TableBuilder<Dst> {
 
         let handle = self.write_block(contents, (self.opt.compressor, compressor))?;
 
-        let mut handle_enc = [0 as u8; 16];
+        let mut handle_enc = [0_u8; 16];
         let enc_len = handle.encode_to(&mut handle_enc);
 
         self.index_block
@@ -203,7 +203,7 @@ impl<Dst: Write> TableBuilder<Dst> {
     fn write_block(
         &mut self,
         block: BlockContents,
-        compressor_id_pair: (u8, &Box<dyn Compressor>),
+        compressor_id_pair: (u8, &dyn Compressor),
     ) -> Result<BlockHandle> {
         let (ctype, compressor) = compressor_id_pair;
         let data = compressor.encode(block)?;
@@ -213,8 +213,8 @@ impl<Dst: Write> TableBuilder<Dst> {
         digest.update(&data);
         digest.update(&[ctype; TABLE_BLOCK_COMPRESS_LEN]);
 
-        self.dst.write(&data)?;
-        self.dst.write(&[ctype; TABLE_BLOCK_COMPRESS_LEN])?;
+        self.dst.write_all(&data)?;
+        self.dst.write_all(&[ctype; TABLE_BLOCK_COMPRESS_LEN])?;
         self.dst.write_fixedint(mask_crc(digest.finalize()))?;
 
         let handle = BlockHandle::new(self.offset, data.len());
@@ -252,13 +252,10 @@ impl<Dst: Write> TableBuilder<Dst> {
             let fblock_data = fblock.finish();
             let fblock_handle = self.write_block(
                 fblock_data,
-                (
-                    compressor::NoneCompressor::ID,
-                    &(Box::new(compressor::NoneCompressor) as Box<dyn Compressor>),
-                ),
+                (compressor::NoneCompressor::ID, &compressor::NoneCompressor),
             )?;
 
-            let mut handle_enc = [0 as u8; 16];
+            let mut handle_enc = [0_u8; 16];
             let enc_len = fblock_handle.encode_to(&mut handle_enc);
 
             meta_ix_block.add(filter_key.as_bytes(), &handle_enc[0..enc_len]);
@@ -310,13 +307,13 @@ mod tests {
         opt.compressor = compressor::SnappyCompressor::ID;
         let mut b = TableBuilder::new_raw(opt, &mut d);
 
-        let data = vec![
+        let data = [
             ("abc", "def"),
             ("abe", "dee"),
             ("bcd", "asa"),
             ("dcc", "a00"),
         ];
-        let data2 = vec![
+        let data2 = [
             ("abd", "def"),
             ("abf", "dee"),
             ("ccd", "asa"),
@@ -324,9 +321,8 @@ mod tests {
         ];
 
         for i in 0..data.len() {
-            b.add(&data[i].0.as_bytes(), &data[i].1.as_bytes()).unwrap();
-            b.add(&data2[i].0.as_bytes(), &data2[i].1.as_bytes())
-                .unwrap();
+            b.add(data[i].0.as_bytes(), data[i].1.as_bytes()).unwrap();
+            b.add(data2[i].0.as_bytes(), data2[i].1.as_bytes()).unwrap();
         }
 
         let estimate = b.size_estimate();
@@ -347,7 +343,7 @@ mod tests {
         let mut b = TableBuilder::new_raw(opt, &mut d);
 
         // Test two equal consecutive keys
-        let data = vec![
+        let data = [
             ("abc", "def"),
             ("abc", "dee"),
             ("bcd", "asa"),

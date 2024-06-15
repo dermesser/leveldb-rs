@@ -29,7 +29,7 @@ pub struct Snapshot {
 
 impl Snapshot {
     pub fn sequence(&self) -> SequenceNumber {
-        (*self.inner).seq
+        self.inner.seq
     }
 }
 

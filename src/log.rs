@@ -222,8 +222,8 @@ mod tests {
 
     #[test]
     fn test_crc_sanity() {
-        assert_eq!(0x8a9136aa, crc::crc32(&[0_u8; 32]));
-        assert_eq!(0x62a8ab43, crc::crc32(&[0xff_u8; 32]));
+        assert_eq!(0x8a9136aa, crc::crc32([0_u8; 32]));
+        assert_eq!(0x62a8ab43, crc::crc32([0xff_u8; 32]));
     }
 
     #[test]
@@ -251,8 +251,7 @@ mod tests {
             "and my third",
         ];
 
-        let mut dst = Vec::new();
-        dst.resize(1024, 0 as u8);
+        let mut dst = vec![0_u8; 1024];
 
         {
             let mut lw = LogWriter::new(Cursor::new(dst.as_mut_slice()));
@@ -278,7 +277,7 @@ mod tests {
 
     #[test]
     fn test_reader() {
-        let data = vec![
+        let data = [
             "abcdefghi".as_bytes().to_vec(),    // fits one block of 17
             "123456789012".as_bytes().to_vec(), // spans two blocks of 17
             "0101010101010101010101".as_bytes().to_vec(),
@@ -308,7 +307,7 @@ mod tests {
         loop {
             let r = lr.read(&mut dst);
 
-            if !r.is_ok() {
+            if r.is_err() {
                 panic!("{}", r.unwrap_err());
             } else if r.unwrap() == 0 {
                 break;

@@ -114,11 +114,14 @@ impl CompressorList {
         self.0[id as usize].is_some()
     }
 
-    pub fn get(&self, id: u8) -> Result<&Box<dyn Compressor + 'static>> {
-        self.0[id as usize].as_ref().ok_or_else(|| Status {
-            code: StatusCode::NotSupported,
-            err: format!("invalid compression id `{}`", id),
-        })
+    pub fn get(&self, id: u8) -> Result<&dyn Compressor> {
+        self.0[id as usize]
+            .as_ref()
+            .map(AsRef::as_ref)
+            .ok_or_else(|| Status {
+                code: StatusCode::NotSupported,
+                err: format!("invalid compression id `{}`", id),
+            })
     }
 }
 
@@ -134,14 +137,16 @@ impl Default for CompressorList {
 /// Returns Options that will cause a database to exist purely in-memory instead of being stored on
 /// disk. This is useful for testing or ephemeral databases.
 pub fn in_memory() -> Options {
-    let mut opt = Options::default();
-    opt.env = Rc::new(Box::new(MemEnv::new()));
-    opt
+    Options {
+        env: Rc::new(Box::new(MemEnv::new())),
+        ..Options::default()
+    }
 }
 
 pub fn for_test() -> Options {
-    let mut o = Options::default();
-    o.env = Rc::new(Box::new(MemEnv::new()));
-    o.log = Some(share(infolog::stderr()));
-    o
+    Options {
+        env: Rc::new(Box::new(MemEnv::new())),
+        log: Some(share(infolog::stderr())),
+        ..Options::default()
+    }
 }

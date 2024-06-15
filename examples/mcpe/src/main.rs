@@ -5,8 +5,8 @@ use rusty_leveldb::{Compressor, CompressorList, Options, DB};
 use std::rc::Rc;
 
 /// A zlib compressor that with zlib wrapper
-/// 
-/// This is use for old world format 
+///
+/// This is use for old world format
 struct ZlibCompressor(u8);
 
 impl ZlibCompressor {
@@ -67,10 +67,10 @@ pub fn mcpe_options(compression_level: u8) -> Options {
 
     // Mojang create a custom [compressor list](https://github.com/reedacartwright/rbedrock/blob/fb32a899da4e15c1aaa0d6de2b459e914e183516/src/leveldb-mcpe/include/leveldb/options.h#L123)
     // Sample config for compressor list can be find in [here](https://github.com/reedacartwright/rbedrock/blob/fb32a899da4e15c1aaa0d6de2b459e914e183516/src/leveldb-mcpe/mcpe_sample_setup.cpp#L24-L28)
-    // 
+    //
     // Their compression id can be find in [here](https://github.com/reedacartwright/rbedrock/blob/fb32a899da4e15c1aaa0d6de2b459e914e183516/src/leveldb-mcpe/include/leveldb/zlib_compressor.h#L38)
     // and [here](https://github.com/reedacartwright/rbedrock/blob/fb32a899da4e15c1aaa0d6de2b459e914e183516/src/leveldb-mcpe/include/leveldb/zlib_compressor.h#L48)
-    // 
+    //
     // Compression id will be use in [here](https://github.com/reedacartwright/rbedrock/blob/fb32a899da4e15c1aaa0d6de2b459e914e183516/src/leveldb-mcpe/table/format.cc#L125-L150)
     let mut list = CompressorList::new();
     list.set_with_id(0, NoneCompressor::default());

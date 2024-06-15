@@ -234,7 +234,7 @@ impl AsyncDB {
                 Request::GetAt { snapshot, key } => {
                     let snapshot_id = snapshot.0;
                     if let Some(snapshot) = snapshots.get(&snapshot_id) {
-                        let ok = db.get_at(&snapshot, &key);
+                        let ok = db.get_at(snapshot, &key);
                         match ok {
                             Err(e) => {
                                 message.resp_channel.send(Response::Error(e)).ok();

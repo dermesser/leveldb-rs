@@ -36,7 +36,7 @@ impl MemTable {
         self.map.approx_memory()
     }
 
-    pub fn add<'a>(&mut self, seq: SequenceNumber, t: ValueType, key: UserKey<'a>, value: &[u8]) {
+    pub fn add(&mut self, seq: SequenceNumber, t: ValueType, key: UserKey<'_>, value: &[u8]) {
         self.map
             .insert(build_memtable_key(key, value, t, seq), Vec::new())
     }
@@ -120,7 +120,7 @@ impl LdbIterator for MemtableIterator {
         }
 
         if self.skipmapiter.current(key, val) {
-            let (keylen, keyoff, _, vallen, valoff) = parse_memtable_key(&key);
+            let (keylen, keyoff, _, vallen, valoff) = parse_memtable_key(key);
             val.clear();
             val.extend_from_slice(&key[valoff..valoff + vallen]);
             // zero-allocation truncation.
@@ -302,7 +302,7 @@ mod tests {
         let mt = get_memtable();
         let mut iter = mt.iter();
 
-        let expected = vec![
+        let expected = [
             "123".as_bytes(), /* i.e., the abc entry with
                                * higher sequence number comes first */
             "122".as_bytes(),
@@ -311,11 +311,8 @@ mod tests {
             "125".as_bytes(),
             "126".as_bytes(),
         ];
-        let mut i = 0;
-
-        for (k, v) in LdbIteratorIter::wrap(&mut iter) {
+        for (i, (k, v)) in LdbIteratorIter::wrap(&mut iter).enumerate() {
             assert_eq!(v, expected[i]);
-            i += 1;
         }
     }
 
@@ -378,7 +375,7 @@ mod tests {
     #[test]
     fn test_memtable_iterator_behavior() {
         let mut mt = MemTable::new(options::for_test().cmp);
-        let entries = vec![
+        let entries = [
             (115, "abc", "122"),
             (120, "abd", "123"),
             (121, "abe", "124"),

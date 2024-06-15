@@ -180,7 +180,6 @@ impl Cmp for MemtableKeyCmp {
 mod tests {
     use super::*;
     use key_types::LookupKey;
-    use types;
 
     #[test]
     fn test_cmp_defaultcmp_shortest_sep() {

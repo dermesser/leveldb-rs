@@ -77,6 +77,11 @@ impl SkipMap {
     pub fn len(&self) -> usize {
         self.map.borrow().len
     }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
     pub fn approx_memory(&self) -> usize {
         self.map.borrow().approx_mem
     }
@@ -111,7 +116,7 @@ impl InnerSkipMap {
 
     fn contains(&self, key: &[u8]) -> bool {
         if let Some(n) = self.get_greater_or_equal(key) {
-            n.key.starts_with(&key)
+            n.key.starts_with(key)
         } else {
             false
         }
@@ -172,12 +177,9 @@ impl InnerSkipMap {
                 if let Some(next) = (*current).skips[level] {
                     let ord = self.cmp.cmp((*next).key.as_slice(), key);
 
-                    match ord {
-                        Ordering::Less => {
-                            current = next;
-                            continue;
-                        }
-                        _ => (),
+                    if let Ordering::Less = ord {
+                        current = next;
+                        continue;
                     }
                 }
             }
@@ -210,9 +212,9 @@ impl InnerSkipMap {
         let mut level = MAX_HEIGHT - 1;
         let mut current = self.head.as_mut() as *mut Node;
         // Set previous node for all levels to current node.
-        for i in 0..prevs.len() {
+        (0..prevs.len()).for_each(|i| {
             prevs[i] = Some(current);
-        }
+        });
 
         // Find the node after which we want to insert the new node; this is the node with the key
         // immediately smaller than the key to be inserted.
@@ -253,14 +255,14 @@ impl InnerSkipMap {
         });
         let newp = new.as_mut() as *mut Node;
 
-        for i in 0..new_height {
+        (0..new_height).for_each(|i| {
             if let Some(prev) = prevs[i] {
                 unsafe {
                     new.skips[i] = (*prev).skips[i];
                     (*prev).skips[i] = Some(newp);
                 }
             }
-        }
+        });
 
         let added_mem = size_of::<Node>()
             + size_of::<Option<*mut Node>>() * new.skips.len()
@@ -408,79 +410,63 @@ pub mod tests {
     #[test]
     fn test_contains() {
         let skm = make_skipmap();
-        assert!(skm.contains(&"aby".as_bytes().to_vec()));
-        assert!(skm.contains(&"abc".as_bytes().to_vec()));
-        assert!(skm.contains(&"abz".as_bytes().to_vec()));
-        assert!(!skm.contains(&"ab{".as_bytes().to_vec()));
-        assert!(!skm.contains(&"123".as_bytes().to_vec()));
-        assert!(!skm.contains(&"aaa".as_bytes().to_vec()));
-        assert!(!skm.contains(&"456".as_bytes().to_vec()));
+        assert!(skm.contains(b"aby"));
+        assert!(skm.contains(b"abc"));
+        assert!(skm.contains(b"abz"));
+        assert!(!skm.contains(b"ab{"));
+        assert!(!skm.contains(b"123"));
+        assert!(!skm.contains(b"aaa"));
+        assert!(!skm.contains(b"456"));
     }
 
     #[test]
     fn test_find() {
         let skm = make_skipmap();
         assert_eq!(
-            skm.map
-                .borrow()
-                .get_greater_or_equal(&"abf".as_bytes().to_vec())
-                .unwrap()
-                .key,
-            "abf".as_bytes().to_vec()
+            skm.map.borrow().get_greater_or_equal(b"abf").unwrap().key,
+            b"abf"
         );
-        assert!(skm
-            .map
-            .borrow()
-            .get_greater_or_equal(&"ab{".as_bytes().to_vec())
-            .is_none());
+        assert!(skm.map.borrow().get_greater_or_equal(b"ab{").is_none());
         assert_eq!(
-            skm.map
-                .borrow()
-                .get_greater_or_equal(&"aaa".as_bytes().to_vec())
-                .unwrap()
-                .key,
-            "aba".as_bytes().to_vec()
+            skm.map.borrow().get_greater_or_equal(b"aaa").unwrap().key,
+            b"aba"
         );
         assert_eq!(
             skm.map
                 .borrow()
-                .get_greater_or_equal(&"ab".as_bytes())
+                .get_greater_or_equal(b"ab")
                 .unwrap()
                 .key
                 .as_slice(),
-            "aba".as_bytes()
+            b"aba"
         );
         assert_eq!(
             skm.map
                 .borrow()
-                .get_greater_or_equal(&"abc".as_bytes())
+                .get_greater_or_equal(b"abc")
                 .unwrap()
                 .key
                 .as_slice(),
-            "abc".as_bytes()
+            b"abc"
         );
-        assert!(skm
-            .map
-            .borrow()
-            .get_next_smaller(&"ab0".as_bytes())
-            .is_none());
+        assert!(skm.map.borrow().get_next_smaller(b"ab0").is_none());
         assert_eq!(
             skm.map
                 .borrow()
-                .get_next_smaller(&"abd".as_bytes())
+                .get_next_smaller(b"abd")
                 .unwrap()
                 .key
                 .as_slice(),
-            "abc".as_bytes()
+            b"abc"
         );
         assert_eq!(
             skm.map
                 .borrow()
-                .get_next_smaller(&"ab{".as_bytes())
+                .get_next_smaller(b"ab{")
                 .unwrap()
                 .key
                 .as_slice(),
-            "abz".as_bytes()
+            b"abz"
         );
     }
 
@@ -491,7 +477,7 @@ pub mod tests {
         let skm = SkipMap::new(cmp);
 
         let mut it = skm.iter();
-        it.seek("abc".as_bytes());
+        it.seek(b"abc");
         assert!(!it.valid());
     }
 
@@ -546,19 +532,19 @@ pub mod tests {
         iter.next();
         assert!(iter.valid());
         assert_eq!(current_key_val(&iter).unwrap().0, "aba".as_bytes().to_vec());
-        iter.seek(&"abz".as_bytes().to_vec());
+        iter.seek(b"abz");
         assert_eq!(
             current_key_val(&iter).unwrap(),
             ("abz".as_bytes().to_vec(), "def".as_bytes().to_vec())
         );
         // go back to beginning
-        iter.seek(&"aba".as_bytes().to_vec());
+        iter.seek(b"aba");
         assert_eq!(
             current_key_val(&iter).unwrap(),
-            ("aba".as_bytes().to_vec(), "def".as_bytes().to_vec())
+            (b"aba".to_vec(), b"def".to_vec())
         );
 
-        iter.seek(&"".as_bytes().to_vec());
+        iter.seek(b"");
         assert!(iter.valid());
         iter.prev();
         assert!(!iter.valid());
@@ -588,7 +574,7 @@ pub mod tests {
         assert!(iter.valid());
         iter.prev();
         assert!(!iter.valid());
-        iter.seek(&"abc".as_bytes());
+        iter.seek(b"abc");
         iter.prev();
         assert_eq!(
             current_key_val(&iter).unwrap(),

@@ -103,18 +103,16 @@ impl MergingIter {
     }
 
     fn find(&mut self, direction: SL) {
-        if self.iters.len() == 0 {
+        if self.iters.is_empty() {
             // Iterator stays invalid.
             return;
         }
 
-        let ord;
-
-        if direction == SL::Smallest {
-            ord = Ordering::Less;
+        let ord = if direction == SL::Smallest {
+            Ordering::Less
         } else {
-            ord = Ordering::Greater;
-        }
+            Ordering::Greater
+        };
 
         let mut next_ix = 0;
         let (mut current, mut smallest, mut valscratch) = (vec![], vec![], vec![]);
@@ -210,16 +208,12 @@ mod tests {
 
         let mut miter = MergingIter::new(Rc::new(Box::new(DefaultCmp)), vec![Box::new(iter)]);
 
-        loop {
-            if let Some((k, v)) = miter.next() {
-                if let Some((k2, v2)) = iter2.next() {
-                    assert_eq!(k, k2);
-                    assert_eq!(v, v2);
-                } else {
-                    panic!("Expected element from iter2");
-                }
+        while let Some((k, v)) = miter.next() {
+            if let Some((k2, v2)) = iter2.next() {
+                assert_eq!(k, k2);
+                assert_eq!(v, v2);
             } else {
-                break;
+                panic!("Expected element from iter2");
             }
         }
     }
@@ -235,16 +229,12 @@ mod tests {
             vec![Box::new(iter), Box::new(iter2)],
         );
 
-        loop {
-            if let Some((k, v)) = miter.next() {
-                if let Some((k2, v2)) = miter.next() {
-                    assert_eq!(k, k2);
-                    assert_eq!(v, v2);
-                } else {
-                    panic!("Odd number of elements");
-                }
+        while let Some((k, v)) = miter.next() {
+            if let Some((k2, v2)) = miter.next() {
+                assert_eq!(k, k2);
+                assert_eq!(v, v2);
             } else {
-                break;
+                panic!("Odd number of elements");
             }
         }
     }
@@ -317,19 +307,17 @@ mod tests {
     fn test_merging_real() {
         let val = "def".as_bytes();
 
-        let it1 = TestLdbIter::new(vec![(&b("aba"), val), (&b("abc"), val), (&b("abe"), val)]);
-        let it2 = TestLdbIter::new(vec![(&b("abb"), val), (&b("abd"), val)]);
-        let expected = vec![b("aba"), b("abb"), b("abc"), b("abd"), b("abe")];
+        let it1 = TestLdbIter::new(vec![(b("aba"), val), (b("abc"), val), (b("abe"), val)]);
+        let it2 = TestLdbIter::new(vec![(b("abb"), val), (b("abd"), val)]);
+        let expected = [b("aba"), b("abb"), b("abc"), b("abd"), b("abe")];
 
         let mut iter = MergingIter::new(
             Rc::new(Box::new(DefaultCmp)),
             vec![Box::new(it1), Box::new(it2)],
         );
 
-        let mut i = 0;
-        for (k, _) in LdbIteratorIter::wrap(&mut iter) {
+        for (i, (k, _)) in LdbIteratorIter::wrap(&mut iter).enumerate() {
             assert_eq!(k, expected[i]);
-            i += 1;
         }
     }
 
