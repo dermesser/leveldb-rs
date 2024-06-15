@@ -19,7 +19,7 @@ pub struct WriteBatch {
 }
 
 impl WriteBatch {
-    pub fn new() -> WriteBatch {
+    pub(crate) fn new() -> WriteBatch {
         let mut v = Vec::with_capacity(128);
         v.resize(HEADER_SIZE, 0);
 
@@ -51,7 +51,7 @@ impl WriteBatch {
     #[allow(unused_assignments)]
     pub fn delete(&mut self, k: &[u8]) {
         self.entries
-            .write(&[ValueType::TypeDeletion as u8])
+            .write_all(&[ValueType::TypeDeletion as u8])
             .unwrap();
         self.entries.write_varint(k.len()).unwrap();
         self.entries.write_all(k).unwrap();
@@ -109,6 +109,12 @@ impl WriteBatch {
     }
 }
 
+impl Default for WriteBatch {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub struct WriteBatchIter<'a> {
     batch: &'a WriteBatch,
     ix: usize,
@@ -151,12 +157,12 @@ mod tests {
     #[test]
     fn test_write_batch() {
         let mut b = WriteBatch::new();
-        let entries = vec![
-            ("abc".as_bytes(), "def".as_bytes()),
-            ("123".as_bytes(), "456".as_bytes()),
-            ("xxx".as_bytes(), "yyy".as_bytes()),
-            ("zzz".as_bytes(), "".as_bytes()),
-            ("010".as_bytes(), "".as_bytes()),
+        let entries: [(&[u8], &[u8]); 5] = [
+            (b"abc", b"def"),
+            (b"123", b"456"),
+            (b"xxx", b"yyy"),
+            (b"zzz", b""),
+            (b"010", b""),
         ];
 
         for &(k, v) in entries.iter() {

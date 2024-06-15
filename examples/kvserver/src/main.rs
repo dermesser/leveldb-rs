@@ -1,5 +1,3 @@
-use canteen;
-use rusty_leveldb;
 
 struct KVService {
     db: rusty_leveldb::DB,
@@ -62,7 +60,7 @@ fn put_key_fn(rq: &canteen::Request) -> canteen::Response {
 
 fn main() {
     let db = rusty_leveldb::DB::open("httpdb", rusty_leveldb::Options::default()).unwrap();
-    let service = KVService { db: db };
+    let service = KVService { db };
     unsafe { STORAGE_SERVICE = Some(std::sync::Mutex::new(service)) };
 
     let mut ct = canteen::Canteen::new();

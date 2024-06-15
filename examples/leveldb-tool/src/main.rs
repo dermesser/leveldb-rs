@@ -56,10 +56,12 @@ fn main() {
         );
     }
 
-    let mut opt = Options::default();
-    opt.reuse_logs = false;
-    opt.reuse_manifest = false;
-    opt.compressor = compressor::SnappyCompressor::ID;
+    let opt = Options {
+        reuse_logs: false,
+        reuse_manifest: false,
+        compressor: compressor::SnappyCompressor::ID,
+        ..Default::default()
+    };
     let mut db = DB::open("tooldb", opt).unwrap();
 
     match args[1].as_str() {

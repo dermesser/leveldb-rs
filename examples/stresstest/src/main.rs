@@ -34,7 +34,7 @@ fn read(db: &mut DB, n: usize) -> usize {
     for _ in 0..n {
         let k = gen_string(KEY_LEN);
 
-        if let Some(_) = db.get(k.as_bytes()) {
+        if db.get(k.as_bytes()).is_some() {
             succ += 1;
         }
     }
@@ -48,8 +48,10 @@ fn main() {
     let mut entries = 0;
 
     for i in 0..m {
-        let mut opt = Options::default();
-        opt.compressor = compressor::SnappyCompressor::ID;
+        let opt = Options {
+            compressor: compressor::SnappyCompressor::ID,
+            ..Default::default()
+        };
         let mut db = DB::open(path, opt).unwrap();
         write(&mut db, n);
         entries += n;

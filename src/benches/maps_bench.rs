@@ -21,10 +21,10 @@ fn gen_key_val<R: Rng>(gen: &mut R, keylen: usize, vallen: usize) -> (Vec<u8>, V
     let mut val = Vec::with_capacity(vallen);
 
     for _i in 0..keylen {
-        key.push(gen.gen_range(b'a', b'z'));
+        key.push(gen.gen_range(b'a'..=b'z'));
     }
     for _i in 0..vallen {
-        val.push(gen.gen_range(b'a', b'z'));
+        val.push(gen.gen_range(b'a'..=b'z'));
     }
     (key, val)
 }

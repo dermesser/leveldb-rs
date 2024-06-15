@@ -176,10 +176,10 @@ mod tests {
 
     fn get_keys() -> Vec<&'static [u8]> {
         vec![
-            "abcd".as_bytes(),
-            "efgh".as_bytes(),
-            "ijkl".as_bytes(),
-            "mnopqrstuvwxyz".as_bytes(),
+            b"abcd",
+            b"efgh",
+            b"ijkl",
+            b"mnopqrstuvwxyz",
         ]
     }
 
@@ -229,11 +229,9 @@ mod tests {
             17
         ); // third block in third filter
 
-        let unknown_keys = vec![
-            "xsb".as_bytes(),
-            "9sad".as_bytes(),
-            "assssaaaass".as_bytes(),
-        ];
+        let unknown_keys: [&[u8]; 3] = [b"xsb",
+            b"9sad",
+            b"assssaaaass"];
 
         for block_offset in vec![0, 1024, 5000, 6025].into_iter() {
             for key in get_keys().iter() {

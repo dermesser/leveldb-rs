@@ -54,7 +54,7 @@ mod tests {
     #[test]
     fn test_blockhandle() {
         let bh = BlockHandle::new(890, 777);
-        let mut dst = [0 as u8; 128];
+        let mut dst = [0_u8; 128];
         let enc_sz = bh.encode_to(&mut dst[..]);
 
         let (bh2, dec_sz) = BlockHandle::decode(&dst).unwrap();

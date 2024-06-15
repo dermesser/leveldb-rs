@@ -9,7 +9,7 @@ fn update_count(w: &str, db: &mut leveldb::DB) -> Option<()> {
     let mut count: usize = 0;
     if let Some(v) = db.get(w.as_bytes()) {
         let s = String::from_utf8(v).unwrap();
-        count = usize::from_str_radix(&s, 10).unwrap();
+        count = s.parse::<usize>().unwrap();
     }
     count += 1;
     let s = count.to_string();
@@ -35,8 +35,10 @@ fn run(mut db: leveldb::DB) -> io::Result<()> {
 }
 
 fn main() {
-    let mut opts = leveldb::Options::default();
-    opts.compressor = leveldb::compressor::NoneCompressor::ID;
+    let opts = leveldb::Options {
+        compressor: leveldb::compressor::NoneCompressor::ID,
+        ..Default::default()
+    };
     let db = leveldb::DB::open("wordsdb", opts).unwrap();
 
     run(db).unwrap();

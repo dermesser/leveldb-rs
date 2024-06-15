@@ -74,8 +74,8 @@ impl DB {
         }
         let path = name.canonicalize().unwrap_or(name.to_owned());
 
-        let cache = share(TableCache::new(&name, opt.clone(), opt.max_open_files - 10));
-        let vset = VersionSet::new(&name, opt.clone(), cache.clone());
+        let cache = share(TableCache::new(name, opt.clone(), opt.max_open_files - 10));
+        let vset = VersionSet::new(name, opt.clone(), cache.clone());
 
         DB {
             name: name.to_owned(),
@@ -151,20 +151,20 @@ impl DB {
             lw.add_record(&ve.encode())?;
             lw.flush()?;
         }
-        set_current_file(&self.opt.env, &self.path, 1)
+        set_current_file(self.opt.env.as_ref().as_ref(), &self.path, 1)
     }
 
     /// recover recovers from the existing state on disk. If the wrapped result is `true`, then
     /// log_and_apply() should be called after recovery has finished.
     fn recover(&mut self, ve: &mut VersionEdit) -> Result<bool> {
-        if self.opt.error_if_exists && self.opt.env.exists(&self.path.as_ref()).unwrap_or(false) {
+        if self.opt.error_if_exists && self.opt.env.exists(self.path.as_ref()).unwrap_or(false) {
             return err(StatusCode::AlreadyExists, "database already exists");
         }
 
         let _ = self.opt.env.mkdir(Path::new(&self.path));
         self.acquire_lock()?;
 
-        if let Err(e) = read_current_file(&self.opt.env, &self.path) {
+        if let Err(e) = read_current_file(self.opt.env.as_ref().as_ref(), &self.path) {
             if e.code == StatusCode::NotFound && self.opt.create_if_missing {
                 self.initialize_db()?;
             } else {
@@ -186,7 +186,7 @@ impl DB {
         let mut log_files = vec![];
 
         for file in &filenames {
-            match parse_file_name(&file) {
+            match parse_file_name(file) {
                 Ok((num, typ)) => {
                     expected.remove(&num);
                     if typ == FileType::Log
@@ -551,7 +551,7 @@ impl DB {
     }
 
     /// Trigger a compaction based on where this key is located in the different levels.
-    fn record_read_sample<'a>(&mut self, k: InternalKey<'a>) {
+    fn record_read_sample(&mut self, k: InternalKey<'_>) {
         let current = self.current();
         if current.borrow_mut().record_read_sample(k) {
             if let Err(e) = self.maybe_do_compaction() {
@@ -645,7 +645,7 @@ impl DB {
                 if let Some(c) = c_ {
                     // Update ifrom to the largest key of the last file in this compaction.
                     let ix = c.num_inputs(0) - 1;
-                    ifrom = c.input(0, ix).largest.clone();
+                    ifrom.clone_from(&c.input(0, ix).largest);
                     self.start_compaction(c)?;
                 } else {
                     break;
@@ -696,7 +696,7 @@ impl DB {
             };
             let mut state = CompactionState::new(compaction, smallest);
             if let Err(e) = self.do_compaction_work(&mut state) {
-                state.cleanup(&self.opt.env, &self.path);
+                state.cleanup(self.opt.env.as_ref().as_ref(), &self.path);
                 log!(self.opt.log, "Compaction work failed: {}", e);
             }
             self.install_compaction_results(state)?;
@@ -763,9 +763,11 @@ impl DB {
             return Err(e);
         }
 
-        let mut stats = CompactionStats::default();
-        stats.micros = self.opt.env.micros() - start_ts;
-        stats.written = fmd.size;
+        let stats = CompactionStats {
+            micros: self.opt.env.micros() - start_ts,
+            written: fmd.size,
+            ..Default::default()
+        };
 
         let mut level = 0;
         if let Some(b) = base {
@@ -853,8 +855,10 @@ impl DB {
 
             if cs.builder.is_none() {
                 let fnum = self.vset.borrow_mut().new_file_number();
-                let mut fmd = FileMetaData::default();
-                fmd.num = fnum;
+                let fmd = FileMetaData {
+                    num: fnum,
+                    ..Default::default()
+                };
 
                 let fname = table_file_name(&self.path, fnum);
                 let f = self.opt.env.open_writable_file(Path::new(&fname))?;
@@ -863,9 +867,9 @@ impl DB {
                 cs.outputs.push(fmd);
             }
             if cs.builder.as_ref().unwrap().entries() == 0 {
-                cs.current_output().smallest = key.clone();
+                cs.current_output().smallest.clone_from(&key);
             }
-            cs.current_output().largest = key.clone();
+            cs.current_output().largest.clone_from(&key);
             cs.builder.as_mut().unwrap().add(&key, &val)?;
             // NOTE: Adjust max file size based on level.
             if cs.builder.as_ref().unwrap().size_estimate() > self.opt.max_file_size {
@@ -879,8 +883,10 @@ impl DB {
             self.finish_compaction_output(cs)?;
         }
 
-        let mut stats = CompactionStats::default();
-        stats.micros = self.opt.env.micros() - start_ts;
+        let mut stats = CompactionStats {
+            micros: self.opt.env.micros() - start_ts,
+            ..Default::default()
+        };
         for parent in 0..2 {
             for inp in 0..cs.compaction.num_inputs(parent) {
                 stats.read += cs.compaction.input(parent, inp).size;
@@ -980,7 +986,7 @@ impl CompactionState {
     }
 
     /// cleanup cleans up after an aborted compaction.
-    fn cleanup<P: AsRef<Path>>(&mut self, env: &Box<dyn Env>, name: P) {
+    fn cleanup<P: AsRef<Path>>(&mut self, env: &dyn Env, name: P) {
         for o in self.outputs.drain(..) {
             let name = table_file_name(name.as_ref(), o.num);
             let _ = env.delete(&name);
@@ -1112,7 +1118,7 @@ pub mod testutil {
         let mut lw = LogWriter::new(manifest_file);
         lw.add_record(&ve.encode()).unwrap();
         lw.flush().unwrap();
-        set_current_file(&opt.env, name, 10).unwrap();
+        set_current_file(opt.env.as_ref().as_ref(), name, 10).unwrap();
 
         (DB::open(name, opt.clone()).unwrap(), opt)
     }
@@ -1182,12 +1188,7 @@ mod tests {
         let mut mt = MemTable::new(options::for_test().cmp);
         let mut i = 1;
         for k in ["abc", "def", "ghi", "jkl", "mno", "aabc", "test123"].iter() {
-            mt.add(
-                i,
-                ValueType::TypeValue,
-                k.as_bytes(),
-                "looooongval".as_bytes(),
-            );
+            mt.add(i, ValueType::TypeValue, k.as_bytes(), b"looooongval");
             i += 1;
         }
         mt
@@ -1241,8 +1242,8 @@ mod tests {
             assert!(env.exists(&Path::new("db").join("LOCK")).unwrap());
             assert!(env.exists(&Path::new("db").join("000003.log")).unwrap());
 
-            db.put("abc".as_bytes(), "def".as_bytes()).unwrap();
-            db.put("abd".as_bytes(), "def".as_bytes()).unwrap();
+            db.put(b"abc", b"def").unwrap();
+            db.put(b"abd", b"def").unwrap();
         }
 
         {
@@ -1276,16 +1277,16 @@ mod tests {
             let current = db.current();
             log!(opt.log, "files: {:?}", current.borrow().files);
             assert_eq!(
-                "def".as_bytes(),
+                b"def",
                 current
                     .borrow_mut()
-                    .get(LookupKey::new("abc".as_bytes(), 1).internal_key())
+                    .get(LookupKey::new(b"abc", 1).internal_key())
                     .unwrap()
                     .unwrap()
                     .0
                     .as_slice()
             );
-            db.put("abe".as_bytes(), "def".as_bytes()).unwrap();
+            db.put(b"abe", b"def").unwrap();
         }
 
         {
@@ -1318,12 +1319,8 @@ mod tests {
             // Log is reused, so memtable should contain last written entry from above.
             assert_eq!(1, db.mem.len());
             assert_eq!(
-                "def".as_bytes(),
-                db.mem
-                    .get(&LookupKey::new("abe".as_bytes(), 3))
-                    .0
-                    .unwrap()
-                    .as_slice()
+                b"def",
+                db.mem.get(&LookupKey::new(b"abe", 3)).0.unwrap().as_slice()
             );
         }
     }
@@ -1468,11 +1465,11 @@ mod tests {
         let path = &Path::new("db").join("000123.ldb");
 
         assert_eq!(
-            LookupKey::new("aabc".as_bytes(), 6).internal_key(),
+            LookupKey::new(b"aabc", 6).internal_key(),
             f.smallest.as_slice()
         );
         assert_eq!(
-            LookupKey::new("test123".as_bytes(), 7).internal_key(),
+            LookupKey::new(b"test123", 7).internal_key(),
             f.largest.as_slice()
         );
         assert_eq!(379, f.size);
@@ -1530,49 +1527,34 @@ mod tests {
         assert_eq!(30, db.vset.borrow().last_seq);
 
         // seq = 31
-        db.put("xyy".as_bytes(), "123".as_bytes()).unwrap();
+        db.put(b"xyy", b"123").unwrap();
         let old_ss = db.get_snapshot();
         // seq = 32
-        db.put("xyz".as_bytes(), "123".as_bytes()).unwrap();
+        db.put(b"xyz", b"123").unwrap();
         db.flush().unwrap();
-        assert!(db.get_at(&old_ss, "xyy".as_bytes()).unwrap().is_some());
-        assert!(db.get_at(&old_ss, "xyz".as_bytes()).unwrap().is_none());
+        assert!(db.get_at(&old_ss, b"xyy").unwrap().is_some());
+        assert!(db.get_at(&old_ss, b"xyz").unwrap().is_none());
 
         // memtable get
-        assert_eq!(
-            "123".as_bytes(),
-            db.get("xyz".as_bytes()).unwrap().as_slice()
-        );
-        assert!(db.get_internal(31, "xyy".as_bytes()).unwrap().is_some());
-        assert!(db.get_internal(32, "xyy".as_bytes()).unwrap().is_some());
+        assert_eq!(b"123", db.get(b"xyz").unwrap().as_slice());
+        assert!(db.get_internal(31, b"xyy").unwrap().is_some());
+        assert!(db.get_internal(32, b"xyy").unwrap().is_some());
 
-        assert!(db.get_internal(31, "xyz".as_bytes()).unwrap().is_none());
-        assert!(db.get_internal(32, "xyz".as_bytes()).unwrap().is_some());
+        assert!(db.get_internal(31, b"xyz").unwrap().is_none());
+        assert!(db.get_internal(32, b"xyz").unwrap().is_some());
 
         // table get
-        assert_eq!(
-            "val2".as_bytes(),
-            db.get("eab".as_bytes()).unwrap().as_slice()
-        );
-        assert!(db.get_internal(3, "eab".as_bytes()).unwrap().is_none());
-        assert!(db.get_internal(32, "eab".as_bytes()).unwrap().is_some());
+        assert_eq!(b"val2", db.get(b"eab").unwrap().as_slice());
+        assert!(db.get_internal(3, b"eab").unwrap().is_none());
+        assert!(db.get_internal(32, b"eab").unwrap().is_some());
 
         {
             let ss = db.get_snapshot();
-            assert_eq!(
-                "val2".as_bytes(),
-                db.get_at(&ss, "eab".as_bytes())
-                    .unwrap()
-                    .unwrap()
-                    .as_slice()
-            );
+            assert_eq!(b"val2", db.get_at(&ss, b"eab").unwrap().unwrap().as_slice());
         }
 
         // from table.
-        assert_eq!(
-            "val2".as_bytes(),
-            db.get("cab".as_bytes()).unwrap().as_slice()
-        );
+        assert_eq!(b"val2", db.get(b"cab").unwrap().as_slice());
     }
 
     #[test]
@@ -1612,10 +1594,10 @@ mod tests {
     fn test_db_impl_compaction_trivial_move() {
         let mut db = DB::open("db", options::for_test()).unwrap();
 
-        db.put("abc".as_bytes(), "xyz".as_bytes()).unwrap();
-        db.put("ab3".as_bytes(), "xyz".as_bytes()).unwrap();
-        db.put("ab0".as_bytes(), "xyz".as_bytes()).unwrap();
-        db.put("abz".as_bytes(), "xyz".as_bytes()).unwrap();
+        db.put(b"abc", b"xyz").unwrap();
+        db.put(b"ab3", b"xyz").unwrap();
+        db.put(b"ab0", b"xyz").unwrap();
+        db.put(b"abz", b"xyz").unwrap();
         assert_eq!(4, db.mem.len());
         let mut imm = MemTable::new(db.opt.cmp.clone());
         mem::swap(&mut imm, &mut db.mem);
@@ -1749,17 +1731,19 @@ mod tests {
         let env: Box<dyn Env> = Box::new(MemEnv::new());
         let name = "db";
 
-        let stuff = "abcdefghijkl".as_bytes();
+        let stuff = b"abcdefghijkl";
         env.open_writable_file(&Path::new("db").join("000001.ldb"))
             .unwrap()
             .write_all(stuff)
             .unwrap();
-        let mut fmd = FileMetaData::default();
-        fmd.num = 1;
+        let fmd = FileMetaData {
+            num: 1,
+            ..Default::default()
+        };
 
         let mut cs = CompactionState::new(Compaction::new(&options::for_test(), 2, None), 12);
         cs.outputs = vec![fmd];
-        cs.cleanup(&env, name);
+        cs.cleanup(env.as_ref(), name);
 
         assert!(!env.exists(&Path::new("db").join("000001.ldb")).unwrap());
     }

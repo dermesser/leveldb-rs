@@ -1,6 +1,6 @@
 use crate::cmp::{Cmp, InternalKeyCmp};
 use crate::env::Env;
-use crate::error::{err, Result, Status, StatusCode};
+use crate::error::{err, Result, StatusCode};
 use crate::key_types::{parse_internal_key, InternalKey, UserKey};
 use crate::log::{LogReader, LogWriter};
 use crate::merging_iter::MergingIter;
@@ -99,7 +99,7 @@ impl Compaction {
     /// is_base_level_for checks whether the given key may exist in levels higher than this
     /// compaction's level plus 2. I.e., whether the levels for this compaction are the last ones
     /// to contain the key.
-    pub fn is_base_level_for<'a>(&mut self, k: UserKey<'a>) -> bool {
+    pub fn is_base_level_for(&mut self, k: UserKey<'_>) -> bool {
         assert!(self.input_version.is_some());
         let inp_version = self.input_version.as_ref().unwrap();
         for level in self.level + 2..NUM_LEVELS {
@@ -134,7 +134,7 @@ impl Compaction {
         self.num_inputs(0) == 1 && self.num_inputs(1) == 0 && inputs_size < 10 * self.max_file_size
     }
 
-    pub fn should_stop_before<'a>(&mut self, k: InternalKey<'a>) -> bool {
+    pub fn should_stop_before(&mut self, k: InternalKey<'_>) -> bool {
         if self.grandparents.is_none() {
             self.seen_key = true;
             return false;
@@ -258,7 +258,7 @@ impl VersionSet {
         v.compaction_score.unwrap_or(0.0) >= 1.0 || v.file_to_compact.is_some()
     }
 
-    fn approximate_offset<'a>(&self, v: &Shared<Version>, key: InternalKey<'a>) -> usize {
+    fn approximate_offset(&self, v: &Shared<Version>, key: InternalKey<'_>) -> usize {
         let mut offset = 0;
         for level in 0..NUM_LEVELS {
             for f in &v.borrow().files[level] {
@@ -315,7 +315,7 @@ impl VersionSet {
         }
 
         c.level = level;
-        c.input_version = self.current.clone();
+        c.input_version.clone_from(&self.current);
 
         if level == 0 {
             let (smallest, largest) = get_range(&self.cmp, c.inputs[0].iter());
@@ -328,11 +328,11 @@ impl VersionSet {
         Some(c)
     }
 
-    pub fn compact_range<'a, 'b>(
+    pub fn compact_range(
         &mut self,
         level: usize,
-        from: InternalKey<'a>,
-        to: InternalKey<'b>,
+        from: InternalKey<'_>,
+        to: InternalKey<'_>,
     ) -> Option<Compaction> {
         assert!(self.current.is_some());
         let mut inputs = self
@@ -514,7 +514,11 @@ impl VersionSet {
             lw.add_record(&encoded)?;
             lw.flush()?;
         }
-        set_current_file(&self.opt.env, &self.dbname, self.manifest_num)?;
+        set_current_file(
+            self.opt.env.as_ref().as_ref(),
+            &self.dbname,
+            self.manifest_num,
+        )?;
 
         self.add_version(v);
         // log_number was set above.
@@ -529,16 +533,15 @@ impl VersionSet {
         let mut best_score = None;
 
         for l in 0..NUM_LEVELS - 1 {
-            let score: f64;
-            if l == 0 {
-                score = v.files[l].len() as f64 / 4.0;
+            let score = if l == 0 {
+                v.files[l].len() as f64 / 4.0
             } else {
                 let mut max_bytes = 10.0 * f64::from(1 << 20);
                 for _ in 0..l - 1 {
                     max_bytes *= 10.0;
                 }
-                score = total_size(v.files[l].iter()) as f64 / max_bytes;
-            }
+                total_size(v.files[l].iter()) as f64 / max_bytes
+            };
             if let Some(ref mut b) = best_score {
                 if *b < score {
                     *b = score;
@@ -558,7 +561,7 @@ impl VersionSet {
     pub fn recover(&mut self) -> Result<bool> {
         assert!(self.current.is_some());
 
-        let mut current = read_current_file(&self.opt.env, &self.dbname)?;
+        let mut current = read_current_file(self.opt.env.as_ref().as_ref(), &self.dbname)?;
         let len = current.len();
         current.truncate(len - 1);
         let current = Path::new(&current);
@@ -652,7 +655,7 @@ impl VersionSet {
         );
 
         // A new manifest needs to be written only if we don't reuse the existing one.
-        Ok(!self.reuse_manifest(&descfilename, &current))
+        Ok(!self.reuse_manifest(&descfilename, current))
     }
 
     /// reuse_manifest checks whether the current manifest can be reused.
@@ -755,7 +758,7 @@ impl Builder {
     /// copied to the supplied compaction_ptrs array.
     fn apply(&mut self, edit: &VersionEdit, compaction_ptrs: &mut [Vec<u8>; NUM_LEVELS]) {
         for c in edit.compaction_ptrs.iter() {
-            compaction_ptrs[c.level] = c.key.clone();
+            compaction_ptrs[c.level].clone_from(&c.key);
         }
         for &(level, num) in edit.deleted.iter() {
             self.deleted[level].push(num);
@@ -856,7 +859,7 @@ fn current_file_name<P: AsRef<Path>>(dbname: P) -> PathBuf {
     dbname.as_ref().join("CURRENT").to_owned()
 }
 
-pub fn read_current_file(env: &Box<dyn Env>, dbname: &Path) -> Result<String> {
+pub fn read_current_file(env: &dyn Env, dbname: &Path) -> Result<String> {
     let mut current = String::new();
     let mut f = env.open_sequential_file(Path::new(&current_file_name(dbname)))?;
     f.read_to_string(&mut current)?;
@@ -870,7 +873,7 @@ pub fn read_current_file(env: &Box<dyn Env>, dbname: &Path) -> Result<String> {
 }
 
 pub fn set_current_file<P: AsRef<Path>>(
-    env: &Box<dyn Env>,
+    env: &dyn Env,
     dbname: P,
     manifest_file_num: FileNum,
 ) -> Result<()> {
@@ -886,13 +889,13 @@ pub fn set_current_file<P: AsRef<Path>>(
     if let Err(e) = env.rename(Path::new(&tempfile), Path::new(&currentfile)) {
         // ignore error.
         let _ = env.delete(Path::new(&tempfile));
-        return Err(Status::from(e));
+        return Err(e);
     }
     Ok(())
 }
 
 /// sort_files_by_smallest sorts the list of files by the smallest keys of the files.
-fn sort_files_by_smallest<C: Cmp>(cmp: &C, files: &mut Vec<FileMetaHandle>) {
+fn sort_files_by_smallest<C: Cmp>(cmp: &C, files: &mut [FileMetaHandle]) {
     files.sort_by(|a, b| cmp.cmp(&a.borrow().smallest, &b.borrow().smallest))
 }
 
@@ -975,26 +978,34 @@ mod tests {
     use crate::version::testutil::make_version;
 
     fn example_files() -> Vec<FileMetaHandle> {
-        let mut f1 = FileMetaData::default();
-        f1.num = 1;
-        f1.size = 10;
-        f1.smallest = "f".as_bytes().to_vec();
-        f1.largest = "g".as_bytes().to_vec();
-        let mut f2 = FileMetaData::default();
-        f2.num = 2;
-        f2.size = 20;
-        f2.smallest = "e".as_bytes().to_vec();
-        f2.largest = "f".as_bytes().to_vec();
-        let mut f3 = FileMetaData::default();
-        f3.num = 3;
-        f3.size = 30;
-        f3.smallest = "a".as_bytes().to_vec();
-        f3.largest = "b".as_bytes().to_vec();
-        let mut f4 = FileMetaData::default();
-        f4.num = 4;
-        f4.size = 40;
-        f4.smallest = "q".as_bytes().to_vec();
-        f4.largest = "z".as_bytes().to_vec();
+        let f1 = FileMetaData {
+            num: 1,
+            size: 10,
+            smallest: b"f".to_vec(),
+            largest: b"g".to_vec(),
+            ..Default::default()
+        };
+        let f2 = FileMetaData {
+            num: 2,
+            size: 20,
+            smallest: b"e".to_vec(),
+            largest: b"f".to_vec(),
+            ..Default::default()
+        };
+        let f3 = FileMetaData {
+            num: 3,
+            size: 30,
+            smallest: b"a".to_vec(),
+            largest: b"b".to_vec(),
+            ..Default::default()
+        };
+        let f4 = FileMetaData {
+            num: 4,
+            size: 40,
+            smallest: b"q".to_vec(),
+            largest: b"z".to_vec(),
+            ..Default::default()
+        };
         vec![f1, f2, f3, f4].into_iter().map(share).collect()
     }
 
@@ -1004,7 +1015,7 @@ mod tests {
         let v2 = vec![1, 3, 5, 7];
         assert_eq!(
             vec![1, 2, 3, 4, 5, 6, 7, 8, 10],
-            merge_iters(v1.into_iter(), v2.into_iter(), |a, b| a.cmp(&b))
+            merge_iters(v1.into_iter(), v2.into_iter(), |a, b| a.cmp(b))
         );
     }
 
@@ -1017,10 +1028,7 @@ mod tests {
     fn test_version_set_get_range() {
         let cmp = DefaultCmp;
         let fs = example_files();
-        assert_eq!(
-            ("a".as_bytes().to_vec(), "z".as_bytes().to_vec()),
-            get_range(&cmp, fs.iter())
-        );
+        assert_eq!((b"a".to_vec(), b"z".to_vec()), get_range(&cmp, fs.iter()));
     }
 
     #[test]
@@ -1028,29 +1036,27 @@ mod tests {
         let (v, opt) = make_version();
         let v = share(v);
 
-        let mut fmd = FileMetaData::default();
-        fmd.num = 21;
-        fmd.size = 123;
-        fmd.smallest = LookupKey::new("klm".as_bytes(), 777)
-            .internal_key()
-            .to_vec();
-        fmd.largest = LookupKey::new("kop".as_bytes(), 700)
-            .internal_key()
-            .to_vec();
+        let fmd = FileMetaData {
+            num: 21,
+            size: 123,
+            smallest: LookupKey::new(b"klm", 777).internal_key().to_vec(),
+            largest: LookupKey::new(b"kop", 700).internal_key().to_vec(),
+            ..Default::default()
+        };
 
         let mut ve = VersionEdit::new();
         ve.add_file(1, fmd);
         // This deletion should be undone by apply().
         ve.delete_file(1, 21);
         ve.delete_file(0, 2);
-        ve.set_compact_pointer(2, LookupKey::new("xxx".as_bytes(), 123).internal_key());
+        ve.set_compact_pointer(2, LookupKey::new(b"xxx", 123).internal_key());
 
         let mut b = Builder::new();
         let mut ptrs: [Vec<u8>; NUM_LEVELS] = Default::default();
         b.apply(&ve, &mut ptrs);
 
         assert_eq!(
-            &[120 as u8, 120, 120, 1, 123, 0, 0, 0, 0, 0, 0],
+            &[120_u8, 120, 120, 1, 123, 0, 0, 0, 0, 0, 0],
             ptrs[2].as_slice()
         );
         assert_eq!(2, b.deleted[0][0]);
@@ -1092,7 +1098,7 @@ mod tests {
             let mut lw = LogWriter::new(mffile);
             lw.add_record(&ve.encode()).unwrap();
             lw.flush().unwrap();
-            set_current_file(&opt.env.as_ref(), "db", 19).unwrap();
+            set_current_file(opt.env.as_ref().as_ref(), "db", 19).unwrap();
         }
 
         // Recover from new state.
@@ -1110,15 +1116,13 @@ mod tests {
         {
             let mut ve = VersionEdit::new();
             ve.set_log_num(11);
-            let mut fmd = FileMetaData::default();
-            fmd.num = 21;
-            fmd.size = 123;
-            fmd.smallest = LookupKey::new("abc".as_bytes(), 777)
-                .internal_key()
-                .to_vec();
-            fmd.largest = LookupKey::new("def".as_bytes(), 700)
-                .internal_key()
-                .to_vec();
+            let fmd = FileMetaData {
+                num: 21,
+                size: 123,
+                smallest: LookupKey::new(b"abc", 777).internal_key().to_vec(),
+                largest: LookupKey::new(b"def", 700).internal_key().to_vec(),
+                ..Default::default()
+            };
             ve.add_file(1, fmd);
             vs.log_and_apply(ve).unwrap();
 
@@ -1227,15 +1231,15 @@ mod tests {
             let v = vs.current();
             assert_eq!(
                 0,
-                vs.approximate_offset(&v, LookupKey::new("aaa".as_bytes(), 9000).internal_key())
+                vs.approximate_offset(&v, LookupKey::new(b"aaa", 9000).internal_key())
             );
             assert_eq!(
                 232,
-                vs.approximate_offset(&v, LookupKey::new("bab".as_bytes(), 9000).internal_key())
+                vs.approximate_offset(&v, LookupKey::new(b"bab", 9000).internal_key())
             );
             assert_eq!(
                 1134,
-                vs.approximate_offset(&v, LookupKey::new("fab".as_bytes(), 9000).internal_key())
+                vs.approximate_offset(&v, LookupKey::new(b"fab", 9000).internal_key())
             );
         }
         // The following tests reuse the same version set and verify that various compactions work
@@ -1243,8 +1247,8 @@ mod tests {
         {
             time_test!("compaction tests");
             // compact level 0 with a partial range.
-            let from = LookupKey::new("000".as_bytes(), 1000);
-            let to = LookupKey::new("ab".as_bytes(), 1010);
+            let from = LookupKey::new(b"000", 1000);
+            let to = LookupKey::new(b"ab", 1010);
             let c = vs
                 .compact_range(0, from.internal_key(), to.internal_key())
                 .unwrap();
@@ -1253,8 +1257,8 @@ mod tests {
             assert_eq!(1, c.grandparents.unwrap().len());
 
             // compact level 0, but entire range of keys in version.
-            let from = LookupKey::new("000".as_bytes(), 1000);
-            let to = LookupKey::new("zzz".as_bytes(), 1010);
+            let from = LookupKey::new(b"000", 1000);
+            let to = LookupKey::new(b"zzz", 1010);
             let c = vs
                 .compact_range(0, from.internal_key(), to.internal_key())
                 .unwrap();
@@ -1268,8 +1272,8 @@ mod tests {
             );
 
             // Expand input range on higher level.
-            let from = LookupKey::new("dab".as_bytes(), 1000);
-            let to = LookupKey::new("eab".as_bytes(), 1010);
+            let from = LookupKey::new(b"dab", 1000);
+            let to = LookupKey::new(b"eab", 1010);
             let c = vs
                 .compact_range(1, from.internal_key(), to.internal_key())
                 .unwrap();
@@ -1283,8 +1287,8 @@ mod tests {
             );
 
             // is_trivial_move
-            let from = LookupKey::new("fab".as_bytes(), 1000);
-            let to = LookupKey::new("fba".as_bytes(), 1010);
+            let from = LookupKey::new(b"fab", 1000);
+            let to = LookupKey::new(b"fba", 1010);
             let mut c = vs
                 .compact_range(2, from.internal_key(), to.internal_key())
                 .unwrap();
@@ -1293,9 +1297,9 @@ mod tests {
             assert!(c.is_trivial_move());
 
             // should_stop_before
-            let from = LookupKey::new("000".as_bytes(), 1000);
-            let to = LookupKey::new("zzz".as_bytes(), 1010);
-            let mid = LookupKey::new("abc".as_bytes(), 1010);
+            let from = LookupKey::new(b"000", 1000);
+            let to = LookupKey::new(b"zzz", 1010);
+            let mid = LookupKey::new(b"abc", 1010);
             let mut c = vs
                 .compact_range(0, from.internal_key(), to.internal_key())
                 .unwrap();
@@ -1304,17 +1308,17 @@ mod tests {
             assert!(!c.should_stop_before(to.internal_key()));
 
             // is_base_level_for
-            let from = LookupKey::new("000".as_bytes(), 1000);
-            let to = LookupKey::new("zzz".as_bytes(), 1010);
+            let from = LookupKey::new(b"000", 1000);
+            let to = LookupKey::new(b"zzz", 1010);
             let mut c = vs
                 .compact_range(0, from.internal_key(), to.internal_key())
                 .unwrap();
-            assert!(c.is_base_level_for("aaa".as_bytes()));
-            assert!(!c.is_base_level_for("hac".as_bytes()));
+            assert!(c.is_base_level_for(b"aaa"));
+            assert!(!c.is_base_level_for(b"hac"));
 
             // input/add_input_deletions
-            let from = LookupKey::new("000".as_bytes(), 1000);
-            let to = LookupKey::new("zzz".as_bytes(), 1010);
+            let from = LookupKey::new(b"000", 1000);
+            let to = LookupKey::new(b"zzz", 1010);
             let mut c = vs
                 .compact_range(0, from.internal_key(), to.internal_key())
                 .unwrap();

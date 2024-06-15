@@ -28,8 +28,10 @@ fn fill_db(db: &mut DB, entries: usize) -> Result<(), Box<dyn Error>> {
 }
 
 fn main() {
-    let mut opt = Options::default();
-    opt.compressor = compressor::SnappyCompressor::ID;
+    let opt = Options {
+        compressor: compressor::SnappyCompressor::ID,
+        ..Default::default()
+    };
     let mut db = DB::open("test1", opt).unwrap();
 
     fill_db(&mut db, 32768).unwrap();

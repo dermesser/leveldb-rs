@@ -247,7 +247,7 @@ mod tests {
 
     #[test]
     fn test_merging_behavior() {
-        let val = "def".as_bytes();
+        let val = b"def";
         let iter = TestLdbIter::new(vec![(b("aba"), val), (b("abc"), val)]);
         let iter2 = TestLdbIter::new(vec![(b("abb"), val), (b("abd"), val)]);
         let miter = MergingIter::new(
@@ -259,7 +259,7 @@ mod tests {
 
     #[test]
     fn test_merging_forward_backward() {
-        let val = "def".as_bytes();
+        let val = b"def";
         let iter = TestLdbIter::new(vec![(b("aba"), val), (b("abc"), val), (b("abe"), val)]);
         let iter2 = TestLdbIter::new(vec![(b("abb"), val), (b("abd"), val)]);
 
@@ -305,7 +305,7 @@ mod tests {
 
     #[test]
     fn test_merging_real() {
-        let val = "def".as_bytes();
+        let val = b"def";
 
         let it1 = TestLdbIter::new(vec![(b("aba"), val), (b("abc"), val), (b("abe"), val)]);
         let it2 = TestLdbIter::new(vec![(b("abb"), val), (b("abd"), val)]);
@@ -323,7 +323,7 @@ mod tests {
 
     #[test]
     fn test_merging_seek_reset() {
-        let val = "def".as_bytes();
+        let val = b"def";
 
         let it1 = TestLdbIter::new(vec![(b("aba"), val), (b("abc"), val), (b("abe"), val)]);
         let it2 = TestLdbIter::new(vec![(b("abb"), val), (b("abd"), val)]);
@@ -338,17 +338,17 @@ mod tests {
         assert!(iter.valid());
         assert!(current_key_val(&iter).is_some());
 
-        iter.seek("abc".as_bytes());
+        iter.seek(b"abc");
         assert_eq!(
             current_key_val(&iter),
             Some((b("abc").to_vec(), val.to_vec()))
         );
-        iter.seek("ab0".as_bytes());
+        iter.seek(b"ab0");
         assert_eq!(
             current_key_val(&iter),
             Some((b("aba").to_vec(), val.to_vec()))
         );
-        iter.seek("abx".as_bytes());
+        iter.seek(b"abx");
         assert_eq!(current_key_val(&iter), None);
 
         iter.reset();

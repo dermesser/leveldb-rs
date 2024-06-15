@@ -319,15 +319,15 @@ mod tests {
 
     fn get_data() -> Vec<(&'static [u8], &'static [u8])> {
         vec![
-            ("key1".as_bytes(), "value1".as_bytes()),
+            (b"key1", b"value1"),
             (
-                "loooooooooooooooooooooooooooooooooongerkey1".as_bytes(),
-                "shrtvl1".as_bytes(),
+                b"loooooooooooooooooooooooooooooooooongerkey1",
+                b"shrtvl1",
             ),
             ("medium length key 1".as_bytes(), "some value 2".as_bytes()),
-            ("prefix_key1".as_bytes(), "value".as_bytes()),
-            ("prefix_key2".as_bytes(), "value".as_bytes()),
-            ("prefix_key3".as_bytes(), "value".as_bytes()),
+            (b"prefix_key1", b"value"),
+            (b"prefix_key2", b"value"),
+            (b"prefix_key3", b"value"),
         ]
     }
 
@@ -358,9 +358,9 @@ mod tests {
 
         let block = Block::new(options::for_test(), blockc);
 
-        for _ in LdbIteratorIter::wrap(&mut block.iter()) {
+        LdbIteratorIter::wrap(&mut block.iter()).for_each(|_| {
             panic!("expected 0 iterations");
-        }
+        });
     }
 
     #[test]
@@ -403,7 +403,7 @@ mod tests {
         assert!(!block.valid());
         assert_eq!(
             block.next(),
-            Some(("key1".as_bytes().to_vec(), "value1".as_bytes().to_vec()))
+            Some((b"key1".to_vec(), b"value1".to_vec()))
         );
         assert!(block.valid());
         block.next();
@@ -412,22 +412,22 @@ mod tests {
         assert!(block.valid());
         assert_eq!(
             current_key_val(&block),
-            Some(("key1".as_bytes().to_vec(), "value1".as_bytes().to_vec()))
+            Some((b"key1".to_vec(), b"value1".to_vec()))
         );
         block.prev();
         assert!(!block.valid());
 
         // Verify that prev() from the last entry goes to the prev-to-last entry
         // (essentially, that next() returning None doesn't advance anything)
-        while let Some(_) = block.next() {}
+        while block.next().is_some() {}
 
         block.prev();
         assert!(block.valid());
         assert_eq!(
             current_key_val(&block),
             Some((
-                "prefix_key2".as_bytes().to_vec(),
-                "value".as_bytes().to_vec()
+                b"prefix_key2".to_vec(),
+                b"value".to_vec()
             ))
         );
     }
@@ -448,44 +448,44 @@ mod tests {
 
         let mut block = Block::new(o.clone(), block_contents).iter();
 
-        block.seek(&"prefix_key2".as_bytes());
+        block.seek(b"prefix_key2");
         assert!(block.valid());
         assert_eq!(
             current_key_val(&block),
             Some((
-                "prefix_key2".as_bytes().to_vec(),
-                "value".as_bytes().to_vec()
+                b"prefix_key2".to_vec(),
+                b"value".to_vec()
             ))
         );
 
-        block.seek(&"prefix_key0".as_bytes());
+        block.seek(b"prefix_key0");
         assert!(block.valid());
         assert_eq!(
             current_key_val(&block),
             Some((
-                "prefix_key1".as_bytes().to_vec(),
-                "value".as_bytes().to_vec()
+                b"prefix_key1".to_vec(),
+                b"value".to_vec()
             ))
         );
 
-        block.seek(&"key1".as_bytes());
+        block.seek(b"key1");
         assert!(block.valid());
         assert_eq!(
             current_key_val(&block),
-            Some(("key1".as_bytes().to_vec(), "value1".as_bytes().to_vec()))
+            Some((b"key1".to_vec(), b"value1".to_vec()))
         );
 
-        block.seek(&"prefix_key3".as_bytes());
+        block.seek(b"prefix_key3");
         assert!(block.valid());
         assert_eq!(
             current_key_val(&block),
             Some((
-                "prefix_key3".as_bytes().to_vec(),
-                "value".as_bytes().to_vec()
+                b"prefix_key3".to_vec(),
+                b"value".to_vec()
             ))
         );
 
-        block.seek(&"prefix_key8".as_bytes());
+        block.seek(b"prefix_key8");
         assert!(!block.valid());
         assert_eq!(current_key_val(&block), None);
     }
@@ -495,7 +495,7 @@ mod tests {
         let mut o = options::for_test();
 
         // Test with different number of restarts
-        for block_restart_interval in vec![2, 6, 10] {
+        for block_restart_interval in [2, 6, 10] {
             o.block_restart_interval = block_restart_interval;
 
             let data = get_data();
@@ -514,8 +514,8 @@ mod tests {
             assert_eq!(
                 current_key_val(&block),
                 Some((
-                    "prefix_key3".as_bytes().to_vec(),
-                    "value".as_bytes().to_vec()
+                    b"prefix_key3".to_vec(),
+                    b"value".to_vec()
                 ))
             );
         }

@@ -41,8 +41,7 @@ fn tag_to_enum(t: u32) -> Option<EditTag> {
 
 fn read_length_prefixed<R: Read>(reader: &mut R) -> Result<Vec<u8>> {
     if let Ok(klen) = reader.read_varint() {
-        let mut keybuf = Vec::new();
-        keybuf.resize(klen, 0);
+        let mut keybuf = vec![0; klen];
 
         if let Ok(l) = reader.read(&mut keybuf) {
             if l != klen {
@@ -291,6 +290,12 @@ impl VersionEdit {
         }
 
         Ok(ve)
+    }
+}
+
+impl Default for VersionEdit {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

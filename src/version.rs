@@ -31,6 +31,8 @@ pub struct Version {
     pub compaction_level: Option<usize>,
 }
 
+struct DoSearchResult(Option<(Vec<u8>, Vec<u8>)>, Vec<FileMetaHandle>);
+
 impl Version {
     pub fn new(cache: Shared<TableCache>, ucmp: Rc<Box<dyn Cmp>>) -> Version {
         Version {
@@ -291,11 +293,11 @@ impl Version {
 
         loop {
             match do_search(self, level, ubegin, uend) {
-                (Some((newubegin, newuend)), _) => {
+                DoSearchResult(Some((newubegin, newuend)), _) => {
                     ubegin = newubegin;
                     uend = newuend;
                 }
-                (None, result) => return result,
+                DoSearchResult(None, result) => return result,
             }
         }
 
@@ -307,7 +309,7 @@ impl Version {
             level: usize,
             ubegin: Vec<u8>,
             uend: Vec<u8>,
-        ) -> (Option<(Vec<u8>, Vec<u8>)>, Vec<FileMetaHandle>) {
+        ) -> DoSearchResult {
             let mut inputs = vec![];
             for f_ in myself.files[level].iter() {
                 let f = f_.borrow();
@@ -316,13 +318,14 @@ impl Version {
                     parse_internal_key(&f.largest).2,
                 );
                 // Skip files that are not overlapping.
-                if !ubegin.is_empty() && myself.user_cmp.cmp(flargest, &ubegin) == Ordering::Less {
-                    continue;
-                } else if !uend.is_empty()
-                    && myself.user_cmp.cmp(fsmallest, &uend) == Ordering::Greater
-                {
-                    continue;
-                } else {
+                let ubegin_nonempty = !ubegin.is_empty();
+                let uend_nonempty = !uend.is_empty();
+                let block_before_current =
+                    ubegin_nonempty && myself.user_cmp.cmp(flargest, &ubegin) == Ordering::Less;
+                let block_after_current =
+                    uend_nonempty && myself.user_cmp.cmp(fsmallest, &uend) == Ordering::Greater;
+                let is_overlapping = !(block_before_current || block_after_current);
+                if is_overlapping {
                     inputs.push(f_.clone());
                     // In level 0, files may overlap each other. Check if the new file begins
                     // before ubegin or ends after uend, and expand the range, if so. Then, restart
@@ -331,16 +334,18 @@ impl Version {
                         if !ubegin.is_empty()
                             && myself.user_cmp.cmp(fsmallest, &ubegin) == Ordering::Less
                         {
-                            return (Some((fsmallest.to_vec(), uend)), inputs);
+                            return DoSearchResult(Some((fsmallest.to_vec(), uend)), inputs);
                         } else if !uend.is_empty()
                             && myself.user_cmp.cmp(flargest, &uend) == Ordering::Greater
                         {
-                            return (Some((ubegin, flargest.to_vec())), inputs);
+                            return DoSearchResult(Some((ubegin, flargest.to_vec())), inputs);
                         }
                     }
+                } else {
+                    continue;
                 }
             }
-            (None, inputs)
+            DoSearchResult(None, inputs)
         }
     }
 
@@ -643,63 +648,63 @@ pub mod testutil {
 
         // Level 0 (overlapping)
         let f2: &[(&[u8], &[u8], ValueType)] = &[
-            ("aac".as_bytes(), "val1".as_bytes(), ValueType::TypeDeletion),
-            ("aax".as_bytes(), "val2".as_bytes(), ValueType::TypeValue),
-            ("aba".as_bytes(), "val3".as_bytes(), ValueType::TypeValue),
-            ("bab".as_bytes(), "val4".as_bytes(), ValueType::TypeValue),
-            ("bba".as_bytes(), "val5".as_bytes(), ValueType::TypeValue),
+            (b"aac", b"val1", ValueType::TypeDeletion),
+            (b"aax", b"val2", ValueType::TypeValue),
+            (b"aba", b"val3", ValueType::TypeValue),
+            (b"bab", b"val4", ValueType::TypeValue),
+            (b"bba", b"val5", ValueType::TypeValue),
         ];
         let t2 = write_table(env.as_ref().as_ref(), f2, 26, 2);
         let f1: &[(&[u8], &[u8], ValueType)] = &[
-            ("aaa".as_bytes(), "val1".as_bytes(), ValueType::TypeValue),
-            ("aab".as_bytes(), "val2".as_bytes(), ValueType::TypeValue),
-            ("aac".as_bytes(), "val3".as_bytes(), ValueType::TypeValue),
-            ("aba".as_bytes(), "val4".as_bytes(), ValueType::TypeValue),
+            (b"aaa", b"val1", ValueType::TypeValue),
+            (b"aab", b"val2", ValueType::TypeValue),
+            (b"aac", b"val3", ValueType::TypeValue),
+            (b"aba", b"val4", ValueType::TypeValue),
         ];
         let t1 = write_table(env.as_ref().as_ref(), f1, 22, 1);
         // Level 1
         let f3: &[(&[u8], &[u8], ValueType)] = &[
-            ("aaa".as_bytes(), "val0".as_bytes(), ValueType::TypeValue),
-            ("cab".as_bytes(), "val2".as_bytes(), ValueType::TypeValue),
-            ("cba".as_bytes(), "val3".as_bytes(), ValueType::TypeValue),
+            (b"aaa", b"val0", ValueType::TypeValue),
+            (b"cab", b"val2", ValueType::TypeValue),
+            (b"cba", b"val3", ValueType::TypeValue),
         ];
         let t3 = write_table(env.as_ref().as_ref(), f3, 19, 3);
         let f4: &[(&[u8], &[u8], ValueType)] = &[
-            ("daa".as_bytes(), "val1".as_bytes(), ValueType::TypeValue),
-            ("dab".as_bytes(), "val2".as_bytes(), ValueType::TypeValue),
-            ("dba".as_bytes(), "val3".as_bytes(), ValueType::TypeValue),
+            (b"daa", b"val1", ValueType::TypeValue),
+            (b"dab", b"val2", ValueType::TypeValue),
+            (b"dba", b"val3", ValueType::TypeValue),
         ];
         let t4 = write_table(env.as_ref().as_ref(), f4, 16, 4);
         let f5: &[(&[u8], &[u8], ValueType)] = &[
-            ("eaa".as_bytes(), "val1".as_bytes(), ValueType::TypeValue),
-            ("eab".as_bytes(), "val2".as_bytes(), ValueType::TypeValue),
-            ("fab".as_bytes(), "val3".as_bytes(), ValueType::TypeValue),
+            (b"eaa", b"val1", ValueType::TypeValue),
+            (b"eab", b"val2", ValueType::TypeValue),
+            (b"fab", b"val3", ValueType::TypeValue),
         ];
         let t5 = write_table(env.as_ref().as_ref(), f5, 13, 5);
         // Level 2
         let f6: &[(&[u8], &[u8], ValueType)] = &[
-            ("cab".as_bytes(), "val1".as_bytes(), ValueType::TypeValue),
-            ("fab".as_bytes(), "val2".as_bytes(), ValueType::TypeValue),
-            ("fba".as_bytes(), "val3".as_bytes(), ValueType::TypeValue),
+            (b"cab", b"val1", ValueType::TypeValue),
+            (b"fab", b"val2", ValueType::TypeValue),
+            (b"fba", b"val3", ValueType::TypeValue),
         ];
         let t6 = write_table(env.as_ref().as_ref(), f6, 10, 6);
         let f7: &[(&[u8], &[u8], ValueType)] = &[
-            ("gaa".as_bytes(), "val1".as_bytes(), ValueType::TypeValue),
-            ("gab".as_bytes(), "val2".as_bytes(), ValueType::TypeValue),
-            ("gba".as_bytes(), "val3".as_bytes(), ValueType::TypeValue),
-            ("gca".as_bytes(), "val4".as_bytes(), ValueType::TypeDeletion),
-            ("gda".as_bytes(), "val5".as_bytes(), ValueType::TypeValue),
+            (b"gaa", b"val1", ValueType::TypeValue),
+            (b"gab", b"val2", ValueType::TypeValue),
+            (b"gba", b"val3", ValueType::TypeValue),
+            (b"gca", b"val4", ValueType::TypeDeletion),
+            (b"gda", b"val5", ValueType::TypeValue),
         ];
         let t7 = write_table(env.as_ref().as_ref(), f7, 5, 7);
         // Level 3 (2 * 2 entries, for iterator behavior).
         let f8: &[(&[u8], &[u8], ValueType)] = &[
-            ("haa".as_bytes(), "val1".as_bytes(), ValueType::TypeValue),
-            ("hba".as_bytes(), "val2".as_bytes(), ValueType::TypeValue),
+            (b"haa", b"val1", ValueType::TypeValue),
+            (b"hba", b"val2", ValueType::TypeValue),
         ];
         let t8 = write_table(env.as_ref().as_ref(), f8, 3, 8);
         let f9: &[(&[u8], &[u8], ValueType)] = &[
-            ("iaa".as_bytes(), "val1".as_bytes(), ValueType::TypeValue),
-            ("iba".as_bytes(), "val2".as_bytes(), ValueType::TypeValue),
+            (b"iaa", b"val1", ValueType::TypeValue),
+            (b"iba", b"val2", ValueType::TypeValue),
         ];
         let t9 = write_table(env.as_ref().as_ref(), f9, 1, 9);
 
@@ -728,7 +733,7 @@ mod tests {
     fn test_version_concat_iter() {
         let v = make_version().0;
 
-        let expected_entries = vec![0, 9, 8, 4];
+        let expected_entries = [0, 9, 8, 4];
         (1..4).for_each(|l| {
             let mut iter = v.new_concat_iter(l);
             let iter = LdbIteratorIter::wrap(&mut iter);
@@ -760,7 +765,7 @@ mod tests {
         assert_eq!(LdbIteratorIter::wrap(&mut miter).count(), 30);
 
         // Check that all elements are in order.
-        let init = LookupKey::new("000".as_bytes(), MAX_SEQUENCE_NUMBER);
+        let init = LookupKey::new(b"000", MAX_SEQUENCE_NUMBER);
         let cmp = InternalKeyCmp(Rc::new(Box::new(DefaultCmp)));
         LdbIteratorIter::wrap(&mut miter).fold(init.internal_key().to_vec(), |b, (k, _)| {
             assert!(cmp.cmp(&b, &k) == Ordering::Less);
@@ -781,31 +786,31 @@ mod tests {
     fn test_version_get_simple() {
         let v = make_version().0;
         let cases: &[(&[u8], u64, Result<Option<Vec<u8>>>)] = &[
-            ("aaa".as_bytes(), 1, Ok(None)),
-            ("aaa".as_bytes(), 100, Ok(Some("val1".as_bytes().to_vec()))),
-            ("aaa".as_bytes(), 21, Ok(Some("val0".as_bytes().to_vec()))),
-            ("aab".as_bytes(), 0, Ok(None)),
-            ("aab".as_bytes(), 100, Ok(Some("val2".as_bytes().to_vec()))),
-            ("aac".as_bytes(), 100, Ok(None)),
-            ("aac".as_bytes(), 25, Ok(Some("val3".as_bytes().to_vec()))),
-            ("aba".as_bytes(), 100, Ok(Some("val3".as_bytes().to_vec()))),
-            ("aba".as_bytes(), 25, Ok(Some("val4".as_bytes().to_vec()))),
-            ("daa".as_bytes(), 100, Ok(Some("val1".as_bytes().to_vec()))),
-            ("dab".as_bytes(), 1, Ok(None)),
-            ("dac".as_bytes(), 100, Ok(None)),
-            ("gba".as_bytes(), 100, Ok(Some("val3".as_bytes().to_vec()))),
+            (b"aaa", 1, Ok(None)),
+            (b"aaa", 100, Ok(Some("val1".as_bytes().to_vec()))),
+            (b"aaa", 21, Ok(Some("val0".as_bytes().to_vec()))),
+            (b"aab", 0, Ok(None)),
+            (b"aab", 100, Ok(Some("val2".as_bytes().to_vec()))),
+            (b"aac", 100, Ok(None)),
+            (b"aac", 25, Ok(Some("val3".as_bytes().to_vec()))),
+            (b"aba", 100, Ok(Some("val3".as_bytes().to_vec()))),
+            (b"aba", 25, Ok(Some("val4".as_bytes().to_vec()))),
+            (b"daa", 100, Ok(Some("val1".as_bytes().to_vec()))),
+            (b"dab", 1, Ok(None)),
+            (b"dac", 100, Ok(None)),
+            (b"gba", 100, Ok(Some("val3".as_bytes().to_vec()))),
             // deleted key
-            ("gca".as_bytes(), 100, Ok(None)),
-            ("gbb".as_bytes(), 100, Ok(None)),
+            (b"gca", 100, Ok(None)),
+            (b"gbb", 100, Ok(None)),
         ];
 
-        for c in cases {
-            match v.get(LookupKey::new(c.0, c.1).internal_key()) {
+        cases
+            .iter()
+            .for_each(|c| match v.get(LookupKey::new(c.0, c.1).internal_key()) {
                 Ok(Some((val, _))) => assert_eq!(c.2.as_ref().unwrap().as_ref().unwrap(), &val),
                 Ok(None) => assert!(c.2.as_ref().unwrap().as_ref().is_none()),
                 Err(_) => assert!(c.2.is_err()),
-            }
-        }
+            });
     }
 
     #[test]

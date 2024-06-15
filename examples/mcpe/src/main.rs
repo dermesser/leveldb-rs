@@ -73,7 +73,7 @@ pub fn mcpe_options(compression_level: u8) -> Options {
     //
     // Compression id will be use in [here](https://github.com/reedacartwright/rbedrock/blob/fb32a899da4e15c1aaa0d6de2b459e914e183516/src/leveldb-mcpe/table/format.cc#L125-L150)
     let mut list = CompressorList::new();
-    list.set_with_id(0, NoneCompressor::default());
+    list.set_with_id(0, NoneCompressor {});
     list.set_with_id(2, ZlibCompressor::new(compression_level));
     list.set_with_id(4, RawZlibCompressor::new(compression_level));
     opt.compressor_list = Rc::new(list);
