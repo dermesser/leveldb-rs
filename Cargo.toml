@@ -9,14 +9,14 @@ readme = "README.md"
 keywords = ["LevelDB", "key-value", "database", "SSTable", "Google"]
 license = "MIT"
 publish = true
-edition = "2018"
+edition = "2021"
 include = ["src/**/*", "src/*", "Cargo.toml", "LICENSE", "README.md"]
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-crc = "1.8"
+crc = "3.2"
 integer-encoding = "3.0"
 rand = "0.8.5"
 snap = "1.0"

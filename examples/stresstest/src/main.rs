@@ -16,7 +16,7 @@ fn write(db: &mut DB, n: usize) {
         let (k, v) = (gen_string(KEY_LEN), gen_string(VAL_LEN));
 
         db.put(k.as_bytes(), v.as_bytes()).unwrap();
-        if i % (n/100) == 0 {
+        if i % (n / 100) == 0 {
             println!("{}/100 ...", i * 100 / n);
             db.flush().unwrap();
         }

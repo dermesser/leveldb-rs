@@ -23,8 +23,6 @@
 
 #![allow(dead_code)]
 
-extern crate crc;
-
 #[cfg(feature = "fs")]
 extern crate errno;
 
@@ -50,6 +48,7 @@ mod block_builder;
 mod blockhandle;
 mod cache;
 mod cmp;
+mod crc;
 
 #[cfg(feature = "fs")]
 mod disk_env;
@@ -80,8 +79,8 @@ mod write_batch;
 mod db_impl;
 mod db_iter;
 
-pub mod env;
 pub mod compressor;
+pub mod env;
 
 #[cfg(feature = "async")]
 pub use asyncdb::AsyncDB;

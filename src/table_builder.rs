@@ -3,6 +3,7 @@ use crate::block_builder::BlockBuilder;
 use crate::blockhandle::BlockHandle;
 use crate::cmp::InternalKeyCmp;
 use crate::compressor::{self, Compressor, CompressorId};
+use crate::crc;
 use crate::error::Result;
 use crate::filter::{InternalFilterPolicy, NoFilterPolicy};
 use crate::filter_block::FilterBlockBuilder;
@@ -14,8 +15,6 @@ use std::cmp::Ordering;
 use std::io::Write;
 use std::rc::Rc;
 
-use crc::crc32;
-use crc::Hasher32;
 use integer_encoding::FixedIntWriter;
 
 pub const FOOTER_LENGTH: usize = 40;
@@ -209,14 +208,14 @@ impl<Dst: Write> TableBuilder<Dst> {
         let (ctype, compressor) = compressor_id_pair;
         let data = compressor.encode(block)?;
 
-        let mut digest = crc32::Digest::new(crc32::CASTAGNOLI);
+        let mut digest = crc::digest();
 
-        digest.write(&data);
-        digest.write(&[ctype; TABLE_BLOCK_COMPRESS_LEN]);
+        digest.update(&data);
+        digest.update(&[ctype; TABLE_BLOCK_COMPRESS_LEN]);
 
         self.dst.write(&data)?;
         self.dst.write(&[ctype; TABLE_BLOCK_COMPRESS_LEN])?;
-        self.dst.write_fixedint(mask_crc(digest.sum32()))?;
+        self.dst.write_fixedint(mask_crc(digest.finalize()))?;
 
         let handle = BlockHandle::new(self.offset, data.len());
         self.offset += data.len() + TABLE_BLOCK_COMPRESS_LEN + TABLE_BLOCK_CKSUM_LEN;
