@@ -356,7 +356,7 @@ impl<T> ReceiverExt<T> for mpsc::Receiver<T> {
     }
 
     fn close(&mut self) {
-        self.close();
+        mpsc::Receiver::close(self);
     }
 }
 
