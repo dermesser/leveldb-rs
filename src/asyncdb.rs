@@ -4,9 +4,17 @@ use std::sync::Arc;
 
 use crate::{Options, Result, Status, StatusCode, WriteBatch, DB};
 
+#[cfg(feature = "asyncdb-tokio")]
 use tokio::sync::mpsc;
+#[cfg(feature = "asyncdb-tokio")]
 use tokio::sync::oneshot;
+#[cfg(feature = "asyncdb-tokio")]
 use tokio::task::{spawn_blocking, JoinHandle};
+
+#[cfg(feature = "asyncdb-async-std")]
+use async_std::channel;
+#[cfg(feature = "asyncdb-async-std")]
+use async_std::task::{spawn_blocking, JoinHandle};
 
 const CHANNEL_BUFFER_SIZE: usize = 32;
 
@@ -38,7 +46,10 @@ enum Response {
 /// Contains both a request and a back-channel for the reply.
 struct Message {
     req: Request,
+    #[cfg(feature = "asyncdb-tokio")]
     resp_channel: oneshot::Sender<Response>,
+    #[cfg(feature = "asyncdb-async-std")]
+    resp_channel: channel::Sender<Response>,
 }
 
 /// `AsyncDB` makes it easy to use LevelDB in a tokio runtime.
@@ -49,14 +60,22 @@ struct Message {
 #[derive(Clone)]
 pub struct AsyncDB {
     jh: Arc<JoinHandle<()>>,
+    #[cfg(feature = "asyncdb-tokio")]
     send: mpsc::Sender<Message>,
+    #[cfg(feature = "asyncdb-async-std")]
+    send: channel::Sender<Message>,
 }
 
 impl AsyncDB {
     /// Create a new or open an existing database.
     pub fn new<P: AsRef<Path>>(name: P, opts: Options) -> Result<AsyncDB> {
         let db = DB::open(name, opts)?;
+        #[cfg(feature = "asyncdb-tokio")]
         let (send, recv) = mpsc::channel(CHANNEL_BUFFER_SIZE);
+
+        #[cfg(feature = "asyncdb-async-std")]
+        let (send, recv) = channel::bounded(CHANNEL_BUFFER_SIZE);
+
         let jh = spawn_blocking(move || AsyncDB::run_server(db, recv));
         Ok(AsyncDB {
             jh: Arc::new(jh),
@@ -183,7 +202,12 @@ impl AsyncDB {
     }
 
     async fn process_request(&self, req: Request) -> Result<Response> {
+        #[cfg(feature = "asyncdb-tokio")]
         let (tx, rx) = oneshot::channel();
+
+        #[cfg(feature = "asyncdb-async-std")]
+        let (tx, rx) = channel::bounded(1);
+
         let m = Message {
             req,
             resp_channel: tx,
@@ -194,7 +218,11 @@ impl AsyncDB {
                 err: e.to_string(),
             });
         }
+        #[cfg(feature = "asyncdb-tokio")]
         let resp = rx.await;
+
+        #[cfg(feature = "asyncdb-async-std")]
+        let resp = rx.recv().await;
         match resp {
             Err(e) => Err(Status {
                 code: StatusCode::AsyncError,
@@ -204,82 +232,141 @@ impl AsyncDB {
         }
     }
 
-    fn run_server(mut db: DB, mut recv: mpsc::Receiver<Message>) {
-        let mut snapshots = HashMap::new();
-        let mut snapshot_counter: usize = 0;
+    fn _run_server(mut db: DB, mut recv: impl ReceiverExt<Message>) {
+        {
+            let mut snapshots = HashMap::new();
+            let mut snapshot_counter: usize = 0;
 
-        while let Some(message) = recv.blocking_recv() {
-            match message.req {
-                Request::Close => {
-                    message.resp_channel.send(Response::OK).ok();
-                    recv.close();
-                    return;
-                }
-                Request::Put { key, val } => {
-                    let ok = db.put(&key, &val);
-                    send_response(message.resp_channel, ok);
-                }
-                Request::Delete { key } => {
-                    let ok = db.delete(&key);
-                    send_response(message.resp_channel, ok);
-                }
-                Request::Write { batch, sync } => {
-                    let ok = db.write(batch, sync);
-                    send_response(message.resp_channel, ok);
-                }
-                Request::Flush => {
-                    let ok = db.flush();
-                    send_response(message.resp_channel, ok);
-                }
-                Request::GetAt { snapshot, key } => {
-                    let snapshot_id = snapshot.0;
-                    if let Some(snapshot) = snapshots.get(&snapshot_id) {
-                        let ok = db.get_at(snapshot, &key);
-                        match ok {
-                            Err(e) => {
-                                message.resp_channel.send(Response::Error(e)).ok();
-                            }
-                            Ok(v) => {
-                                message.resp_channel.send(Response::Value(v)).ok();
-                            }
-                        };
-                    } else {
-                        message
-                            .resp_channel
-                            .send(Response::Error(Status {
-                                code: StatusCode::AsyncError,
-                                err: "Unknown snapshot reference: this is a bug".to_string(),
-                            }))
-                            .ok();
+            while let Some(message) = recv.blocking_recv() {
+                match message.req {
+                    Request::Close => {
+                        send_response(message.resp_channel, Response::OK);
+                        recv.close();
+                        return;
                     }
-                }
-                Request::Get { key } => {
-                    let r = db.get(&key);
-                    message.resp_channel.send(Response::Value(r)).ok();
-                }
-                Request::GetSnapshot => {
-                    snapshots.insert(snapshot_counter, db.get_snapshot());
-                    let sref = SnapshotRef(snapshot_counter);
-                    snapshot_counter += 1;
-                    message.resp_channel.send(Response::Snapshot(sref)).ok();
-                }
-                Request::DropSnapshot { snapshot } => {
-                    snapshots.remove(&snapshot.0);
-                    send_response(message.resp_channel, Ok(()));
-                }
-                Request::CompactRange { from, to } => {
-                    let ok = db.compact_range(&from, &to);
-                    send_response(message.resp_channel, ok);
+                    Request::Put { key, val } => {
+                        let ok = db.put(&key, &val);
+                        send_response_result(message.resp_channel, ok);
+                    }
+                    Request::Delete { key } => {
+                        let ok = db.delete(&key);
+                        send_response_result(message.resp_channel, ok);
+                    }
+                    Request::Write { batch, sync } => {
+                        let ok = db.write(batch, sync);
+                        send_response_result(message.resp_channel, ok);
+                    }
+                    Request::Flush => {
+                        let ok = db.flush();
+                        send_response_result(message.resp_channel, ok);
+                    }
+                    Request::GetAt { snapshot, key } => {
+                        let snapshot_id = snapshot.0;
+                        if let Some(snapshot) = snapshots.get(&snapshot_id) {
+                            let ok = db.get_at(snapshot, &key);
+                            match ok {
+                                Err(e) => {
+                                    send_response(message.resp_channel, Response::Error(e));
+                                }
+                                Ok(v) => {
+                                    send_response(message.resp_channel, Response::Value(v));
+                                }
+                            };
+                        } else {
+                            send_response(
+                                message.resp_channel,
+                                Response::Error(Status {
+                                    code: StatusCode::AsyncError,
+                                    err: "Unknown snapshot reference: this is a bug".to_string(),
+                                }),
+                            );
+                        }
+                    }
+                    Request::Get { key } => {
+                        let r = db.get(&key);
+                        send_response(message.resp_channel, Response::Value(r));
+                    }
+                    Request::GetSnapshot => {
+                        snapshots.insert(snapshot_counter, db.get_snapshot());
+                        let sref = SnapshotRef(snapshot_counter);
+                        snapshot_counter += 1;
+                        send_response(message.resp_channel, Response::Snapshot(sref));
+                    }
+                    Request::DropSnapshot { snapshot } => {
+                        snapshots.remove(&snapshot.0);
+                        send_response_result(message.resp_channel, Ok(()));
+                    }
+                    Request::CompactRange { from, to } => {
+                        let ok = db.compact_range(&from, &to);
+                        send_response_result(message.resp_channel, ok);
+                    }
                 }
             }
         }
     }
+
+    #[cfg(feature = "asyncdb-tokio")]
+    fn run_server(db: DB, recv: mpsc::Receiver<Message>) {
+        Self::_run_server(db, recv);
+    }
+
+    #[cfg(feature = "asyncdb-async-std")]
+    fn run_server(db: DB, recv: channel::Receiver<Message>) {
+        Self::_run_server(db, recv);
+    }
 }
 
-fn send_response(ch: oneshot::Sender<Response>, result: Result<()>) {
+#[cfg(feature = "asyncdb-tokio")]
+fn send_response_result(ch: oneshot::Sender<Response>, result: Result<()>) {
     if let Err(e) = result {
         ch.send(Response::Error(e)).ok();
     } else {
         ch.send(Response::OK).ok();
+    }
+}
+
+#[cfg(feature = "asyncdb-async-std")]
+fn send_response_result(ch: channel::Sender<Response>, result: Result<()>) {
+    if let Err(e) = result {
+        ch.try_send(Response::Error(e)).ok();
+    } else {
+        ch.try_send(Response::OK).ok();
+    }
+}
+
+#[cfg(feature = "asyncdb-tokio")]
+fn send_response(ch: oneshot::Sender<Response>, res: Response) {
+    ch.send(res).ok();
+}
+
+#[cfg(feature = "asyncdb-async-std")]
+fn send_response(ch: channel::Sender<Response>, res: Response) {
+    ch.send_blocking(res).ok();
+}
+
+trait ReceiverExt<T> {
+    fn blocking_recv(&mut self) -> Option<T>;
+    fn close(&mut self);
+}
+
+#[cfg(feature = "asyncdb-tokio")]
+impl<T> ReceiverExt<T> for mpsc::Receiver<T> {
+    fn blocking_recv(&mut self) -> Option<T> {
+        self.blocking_recv()
+    }
+
+    fn close(&mut self) {
+        self.close();
+    }
+}
+
+#[cfg(feature = "asyncdb-async-std")]
+impl<T> ReceiverExt<T> for channel::Receiver<T> {
+    fn blocking_recv(&mut self) -> Option<T> {
+        self.recv_blocking().ok()
+    }
+
+    fn close(&mut self) {
+        channel::Receiver::close(self);
     }
 }

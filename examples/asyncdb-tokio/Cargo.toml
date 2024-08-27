@@ -6,5 +6,5 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tokio = { version = "1.21", features = ["rt", "macros" ] }
-rusty-leveldb = { path = "../../", features = ["async"] }
+tokio = { version = "1.21", features = ["rt", "macros"] }
+rusty-leveldb = { path = "../../", features = ["asyncdb-tokio"] }

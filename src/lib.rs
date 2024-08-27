@@ -40,7 +40,7 @@ extern crate time_test;
 #[macro_use]
 mod infolog;
 
-#[cfg(feature = "async")]
+#[cfg(feature = "asyncdb")]
 mod asyncdb;
 
 mod block;
@@ -82,7 +82,7 @@ mod db_iter;
 pub mod compressor;
 pub mod env;
 
-#[cfg(feature = "async")]
+#[cfg(feature = "asyncdb")]
 pub use asyncdb::AsyncDB;
 
 pub use cmp::{Cmp, DefaultCmp};
