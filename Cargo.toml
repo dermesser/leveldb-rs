@@ -50,7 +50,8 @@ members = [
     "examples/leveldb-tool",
     "examples/word-analyze",
     "examples/stresstest",
-    "examples/asyncdb",
+    "examples/asyncdb-tokio",
+    "examples/asyncdb-async-std",
     "examples/mcpe",
     "examples/kvserver",
 ]
