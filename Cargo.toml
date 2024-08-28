@@ -30,9 +30,8 @@ async-std = { optional = true, version = "1.12.0" }
 [features]
 default = ["fs"]
 async = ["asyncdb-tokio"]
-asyncdb-tokio = ["dep:tokio", "asyncdb"]
-asyncdb-async-std = ["dep:async-std", "asyncdb"]
-asyncdb = []
+asyncdb-tokio = ["tokio"]
+asyncdb-async-std = ["async-std"]
 fs = ["errno", "fs2"]
 
 [dev-dependencies]
