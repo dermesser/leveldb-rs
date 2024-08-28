@@ -26,17 +26,25 @@ fs2 = { optional = true, version = "0.4.3" }
 
 tokio = { optional = true, features = ["rt", "sync"], version = "1.39.3" }
 async-std = { optional = true, version = "1.12.0" }
+wasm-bindgen-futures = { optional = true, version = "0.4.24" }
+getrandom = { optional = true, version = "0.2.15", features = ["js"] }
 
 [features]
-default = ["fs"]
+default = ["fs", "asyncdb-wasm-bindgen-futures"]
 async = ["asyncdb-tokio"]
 asyncdb-tokio = ["tokio"]
 asyncdb-async-std = ["async-std"]
+asyncdb-wasm-bindgen-futures = [
+    "wasm-bindgen-futures",
+    "async-std/async-channel",
+    "getrandom",
+]
 fs = ["errno", "fs2"]
 
 [dev-dependencies]
 time-test = "0.2"
 bencher = "0.1"
+wasm-bindgen-test = "0.3.0"
 
 [[bench]]
 name = "maps_bench"

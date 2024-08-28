@@ -40,7 +40,11 @@ extern crate time_test;
 #[macro_use]
 mod infolog;
 
-#[cfg(any(feature = "asyncdb-tokio", feature = "asyncdb-async-std"))]
+#[cfg(any(
+    feature = "asyncdb-tokio",
+    feature = "asyncdb-async-std",
+    feature = "asyncdb-wasm-bindgen-futures"
+))]
 mod asyncdb;
 
 #[cfg(feature = "asyncdb-tokio")]
@@ -52,6 +56,11 @@ use asyncdb_tokio::{send_response, send_response_result, Message};
 mod asyncdb_async_std;
 #[cfg(feature = "asyncdb-async-std")]
 use asyncdb_async_std::{send_response, send_response_result, Message};
+
+#[cfg(feature = "asyncdb-wasm-bindgen-futures")]
+mod asyncdb_wasm_bindgen_futures;
+#[cfg(feature = "asyncdb-wasm-bindgen-futures")]
+use self::asyncdb_wasm_bindgen_futures::{send_response, send_response_result, Message};
 
 mod block;
 mod block_builder;
@@ -96,6 +105,8 @@ pub mod env;
 pub use asyncdb_async_std::AsyncDB;
 #[cfg(feature = "asyncdb-tokio")]
 pub use asyncdb_tokio::AsyncDB;
+#[cfg(feature = "asyncdb-wasm-bindgen-futures")]
+pub use asyncdb_wasm_bindgen_futures::AsyncDB;
 pub use cmp::{Cmp, DefaultCmp};
 pub use compressor::{Compressor, CompressorId};
 pub use db_impl::DB;

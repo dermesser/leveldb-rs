@@ -11,6 +11,7 @@ pub(crate) struct Message {
     pub(crate) req: Request,
     pub(crate) resp_channel: channel::Sender<Response>,
 }
+
 /// `AsyncDB` makes it easy to use LevelDB in a async-std runtime.
 /// The methods follow very closely the main API (see `DB` type). Iteration is not yet implemented.
 #[derive(Clone)]
