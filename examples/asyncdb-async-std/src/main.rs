@@ -1,8 +1,6 @@
-use tokio::main;
-
 use rusty_leveldb::{AsyncDB, Options, Status, StatusCode};
 
-#[main(flavor = "current_thread")]
+#[async_std::main]
 async fn main() {
     let adb = AsyncDB::new("testdb", Options::default()).unwrap();
 
