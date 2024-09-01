@@ -22,13 +22,16 @@ rand = "0.8.5"
 snap = "1.0"
 
 errno = { optional = true, version = "0.2" }
-fs2 = {optional = true, version = "0.4.3"}
+fs2 = { optional = true, version = "0.4.3" }
 
-tokio = { optional = true, features = ["rt", "sync"], version = ">= 1.21" }
+tokio = { optional = true, features = ["rt", "sync"], version = "1.39.3" }
+async-std = { optional = true, version = "1.12.0" }
 
 [features]
 default = ["fs"]
-async = ["tokio"]
+async = ["asyncdb-tokio"]
+asyncdb-tokio = ["tokio"]
+asyncdb-async-std = ["async-std"]
 fs = ["errno", "fs2"]
 
 [dev-dependencies]
@@ -46,7 +49,8 @@ members = [
     "examples/leveldb-tool",
     "examples/word-analyze",
     "examples/stresstest",
-    "examples/asyncdb",
+    "examples/asyncdb-tokio",
+    "examples/asyncdb-async-std",
     "examples/mcpe",
     "examples/kvserver",
 ]

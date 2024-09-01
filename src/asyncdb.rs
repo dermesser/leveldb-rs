@@ -1,20 +1,17 @@
 use std::collections::hash_map::HashMap;
-use std::path::Path;
-use std::sync::Arc;
 
-use crate::{Options, Result, Status, StatusCode, WriteBatch, DB};
+use crate::{
+    send_response, send_response_result, AsyncDB, Message, Result, Status, StatusCode, WriteBatch,
+    DB,
+};
 
-use tokio::sync::mpsc;
-use tokio::sync::oneshot;
-use tokio::task::{spawn_blocking, JoinHandle};
-
-const CHANNEL_BUFFER_SIZE: usize = 32;
+pub(crate) const CHANNEL_BUFFER_SIZE: usize = 32;
 
 #[derive(Clone, Copy)]
 pub struct SnapshotRef(usize);
 
 /// A request sent to the database thread.
-enum Request {
+pub(crate) enum Request {
     Close,
     Put { key: Vec<u8>, val: Vec<u8> },
     Delete { key: Vec<u8> },
@@ -28,42 +25,14 @@ enum Request {
 }
 
 /// A response received from the database thread.
-enum Response {
+pub(crate) enum Response {
     OK,
     Error(Status),
     Value(Option<Vec<u8>>),
     Snapshot(SnapshotRef),
 }
 
-/// Contains both a request and a back-channel for the reply.
-struct Message {
-    req: Request,
-    resp_channel: oneshot::Sender<Response>,
-}
-
-/// `AsyncDB` makes it easy to use LevelDB in a tokio runtime.
-/// The methods follow very closely the main API (see `DB` type). Iteration is not yet implemented.
-///
-/// TODO: Make it work in other runtimes as well. This is a matter of adapting the blocking thread
-/// mechanism as well as the channel types.
-#[derive(Clone)]
-pub struct AsyncDB {
-    jh: Arc<JoinHandle<()>>,
-    send: mpsc::Sender<Message>,
-}
-
 impl AsyncDB {
-    /// Create a new or open an existing database.
-    pub fn new<P: AsRef<Path>>(name: P, opts: Options) -> Result<AsyncDB> {
-        let db = DB::open(name, opts)?;
-        let (send, recv) = mpsc::channel(CHANNEL_BUFFER_SIZE);
-        let jh = spawn_blocking(move || AsyncDB::run_server(db, recv));
-        Ok(AsyncDB {
-            jh: Arc::new(jh),
-            send,
-        })
-    }
-
     pub async fn close(&self) -> Result<()> {
         let r = self.process_request(Request::Close).await?;
         match r {
@@ -182,54 +151,32 @@ impl AsyncDB {
         }
     }
 
-    async fn process_request(&self, req: Request) -> Result<Response> {
-        let (tx, rx) = oneshot::channel();
-        let m = Message {
-            req,
-            resp_channel: tx,
-        };
-        if let Err(e) = self.send.send(m).await {
-            return Err(Status {
-                code: StatusCode::AsyncError,
-                err: e.to_string(),
-            });
-        }
-        let resp = rx.await;
-        match resp {
-            Err(e) => Err(Status {
-                code: StatusCode::AsyncError,
-                err: e.to_string(),
-            }),
-            Ok(r) => Ok(r),
-        }
-    }
-
-    fn run_server(mut db: DB, mut recv: mpsc::Receiver<Message>) {
+    pub(crate) fn run_server(mut db: DB, mut recv: impl ReceiverExt<Message>) {
         let mut snapshots = HashMap::new();
         let mut snapshot_counter: usize = 0;
 
         while let Some(message) = recv.blocking_recv() {
             match message.req {
                 Request::Close => {
-                    message.resp_channel.send(Response::OK).ok();
+                    send_response(message.resp_channel, Response::OK);
                     recv.close();
                     return;
                 }
                 Request::Put { key, val } => {
                     let ok = db.put(&key, &val);
-                    send_response(message.resp_channel, ok);
+                    send_response_result(message.resp_channel, ok);
                 }
                 Request::Delete { key } => {
                     let ok = db.delete(&key);
-                    send_response(message.resp_channel, ok);
+                    send_response_result(message.resp_channel, ok);
                 }
                 Request::Write { batch, sync } => {
                     let ok = db.write(batch, sync);
-                    send_response(message.resp_channel, ok);
+                    send_response_result(message.resp_channel, ok);
                 }
                 Request::Flush => {
                     let ok = db.flush();
-                    send_response(message.resp_channel, ok);
+                    send_response_result(message.resp_channel, ok);
                 }
                 Request::GetAt { snapshot, key } => {
                     let snapshot_id = snapshot.0;
@@ -237,49 +184,46 @@ impl AsyncDB {
                         let ok = db.get_at(snapshot, &key);
                         match ok {
                             Err(e) => {
-                                message.resp_channel.send(Response::Error(e)).ok();
+                                send_response(message.resp_channel, Response::Error(e));
                             }
                             Ok(v) => {
-                                message.resp_channel.send(Response::Value(v)).ok();
+                                send_response(message.resp_channel, Response::Value(v));
                             }
                         };
                     } else {
-                        message
-                            .resp_channel
-                            .send(Response::Error(Status {
+                        send_response(
+                            message.resp_channel,
+                            Response::Error(Status {
                                 code: StatusCode::AsyncError,
                                 err: "Unknown snapshot reference: this is a bug".to_string(),
-                            }))
-                            .ok();
+                            }),
+                        );
                     }
                 }
                 Request::Get { key } => {
                     let r = db.get(&key);
-                    message.resp_channel.send(Response::Value(r)).ok();
+                    send_response(message.resp_channel, Response::Value(r));
                 }
                 Request::GetSnapshot => {
                     snapshots.insert(snapshot_counter, db.get_snapshot());
                     let sref = SnapshotRef(snapshot_counter);
                     snapshot_counter += 1;
-                    message.resp_channel.send(Response::Snapshot(sref)).ok();
+                    send_response(message.resp_channel, Response::Snapshot(sref));
                 }
                 Request::DropSnapshot { snapshot } => {
                     snapshots.remove(&snapshot.0);
-                    send_response(message.resp_channel, Ok(()));
+                    send_response_result(message.resp_channel, Ok(()));
                 }
                 Request::CompactRange { from, to } => {
                     let ok = db.compact_range(&from, &to);
-                    send_response(message.resp_channel, ok);
+                    send_response_result(message.resp_channel, ok);
                 }
             }
         }
     }
 }
 
-fn send_response(ch: oneshot::Sender<Response>, result: Result<()>) {
-    if let Err(e) = result {
-        ch.send(Response::Error(e)).ok();
-    } else {
-        ch.send(Response::OK).ok();
-    }
+pub(crate) trait ReceiverExt<T> {
+    fn blocking_recv(&mut self) -> Option<T>;
+    fn close(&mut self);
 }
