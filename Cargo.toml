@@ -1,6 +1,6 @@
 [package]
 name = "rusty-leveldb"
-version = "3.0.0"
+version = "3.0.1"
 authors = ["Lewin Bormann <lbo@spheniscida.de>"]
 description = "A compatible re-implementation of LevelDB in Rust"
 homepage = "https://github.com/dermesser/leveldb-rs"
@@ -35,7 +35,7 @@ asyncdb-async-std = ["async-std"]
 fs = ["errno", "fs2"]
 
 [dev-dependencies]
-time-test = "0.2"
+time-test = "0.3"
 bencher = "0.1"
 
 [[bench]]
