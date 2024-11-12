@@ -1,4 +1,3 @@
-
 struct KVService {
     db: rusty_leveldb::DB,
 }

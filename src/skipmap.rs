@@ -82,9 +82,11 @@ impl SkipMap {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
+
     pub fn approx_memory(&self) -> usize {
         self.map.borrow().approx_mem
     }
+
     pub fn contains(&self, key: &[u8]) -> bool {
         self.map.borrow().contains(key)
     }

@@ -320,10 +320,7 @@ mod tests {
     fn get_data() -> Vec<(&'static [u8], &'static [u8])> {
         vec![
             (b"key1", b"value1"),
-            (
-                b"loooooooooooooooooooooooooooooooooongerkey1",
-                b"shrtvl1",
-            ),
+            (b"loooooooooooooooooooooooooooooooooongerkey1", b"shrtvl1"),
             ("medium length key 1".as_bytes(), "some value 2".as_bytes()),
             (b"prefix_key1", b"value"),
             (b"prefix_key2", b"value"),
@@ -401,10 +398,7 @@ mod tests {
         let mut block = Block::new(o.clone(), block_contents).iter();
 
         assert!(!block.valid());
-        assert_eq!(
-            block.next(),
-            Some((b"key1".to_vec(), b"value1".to_vec()))
-        );
+        assert_eq!(block.next(), Some((b"key1".to_vec(), b"value1".to_vec())));
         assert!(block.valid());
         block.next();
         assert!(block.valid());
@@ -425,10 +419,7 @@ mod tests {
         assert!(block.valid());
         assert_eq!(
             current_key_val(&block),
-            Some((
-                b"prefix_key2".to_vec(),
-                b"value".to_vec()
-            ))
+            Some((b"prefix_key2".to_vec(), b"value".to_vec()))
         );
     }
 
@@ -452,20 +443,14 @@ mod tests {
         assert!(block.valid());
         assert_eq!(
             current_key_val(&block),
-            Some((
-                b"prefix_key2".to_vec(),
-                b"value".to_vec()
-            ))
+            Some((b"prefix_key2".to_vec(), b"value".to_vec()))
         );
 
         block.seek(b"prefix_key0");
         assert!(block.valid());
         assert_eq!(
             current_key_val(&block),
-            Some((
-                b"prefix_key1".to_vec(),
-                b"value".to_vec()
-            ))
+            Some((b"prefix_key1".to_vec(), b"value".to_vec()))
         );
 
         block.seek(b"key1");
@@ -479,10 +464,7 @@ mod tests {
         assert!(block.valid());
         assert_eq!(
             current_key_val(&block),
-            Some((
-                b"prefix_key3".to_vec(),
-                b"value".to_vec()
-            ))
+            Some((b"prefix_key3".to_vec(), b"value".to_vec()))
         );
 
         block.seek(b"prefix_key8");
@@ -513,10 +495,7 @@ mod tests {
             assert!(block.valid());
             assert_eq!(
                 current_key_val(&block),
-                Some((
-                    b"prefix_key3".to_vec(),
-                    b"value".to_vec()
-                ))
+                Some((b"prefix_key3".to_vec(), b"value".to_vec()))
             );
         }
     }

@@ -2,12 +2,13 @@
 //! read-through cache, meaning that non-present tables are read from disk and cached before being
 //! returned.
 
+use crate::block::Block;
 use crate::cache::{self, Cache};
 use crate::error::{err, Result, StatusCode};
 use crate::key_types::InternalKey;
 use crate::options::Options;
 use crate::table_reader::Table;
-use crate::types::FileNum;
+use crate::types::{FileNum, Shared};
 
 use integer_encoding::FixedIntWriter;
 
@@ -29,6 +30,7 @@ fn filenum_to_key(num: FileNum) -> cache::CacheKey {
 pub struct TableCache {
     dbname: PathBuf,
     cache: Cache<Table>,
+    block_cache: Shared<Cache<Block>>,
     opts: Options,
 }
 
@@ -36,10 +38,16 @@ impl TableCache {
     /// Create a new TableCache for the database named `db`, caching up to `entries` tables.
     ///
     /// opt.cmp should be the user-supplied comparator.
-    pub fn new<P: AsRef<Path>>(db: P, opt: Options, entries: usize) -> TableCache {
+    pub fn new<P: AsRef<Path>>(
+        db: P,
+        opt: Options,
+        block_cache: Shared<Cache<Block>>,
+        entries: usize,
+    ) -> TableCache {
         TableCache {
             dbname: db.as_ref().to_owned(),
             cache: Cache::new(entries),
+            block_cache,
             opts: opt,
         }
     }
@@ -72,7 +80,7 @@ impl TableCache {
         }
         let file = Rc::new(self.opts.env.open_random_access_file(path)?);
         // No SSTable file name compatibility.
-        let table = Table::new(self.opts.clone(), file, file_size)?;
+        let table = Table::new(self.opts.clone(), self.block_cache.clone(), file, file_size)?;
         self.cache.insert(&filenum_to_key(file_num), table.clone());
         Ok(table)
     }
@@ -94,6 +102,7 @@ mod tests {
     use crate::options;
     use crate::table_builder::TableBuilder;
     use crate::test_util::LdbIteratorIter;
+    use crate::types::share;
 
     #[test]
     fn test_table_file_name() {
@@ -138,6 +147,7 @@ mod tests {
         // parsed/iterated by the table reader.
         let mut opt = options::for_test();
         opt.env = Rc::new(Box::new(MemEnv::new()));
+        let bc = share(Cache::new(128));
         let dbname = Path::new("testdb1");
         let tablename = table_file_name(dbname, 123);
         let tblpath = Path::new(&tablename);
@@ -146,7 +156,7 @@ mod tests {
         assert!(opt.env.exists(tblpath).unwrap());
         assert!(opt.env.size_of(tblpath).unwrap() > 20);
 
-        let mut cache = TableCache::new(dbname, opt.clone(), 10);
+        let mut cache = TableCache::new(dbname, opt.clone(), bc, 10);
         assert!(cache.cache.get(&filenum_to_key(123)).is_none());
         assert_eq!(
             LdbIteratorIter::wrap(&mut cache.get_table(123).unwrap().iter()).count(),

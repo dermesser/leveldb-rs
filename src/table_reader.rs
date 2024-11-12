@@ -1,6 +1,6 @@
 use crate::block::{Block, BlockIter};
 use crate::blockhandle::BlockHandle;
-use crate::cache;
+use crate::cache::{self, Cache};
 use crate::cmp::InternalKeyCmp;
 use crate::env::RandomAccess;
 use crate::error::{self, err, Result};
@@ -10,7 +10,7 @@ use crate::key_types::InternalKey;
 use crate::options::Options;
 use crate::table_block;
 use crate::table_builder::{self, Footer};
-use crate::types::{current_key_val, LdbIterator};
+use crate::types::{current_key_val, LdbIterator, Shared};
 
 use std::cmp::Ordering;
 use std::rc::Rc;
@@ -37,6 +37,7 @@ pub struct Table {
     cache_id: cache::CacheID,
 
     opt: Options,
+    block_cache: Shared<Cache<Block>>,
 
     footer: Footer,
     indexblock: Block,
@@ -45,7 +46,12 @@ pub struct Table {
 
 impl Table {
     /// Creates a new table reader operating on unformatted keys (i.e., UserKey).
-    fn new_raw(opt: Options, file: Rc<Box<dyn RandomAccess>>, size: usize) -> Result<Table> {
+    fn new_raw(
+        opt: Options,
+        block_cache: Shared<Cache<Block>>,
+        file: Rc<Box<dyn RandomAccess>>,
+        size: usize,
+    ) -> Result<Table> {
         let footer = read_footer(file.as_ref().as_ref(), size)?;
         let indexblock =
             table_block::read_table_block(opt.clone(), file.as_ref().as_ref(), &footer.index)?;
@@ -54,13 +60,14 @@ impl Table {
 
         let filter_block_reader =
             Table::read_filter_block(&metaindexblock, file.as_ref().as_ref(), &opt)?;
-        let cache_id = opt.block_cache.borrow_mut().new_cache_id();
+        let cache_id = block_cache.borrow_mut().new_cache_id();
 
         Ok(Table {
             file,
             file_size: size,
             cache_id,
             opt,
+            block_cache,
             footer,
             filters: filter_block_reader,
             indexblock,
@@ -105,12 +112,17 @@ impl Table {
     /// Creates a new table reader operating on internal keys (i.e., InternalKey). This means that
     /// a different comparator (internal_key_cmp) and a different filter policy
     /// (InternalFilterPolicy) are used.
-    pub fn new(mut opt: Options, file: Rc<Box<dyn RandomAccess>>, size: usize) -> Result<Table> {
+    pub fn new(
+        mut opt: Options,
+        block_cache: Shared<Cache<Block>>,
+        file: Rc<Box<dyn RandomAccess>>,
+        size: usize,
+    ) -> Result<Table> {
         opt.cmp = Rc::new(Box::new(InternalKeyCmp(opt.cmp.clone())));
         opt.filter_policy = Rc::new(Box::new(filter::InternalFilterPolicy::new(
             opt.filter_policy,
         )));
-        Table::new_raw(opt, file, size)
+        Table::new_raw(opt, block_cache, file, size)
     }
 
     /// block_cache_handle creates a CacheKey for a block with a given offset to be used in the
@@ -130,7 +142,7 @@ impl Table {
     /// cache.
     fn read_block(&self, location: &BlockHandle) -> Result<Block> {
         let cachekey = self.block_cache_handle(location.offset());
-        if let Some(block) = self.opt.block_cache.borrow_mut().get(&cachekey) {
+        if let Some(block) = self.block_cache.borrow_mut().get(&cachekey) {
             return Ok(block.clone());
         }
 
@@ -139,10 +151,7 @@ impl Table {
             table_block::read_table_block(self.opt.clone(), self.file.as_ref().as_ref(), location)?;
 
         // insert a cheap copy (Rc).
-        self.opt
-            .block_cache
-            .borrow_mut()
-            .insert(&cachekey, b.clone());
+        self.block_cache.borrow_mut().insert(&cachekey, b.clone());
 
         Ok(b)
     }
@@ -374,13 +383,15 @@ impl LdbIterator for TableIterator {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::RefCell;
+
     use crate::compressor::CompressorId;
     use crate::filter::BloomPolicy;
     use crate::key_types::LookupKey;
     use crate::table_builder::TableBuilder;
     use crate::test_util::{test_iterator_properties, LdbIteratorIter};
-    use crate::types::{current_key_val, LdbIterator};
-    use crate::{compressor, options};
+    use crate::types::{current_key_val, share, LdbIterator};
+    use crate::{block, compressor, options};
 
     use super::*;
 
@@ -464,8 +475,9 @@ mod tests {
     fn test_table_approximate_offset() {
         let (src, size) = build_table(build_data());
         let mut opt = options::for_test();
+        let bc = share(Cache::new(128));
         opt.block_size = 32;
-        let table = Table::new_raw(opt, wrap_buffer(src), size).unwrap();
+        let table = Table::new_raw(opt, bc, wrap_buffer(src), size).unwrap();
         let mut iter = table.iter();
 
         let expected_offsets = [0, 0, 0, 44, 44, 44, 89];
@@ -480,30 +492,40 @@ mod tests {
     #[test]
     fn test_table_block_cache_use() {
         let (src, size) = build_table(build_data());
+        let bc = share(Cache::new(128));
         let mut opt = options::for_test();
         opt.block_size = 32;
 
-        let table = Table::new_raw(opt.clone(), wrap_buffer(src), size).unwrap();
-        let mut iter = table.iter();
+        {
+            let table = Table::new_raw(opt.clone(), bc.clone(), wrap_buffer(src), size).unwrap();
+            let mut iter = table.iter();
 
-        // index/metaindex blocks are not cached. That'd be a waste of memory.
-        assert_eq!(opt.block_cache.borrow().count(), 0);
-        iter.next();
-        assert_eq!(opt.block_cache.borrow().count(), 1);
-        // This may fail if block parameters or data change. In that case, adapt it.
-        iter.next();
-        iter.next();
-        iter.next();
-        iter.next();
-        assert_eq!(opt.block_cache.borrow().count(), 2);
+            // index/metaindex blocks are not cached. That'd be a waste of memory.
+            assert_eq!(bc.borrow().count(), 0);
+            iter.next();
+            assert_eq!(bc.borrow().count(), 1);
+            // This may fail if block parameters or data change. In that case, adapt it.
+            iter.next();
+            iter.next();
+            iter.next();
+            iter.next();
+            assert_eq!(bc.borrow().count(), 2);
+        }
+
+        println!(
+            "weak = {}, strong = {}",
+            std::rc::Rc::<RefCell<cache::Cache<block::Block>>>::weak_count(&bc),
+            std::rc::Rc::<RefCell<cache::Cache<block::Block>>>::strong_count(&bc)
+        );
     }
 
     #[test]
     fn test_table_iterator_fwd_bwd() {
         let (src, size) = build_table(build_data());
         let data = build_data();
+        let bc = share(Cache::new(128));
 
-        let table = Table::new_raw(options::for_test(), wrap_buffer(src), size).unwrap();
+        let table = Table::new_raw(options::for_test(), bc, wrap_buffer(src), size).unwrap();
         let mut iter = table.iter();
         let mut i = 0;
 
@@ -552,8 +574,9 @@ mod tests {
     #[test]
     fn test_table_iterator_filter() {
         let (src, size) = build_table(build_data());
+        let bc = share(Cache::new(128));
 
-        let table = Table::new_raw(options::for_test(), wrap_buffer(src), size).unwrap();
+        let table = Table::new_raw(options::for_test(), bc, wrap_buffer(src), size).unwrap();
         assert!(table.filters.is_some());
         let filter_reader = table.filters.clone().unwrap();
         let mut iter = table.iter();
@@ -566,8 +589,9 @@ mod tests {
     #[test]
     fn test_table_iterator_state_behavior() {
         let (src, size) = build_table(build_data());
+        let bc = share(Cache::new(128));
 
-        let table = Table::new_raw(options::for_test(), wrap_buffer(src), size).unwrap();
+        let table = Table::new_raw(options::for_test(), bc, wrap_buffer(src), size).unwrap();
         let mut iter = table.iter();
 
         // behavior test
@@ -597,7 +621,8 @@ mod tests {
         let mut data = build_data();
         data.truncate(4);
         let (src, size) = build_table(data);
-        let table = Table::new_raw(options::for_test(), wrap_buffer(src), size).unwrap();
+        let bc = share(Cache::new(128));
+        let table = Table::new_raw(options::for_test(), bc, wrap_buffer(src), size).unwrap();
         test_iterator_properties(table.iter());
     }
 
@@ -605,8 +630,9 @@ mod tests {
     fn test_table_iterator_values() {
         let (src, size) = build_table(build_data());
         let data = build_data();
+        let bc = share(Cache::new(128));
 
-        let table = Table::new_raw(options::for_test(), wrap_buffer(src), size).unwrap();
+        let table = Table::new_raw(options::for_test(), bc, wrap_buffer(src), size).unwrap();
         let mut iter = table.iter();
         let mut i = 0;
 
@@ -640,8 +666,9 @@ mod tests {
     #[test]
     fn test_table_iterator_seek() {
         let (src, size) = build_table(build_data());
+        let bc = share(Cache::new(128));
 
-        let table = Table::new_raw(options::for_test(), wrap_buffer(src), size).unwrap();
+        let table = Table::new_raw(options::for_test(), bc, wrap_buffer(src), size).unwrap();
         let mut iter = table.iter();
 
         iter.seek(b"bcd");
@@ -667,8 +694,10 @@ mod tests {
     #[test]
     fn test_table_get() {
         let (src, size) = build_table(build_data());
+        let bc = share(Cache::new(128));
 
-        let table = Table::new_raw(options::for_test(), wrap_buffer(src), size).unwrap();
+        let table =
+            Table::new_raw(options::for_test(), bc.clone(), wrap_buffer(src), size).unwrap();
         let table2 = table.clone();
 
         let mut _iter = table.iter();
@@ -678,7 +707,7 @@ mod tests {
             assert_eq!(Ok(Some((k, v))), r);
         }
 
-        assert_eq!(table.opt.block_cache.borrow().count(), 3);
+        assert_eq!(bc.borrow().count(), 3);
 
         // test that filters work and don't return anything at all.
         assert!(table.get(b"aaa").unwrap().is_none());
@@ -702,7 +731,8 @@ mod tests {
 
         let (src, size) = build_internal_table();
 
-        let table = Table::new(options::for_test(), wrap_buffer(src), size).unwrap();
+        let bc = share(Cache::new(128));
+        let table = Table::new(options::for_test(), bc, wrap_buffer(src), size).unwrap();
         let filter_reader = table.filters.clone().unwrap();
 
         // Check that we're actually using internal keys
@@ -730,11 +760,12 @@ mod tests {
 
     #[test]
     fn test_table_reader_checksum() {
+        let bc = share(Cache::new(128));
         let (mut src, size) = build_table(build_data());
 
         src[10] += 1;
 
-        let table = Table::new_raw(options::for_test(), wrap_buffer(src), size).unwrap();
+        let table = Table::new_raw(options::for_test(), bc, wrap_buffer(src), size).unwrap();
 
         assert!(table.filters.is_some());
         assert_eq!(table.filters.as_ref().unwrap().num(), 1);

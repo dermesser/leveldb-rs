@@ -574,6 +574,7 @@ fn some_file_overlaps_range(
 #[cfg(test)]
 pub mod testutil {
     use super::*;
+    use crate::cache::Cache;
     use crate::cmp::DefaultCmp;
     use crate::env::Env;
     use crate::key_types::ValueType;
@@ -708,7 +709,7 @@ pub mod testutil {
         ];
         let t9 = write_table(env.as_ref().as_ref(), f9, 1, 9);
 
-        let cache = TableCache::new("db", opts.clone(), 100);
+        let cache = TableCache::new("db", opts.clone(), share(Cache::new(128)), 100);
         let mut v = Version::new(share(cache), Rc::new(Box::new(DefaultCmp)));
         v.files[0] = vec![t1, t2];
         v.files[1] = vec![t3, t4, t5];

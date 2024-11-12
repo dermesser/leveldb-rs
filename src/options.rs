@@ -1,5 +1,3 @@
-use crate::block::Block;
-use crate::cache::Cache;
 use crate::cmp::{Cmp, DefaultCmp};
 use crate::compressor::{self, Compressor, CompressorId};
 use crate::env::Env;
@@ -33,7 +31,7 @@ pub struct Options {
     pub write_buffer_size: usize,
     pub max_open_files: usize,
     pub max_file_size: usize,
-    pub block_cache: Shared<Cache<Block>>,
+    pub block_cache_capacity_bytes: usize,
     pub block_size: usize,
     pub block_restart_interval: usize,
     /// Compressor id in compressor list
@@ -66,8 +64,7 @@ impl Default for Options {
             write_buffer_size: WRITE_BUFFER_SIZE,
             max_open_files: 1 << 10,
             max_file_size: 2 << 20,
-            // 2000 elements by default
-            block_cache: share(Cache::new(BLOCK_CACHE_CAPACITY / BLOCK_MAX_SIZE)),
+            block_cache_capacity_bytes: BLOCK_MAX_SIZE * 1024,
             block_size: BLOCK_MAX_SIZE,
             block_restart_interval: 16,
             reuse_logs: true,

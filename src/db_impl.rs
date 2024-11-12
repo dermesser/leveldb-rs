@@ -3,6 +3,8 @@
 
 #![allow(unused_attributes)]
 
+use crate::block::Block;
+use crate::cache::Cache;
 use crate::db_iter::DBIterator;
 
 use crate::cmp::{Cmp, InternalKeyCmp};
@@ -74,7 +76,12 @@ impl DB {
         }
         let path = name.canonicalize().unwrap_or(name.to_owned());
 
-        let cache = share(TableCache::new(name, opt.clone(), opt.max_open_files - 10));
+        let cache = share(TableCache::new(
+            name,
+            opt.clone(),
+            share(Cache::new(opt.block_cache_capacity_bytes / opt.block_size)),
+            opt.max_open_files - 10,
+        ));
         let vset = VersionSet::new(name, opt.clone(), cache.clone());
 
         DB {
@@ -1478,7 +1485,7 @@ mod tests {
 
         {
             // Read table back in.
-            let mut tc = TableCache::new("db", opt.clone(), 100);
+            let mut tc = TableCache::new("db", opt.clone(), share(Cache::new(128)), 100);
             let tbl = tc.get_table(123).unwrap();
             assert_eq!(mt.len(), LdbIteratorIter::wrap(&mut tbl.iter()).count());
         }
@@ -1498,7 +1505,7 @@ mod tests {
                 .write_all(&buf)
                 .unwrap();
 
-            let mut tc = TableCache::new("db", opt.clone(), 100);
+            let mut tc = TableCache::new("db", opt.clone(), share(Cache::new(128)), 100);
             let tbl = tc.get_table(123).unwrap();
             // The last two entries are skipped due to the corruption above.
             assert_eq!(

@@ -971,6 +971,7 @@ fn get_range<'a, C: Cmp, I: Iterator<Item = &'a FileMetaHandle>>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cache::Cache;
     use crate::cmp::DefaultCmp;
     use crate::key_types::LookupKey;
     use crate::test_util::LdbIteratorIter;
@@ -1063,7 +1064,12 @@ mod tests {
         assert_eq!(1, b.added[1].len());
 
         let mut v2 = Version::new(
-            share(TableCache::new("db", opt.clone(), 100)),
+            share(TableCache::new(
+                "db",
+                opt.clone(),
+                share(Cache::new(128)),
+                100,
+            )),
             opt.cmp.clone(),
         );
         b.save_to(&InternalKeyCmp(opt.cmp.clone()), &v, &mut v2);
@@ -1080,7 +1086,12 @@ mod tests {
         let mut vs = VersionSet::new(
             "db",
             opt.clone(),
-            share(TableCache::new("db", opt.clone(), 100)),
+            share(TableCache::new(
+                "db",
+                opt.clone(),
+                share(Cache::new(128)),
+                100,
+            )),
         );
 
         assert_eq!(2, vs.new_file_number());
@@ -1149,7 +1160,11 @@ mod tests {
     #[test]
     fn test_version_set_utils() {
         let (v, opt) = make_version();
-        let mut vs = VersionSet::new("db", opt.clone(), share(TableCache::new("db", opt, 100)));
+        let mut vs = VersionSet::new(
+            "db",
+            opt.clone(),
+            share(TableCache::new("db", opt, share(Cache::new(128)), 100)),
+        );
         vs.add_version(v);
         // live_files()
         assert_eq!(9, vs.live_files().len());
@@ -1173,7 +1188,11 @@ mod tests {
     #[test]
     fn test_version_set_pick_compaction() {
         let (mut v, opt) = make_version();
-        let mut vs = VersionSet::new("db", opt.clone(), share(TableCache::new("db", opt, 100)));
+        let mut vs = VersionSet::new(
+            "db",
+            opt.clone(),
+            share(TableCache::new("db", opt, share(Cache::new(128)), 100)),
+        );
 
         v.compaction_score = Some(2.0);
         v.compaction_level = Some(0);
@@ -1222,7 +1241,11 @@ mod tests {
     #[test]
     fn test_version_set_compaction() {
         let (v, opt) = make_version();
-        let mut vs = VersionSet::new("db", opt.clone(), share(TableCache::new("db", opt, 100)));
+        let mut vs = VersionSet::new(
+            "db",
+            opt.clone(),
+            share(TableCache::new("db", opt, share(Cache::new(128)), 100)),
+        );
         time_test!();
         vs.add_version(v);
 
