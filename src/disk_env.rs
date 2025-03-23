@@ -1,6 +1,7 @@
 use crate::env::{path_to_str, Env, FileLock, Logger, RandomAccess};
 use crate::env_common::{micros, sleep_for};
 use crate::error::{err, Result, Status, StatusCode};
+use crate::types::{share, Shared};
 use fs2::FileExt;
 
 use std::collections::HashMap;
@@ -8,13 +9,12 @@ use std::fs::{self, File};
 use std::io::{self, ErrorKind, Read, Write};
 use std::iter::FromIterator;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
 
 type FileDescriptor = i32;
 
 #[derive(Clone)]
 pub struct PosixDiskEnv {
-    locks: Arc<Mutex<HashMap<String, File>>>,
+    locks: Shared<HashMap<String, File>>,
 }
 
 impl Default for PosixDiskEnv {
@@ -26,7 +26,7 @@ impl Default for PosixDiskEnv {
 impl PosixDiskEnv {
     pub fn new() -> PosixDiskEnv {
         PosixDiskEnv {
-            locks: Arc::new(Mutex::new(HashMap::new())),
+            locks: share(HashMap::new()),
         }
     }
 }
@@ -115,7 +115,7 @@ impl Env for PosixDiskEnv {
     }
 
     fn lock(&self, p: &Path) -> Result<FileLock> {
-        let mut locks = self.locks.lock().unwrap();
+        let mut locks = self.locks.borrow_mut();
 
         if let std::collections::hash_map::Entry::Vacant(e) =
             locks.entry(p.to_str().unwrap().to_string())
@@ -153,7 +153,7 @@ impl Env for PosixDiskEnv {
         }
     }
     fn unlock(&self, l: FileLock) -> Result<()> {
-        let mut locks = self.locks.lock().unwrap();
+        let mut locks = self.locks.borrow_mut();
         if !locks.contains_key(&l.id) {
             err(
                 StatusCode::LockError,
