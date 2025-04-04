@@ -3,7 +3,6 @@ use crate::rand::rngs::StdRng;
 use crate::rand::{RngCore, SeedableRng};
 use crate::types::LdbIterator;
 
-use bytes::Bytes;
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::mem::{replace, size_of};
@@ -96,12 +95,6 @@ impl SkipMap {
     pub fn insert(&mut self, key: Vec<u8>, val: Vec<u8>) {
         assert!(!key.is_empty());
         self.map.borrow_mut().insert(key, val);
-    }
-
-    /// inserts a key into the table with key as Bytes type. key may not be empty.
-    pub fn insert_bytes(&mut self, key: Bytes, val: Vec<u8>) {
-        assert!(!key.is_empty());
-        self.map.borrow_mut().insert(key.to_vec(), val);
     }
 
     pub fn iter(&self) -> SkipMapIter {

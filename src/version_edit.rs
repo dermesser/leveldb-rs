@@ -3,6 +3,7 @@ use crate::key_types::InternalKey;
 use crate::types::{FileMetaData, FileNum, SequenceNumber};
 
 use integer_encoding::{VarIntReader, VarIntWriter};
+use bytes::Bytes;
 
 use std::collections::HashSet;
 use std::io::{Read, Write};
@@ -11,7 +12,7 @@ use std::io::{Read, Write};
 pub struct CompactionPointer {
     pub level: usize,
     // This key is in InternalKey format.
-    pub key: Vec<u8>,
+    pub key: Bytes,
 }
 
 enum EditTag {
@@ -39,7 +40,7 @@ fn tag_to_enum(t: u32) -> Option<EditTag> {
     }
 }
 
-fn read_length_prefixed<R: Read>(reader: &mut R) -> Result<Vec<u8>> {
+fn read_length_prefixed<R: Read>(reader: &mut R) -> Result<Bytes> {
     if let Ok(klen) = reader.read_varint() {
         let mut keybuf = vec![0; klen];
 
@@ -47,7 +48,7 @@ fn read_length_prefixed<R: Read>(reader: &mut R) -> Result<Vec<u8>> {
             if l != klen {
                 return err(StatusCode::IOError, "Couldn't read full key");
             }
-            Ok(keybuf)
+            Ok(Bytes::from(keybuf))
         } else {
             err(StatusCode::IOError, "Couldn't read key")
         }
@@ -118,7 +119,7 @@ impl VersionEdit {
     pub fn set_compact_pointer(&mut self, level: usize, key: InternalKey) {
         self.compaction_ptrs.push(CompactionPointer {
             level,
-            key: Vec::from(key),
+            key: Bytes::copy_from_slice(key),
         })
     }
 
@@ -191,7 +192,7 @@ impl VersionEdit {
                 match tag {
                     EditTag::Comparator => {
                         let buf = read_length_prefixed(&mut reader)?;
-                        if let Ok(c) = String::from_utf8(buf) {
+                        if let Ok(c) = String::from_utf8(buf.to_vec()) {
                             ve.comparator = Some(c);
                         } else {
                             return err(StatusCode::Corruption, "Bad comparator encoding");
@@ -303,6 +304,7 @@ impl Default for VersionEdit {
 mod tests {
     use super::CompactionPointer;
     use super::VersionEdit;
+    use bytes::Bytes;
 
     use crate::cmp::{Cmp, DefaultCmp};
     use crate::types::FileMetaData;
@@ -323,8 +325,8 @@ mod tests {
                 allowed_seeks: 12345,
                 num: 901,
                 size: 234,
-                smallest: vec![5, 6, 7],
-                largest: vec![8, 9, 0],
+                smallest: Bytes::from(vec![5, 6, 7]),
+                largest: Bytes::from(vec![8, 9, 0]),
             },
         );
         ve.delete_file(1, 132);
@@ -341,21 +343,21 @@ mod tests {
             decoded.compaction_ptrs[0],
             CompactionPointer {
                 level: 0,
-                key: vec![0, 1, 2],
+                key: Bytes::copy_from_slice(&[0, 1, 2]),
             }
         );
         assert_eq!(
             decoded.compaction_ptrs[1],
             CompactionPointer {
                 level: 1,
-                key: vec![3, 4, 5],
+                key: Bytes::copy_from_slice(&[3, 4, 5]),
             }
         );
         assert_eq!(
             decoded.compaction_ptrs[2],
             CompactionPointer {
                 level: 2,
-                key: vec![6, 7, 8],
+                key: Bytes::copy_from_slice(&[6, 7, 8]),
             }
         );
         assert_eq!(decoded.new_files.len(), 1);
@@ -367,8 +369,8 @@ mod tests {
                     allowed_seeks: 0,
                     num: 901,
                     size: 234,
-                    smallest: vec![5, 6, 7],
-                    largest: vec![8, 9, 0],
+                    smallest: Bytes::from(vec![5, 6, 7]),
+                    largest: Bytes::from(vec![8, 9, 0]),
                 }
             )
         );

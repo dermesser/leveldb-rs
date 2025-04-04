@@ -5,7 +5,6 @@ use std::rc::Rc;
 use crate::options::Options;
 use crate::types::LdbIterator;
 
-use bytes::BytesMut;
 use integer_encoding::FixedInt;
 use integer_encoding::VarInt;
 
@@ -55,7 +54,7 @@ impl Block {
             current_entry_offset: 0,
             current_restart_ix: 0,
 
-            key: BytesMut::new(),
+            key: Vec::new(),
             val_offset: 0,
         }
     }
@@ -91,7 +90,7 @@ pub struct BlockIter {
     current_restart_ix: usize,
 
     /// We assemble the key from two parts usually, so we keep the current full key here.
-    key: BytesMut,
+    key: Vec<u8>,
     /// Offset of the current value within the block.
     val_offset: usize,
 }
@@ -159,7 +158,8 @@ impl BlockIter {
     /// Only self.key is mutated.
     fn assemble_key(&mut self, off: usize, shared: usize, non_shared: usize) {
         self.key.truncate(shared);
-        self.key.extend_from_slice(&self.block[off..off + non_shared]);
+        self.key
+            .extend_from_slice(&self.block[off..off + non_shared]);
     }
 
     pub fn seek_to_last(&mut self) -> Option<()> {

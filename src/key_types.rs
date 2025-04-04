@@ -4,7 +4,6 @@ use crate::types::SequenceNumber;
 use std::cmp::Ordering;
 use std::io::Write;
 
-use bytes::{Bytes, BytesMut};
 use integer_encoding::{FixedInt, FixedIntWriter, VarInt, VarIntWriter};
 
 // The following typedefs are used to distinguish between the different key formats used internally
@@ -38,7 +37,7 @@ pub type InternalKey<'a> = &'a [u8];
 /// keylen is the length of key plus 8 (for the tag; this for LevelDB compatibility)
 #[derive(Clone, Debug)]
 pub struct LookupKey {
-    key: Bytes,
+    key: Vec<u8>,
     key_offset: usize,
 }
 
@@ -50,14 +49,12 @@ impl LookupKey {
     }
 
     pub fn new_full(k: UserKey, s: SequenceNumber, t: ValueType) -> LookupKey {
+        let mut key = Vec::new();
         let internal_keylen = k.len() + U64_SPACE;
-        let total_size = k.len() + internal_keylen.required_space() + U64_SPACE;
-        let mut buf = BytesMut::with_capacity(total_size);
-        
-        // Reserve space for writing data
-        buf.resize(total_size, 0);
+        key.resize(k.len() + internal_keylen.required_space() + U64_SPACE, 0);
+
         {
-            let mut writer = &mut buf[..];
+            let mut writer = key.as_mut_slice();
             writer
                 .write_varint(internal_keylen)
                 .expect("write to slice failed");
@@ -68,14 +65,14 @@ impl LookupKey {
         }
 
         LookupKey {
-            key: buf.freeze(),
+            key,
             key_offset: internal_keylen.required_space(),
         }
     }
 
     /// Returns the full memtable-formatted key.
     pub fn memtable_key(&self) -> MemtableKey {
-        self.key.as_ref()
+        self.key.as_slice()
     }
 
     /// Returns only the user key portion.
@@ -106,7 +103,7 @@ pub fn parse_tag(tag: u64) -> (ValueType, u64) {
 /// concerned with keys; the value field is not used (instead, the value is encoded in the key,
 /// and for lookups we just search for the next bigger entry).
 /// keylen is the length of key + 8 (to account for the tag)
-pub fn build_memtable_key(key: &[u8], value: &[u8], t: ValueType, seq: SequenceNumber) -> Bytes {
+pub fn build_memtable_key(key: &[u8], value: &[u8], t: ValueType, seq: SequenceNumber) -> Vec<u8> {
     // We are using the original LevelDB approach here -- encoding key and value into the
     // key that is used for insertion into the SkipMap.
     // The format is: [key_size: varint32, key_data: [u8], flags: u64, value_size: varint32,
@@ -114,13 +111,11 @@ pub fn build_memtable_key(key: &[u8], value: &[u8], t: ValueType, seq: SequenceN
 
     let keysize = key.len() + U64_SPACE;
     let valsize = value.len();
-    let total_size = keysize + valsize + keysize.required_space() + valsize.required_space();
-    
-    let mut buf = BytesMut::with_capacity(total_size);
-    buf.resize(total_size, 0);
+    let mut buf =
+        vec![0_u8; keysize + valsize + keysize.required_space() + valsize.required_space()];
 
     {
-        let mut writer = &mut buf[..];
+        let mut writer = buf.as_mut_slice();
         writer.write_varint(keysize).expect("write to slice failed");
         writer.write_all(key).expect("write to slice failed");
         writer
@@ -130,7 +125,7 @@ pub fn build_memtable_key(key: &[u8], value: &[u8], t: ValueType, seq: SequenceN
         writer.write_all(value).expect("write to slice failed");
         assert_eq!(writer.len(), 0);
     }
-    buf.freeze()
+    buf
 }
 
 /// Parses a memtable key and returns  (keylen, key offset, tag, vallen, val offset).
@@ -220,8 +215,7 @@ mod tests {
 
         // Assert correct allocation strategy
         assert_eq!(lk1.key.len(), 14);
-        // Bytes type doesn't have capacity method, using len instead
-        // assert_eq!(lk1.key.capacity(), 14);
+        assert_eq!(lk1.key.capacity(), 14);
 
         assert_eq!(lk1.user_key(), "abcde".as_bytes());
         assert_eq!(u32::decode_var(lk1.memtable_key()).unwrap(), (13, 1));
@@ -233,42 +227,35 @@ mod tests {
 
     #[test]
     fn test_build_memtable_key() {
-        let key1 = build_memtable_key(
-            "abc".as_bytes(),
-            "123".as_bytes(),
-            ValueType::TypeValue,
-            231
-        );
         assert_eq!(
-            key1.as_ref(),
+            build_memtable_key(
+                "abc".as_bytes(),
+                "123".as_bytes(),
+                ValueType::TypeValue,
+                231
+            ),
             vec![11, 97, 98, 99, 1, 231, 0, 0, 0, 0, 0, 0, 3, 49, 50, 51]
         );
-        
-        let key2 = build_memtable_key("".as_bytes(), "123".as_bytes(), ValueType::TypeValue, 231);
         assert_eq!(
-            key2.as_ref(),
+            build_memtable_key("".as_bytes(), "123".as_bytes(), ValueType::TypeValue, 231),
             vec![8, 1, 231, 0, 0, 0, 0, 0, 0, 3, 49, 50, 51]
         );
-        
-        let key3 = build_memtable_key(
-            "abc".as_bytes(),
-            "123".as_bytes(),
-            ValueType::TypeDeletion,
-            231
-        );
         assert_eq!(
-            key3.as_ref(),
+            build_memtable_key(
+                "abc".as_bytes(),
+                "123".as_bytes(),
+                ValueType::TypeDeletion,
+                231
+            ),
             vec![11, 97, 98, 99, 0, 231, 0, 0, 0, 0, 0, 0, 3, 49, 50, 51]
         );
-        
-        let key4 = build_memtable_key(
-            "abc".as_bytes(),
-            "".as_bytes(),
-            ValueType::TypeDeletion,
-            231
-        );
         assert_eq!(
-            key4.as_ref(),
+            build_memtable_key(
+                "abc".as_bytes(),
+                "".as_bytes(),
+                ValueType::TypeDeletion,
+                231
+            ),
             vec![11, 97, 98, 99, 0, 231, 0, 0, 0, 0, 0, 0, 0]
         );
     }
