@@ -38,7 +38,7 @@ impl MemTable {
 
     pub fn add(&mut self, seq: SequenceNumber, t: ValueType, key: UserKey<'_>, value: &[u8]) {
         self.map
-            .insert(build_memtable_key(key, value, t, seq), Vec::new())
+            .insert_bytes(build_memtable_key(key, value, t, seq), Vec::new())
     }
 
     /// get returns the value for the given entry and whether the entry is marked as deleted. This

@@ -3,7 +3,6 @@
 
 #![allow(unused_attributes)]
 
-use crate::block::Block;
 use crate::cache::Cache;
 use crate::db_iter::DBIterator;
 
