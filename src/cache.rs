@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::mem::swap;
 
 // No clone, no copy! That asserts that an LRUHandle exists only once.
-type LRUHandle<T> = *mut LRUNode<T>;
+struct LRUHandle<T>(*mut LRUNode<T>);
 
 struct LRUNode<T> {
     next: Option<Box<LRUNode<T>>>, // None in the list's last node
@@ -46,7 +46,7 @@ impl<T> LRUList<T> {
             new.next = self.head.next.take();
             self.head.next = Some(new);
 
-            newp
+            LRUHandle(newp)
         } else {
             // First node; the only node right now is an empty head node
             let mut new = Box::new(LRUNode {
@@ -61,7 +61,7 @@ impl<T> LRUList<T> {
             // Set first node
             self.head.next = Some(new);
 
-            newp
+            LRUHandle(newp)
         }
     }
 
@@ -85,9 +85,9 @@ impl<T> LRUList<T> {
 
     fn remove(&mut self, node_handle: LRUHandle<T>) -> T {
         unsafe {
-            let d = (*node_handle).data.take().unwrap();
+            let d = (*node_handle.0).data.take().unwrap();
             // Take ownership of node to be removed.
-            let mut current = (*(*node_handle).prev.unwrap()).next.take().unwrap();
+            let mut current = (*(*node_handle.0).prev.unwrap()).next.take().unwrap();
             let prev = current.prev.unwrap();
             // Update previous node's successor.
             if current.next.is_some() {
@@ -103,12 +103,12 @@ impl<T> LRUList<T> {
     }
 
     /// Reinserts the referenced node at the front.
-    fn reinsert_front(&mut self, node_handle: LRUHandle<T>) {
+    fn reinsert_front(&mut self, node_handle: &LRUHandle<T>) {
         unsafe {
-            let prevp = (*node_handle).prev.unwrap();
+            let prevp = (*node_handle.0).prev.unwrap();
 
             // If not last node, update following node's prev
-            if let Some(next) = (*node_handle).next.as_mut() {
+            if let Some(next) = (*node_handle.0).next.as_mut() {
                 next.prev = Some(prevp);
             } else {
                 // If last node, update head
@@ -116,18 +116,18 @@ impl<T> LRUList<T> {
             }
 
             // Swap this.next with prev.next. After that, this.next refers to this (!)
-            swap(&mut (*prevp).next, &mut (*node_handle).next);
+            swap(&mut (*prevp).next, &mut (*node_handle.0).next);
             // To reinsert at head, swap head's next with this.next
-            swap(&mut (*node_handle).next, &mut self.head.next);
+            swap(&mut (*node_handle.0).next, &mut self.head.next);
             // Update this' prev reference to point to head.
 
             // Update the second node's prev reference.
-            if let Some(ref mut newnext) = (*node_handle).next {
-                (*node_handle).prev = newnext.prev;
-                newnext.prev = Some(node_handle);
+            if let Some(ref mut newnext) = (*node_handle.0).next {
+                (*node_handle.0).prev = newnext.prev;
+                newnext.prev = Some(node_handle.0);
             } else {
                 // Only one node, being the last one; avoid head.prev pointing to head
-                self.head.prev = Some(node_handle);
+                self.head.prev = Some(node_handle.0);
             }
 
             assert!(self.head.next.is_some());
@@ -215,7 +215,7 @@ impl<T> Cache<T> {
         match self.map.get(key) {
             None => None,
             Some((elem, lru_handle)) => {
-                self.list.reinsert_front(*lru_handle);
+                self.list.reinsert_front(&lru_handle);
                 Some(elem)
             }
         }
@@ -349,15 +349,15 @@ mod tests {
 
         assert_eq!(lru._testing_head_ref().copied().unwrap(), 244);
 
-        lru.reinsert_front(handle1);
+        lru.reinsert_front(&handle1);
 
         assert_eq!(lru._testing_head_ref().copied().unwrap(), 56);
 
-        lru.reinsert_front(handle3);
+        lru.reinsert_front(&handle3);
 
         assert_eq!(lru._testing_head_ref().copied().unwrap(), 244);
 
-        lru.reinsert_front(handle2);
+        lru.reinsert_front(&handle2);
 
         assert_eq!(lru._testing_head_ref().copied().unwrap(), 22);
 
@@ -383,7 +383,7 @@ mod tests {
         ];
 
         (0..9).for_each(|i| {
-            lru.reinsert_front(handles[i]);
+            lru.reinsert_front(&handles[i]);
             assert_eq!(lru._testing_head_ref().copied(), Some(i));
         });
     }
@@ -394,7 +394,7 @@ mod tests {
 
         let handle = lru.insert(3);
 
-        lru.reinsert_front(handle);
+        lru.reinsert_front(&handle);
         assert_eq!(lru._testing_head_ref().copied(), Some(3));
         assert_eq!(lru.remove_last(), Some(3));
         assert_eq!(lru.remove_last(), None);
