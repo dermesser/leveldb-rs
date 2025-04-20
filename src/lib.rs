@@ -32,6 +32,7 @@ extern crate fs2;
 extern crate integer_encoding;
 extern crate rand;
 extern crate snap;
+extern crate bytes;
 
 #[cfg(test)]
 #[macro_use]

@@ -5,6 +5,7 @@ use crate::error::{err, Result, StatusCode};
 use std::cell::RefCell;
 use std::path::Path;
 use std::rc::Rc;
+use bytes::Bytes;
 
 pub const NUM_LEVELS: usize = 7;
 
@@ -125,8 +126,8 @@ pub struct FileMetaData {
     pub num: FileNum,
     pub size: usize,
     // these are in InternalKey format:
-    pub smallest: Vec<u8>,
-    pub largest: Vec<u8>,
+    pub smallest: Bytes,
+    pub largest: Bytes,
 }
 
 #[derive(Debug, Clone, PartialEq)]

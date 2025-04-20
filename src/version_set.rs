@@ -17,6 +17,7 @@ use std::collections::HashSet;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use bytes::Bytes;
 
 pub struct Compaction {
     level: usize,
@@ -443,8 +444,8 @@ impl VersionSet {
             largest
         );
 
-        compaction.edit().set_compact_pointer(level, &largest);
-        self.compaction_ptrs[level] = largest;
+        compaction.edit().set_compact_pointer(level, &largest.to_vec());
+        self.compaction_ptrs[level] = largest.to_vec();
     }
 
     /// write_snapshot writes the current version, with all files, to the manifest.
@@ -757,12 +758,17 @@ impl Builder {
     /// apply applies the edits recorded in edit to the builder state. compaction pointers are
     /// copied to the supplied compaction_ptrs array.
     fn apply(&mut self, edit: &VersionEdit, compaction_ptrs: &mut [Vec<u8>; NUM_LEVELS]) {
-        for c in edit.compaction_ptrs.iter() {
-            compaction_ptrs[c.level].clone_from(&c.key);
+        // Update compaction pointers.
+        for c in &edit.compaction_ptrs {
+            compaction_ptrs[c.level] = c.key.to_vec();
         }
-        for &(level, num) in edit.deleted.iter() {
-            self.deleted[level].push(num);
+
+        // Delete files.
+        for deleted in &edit.deleted {
+            self.deleted[deleted.0].push(deleted.1);
         }
+
+        // Add new files.
         for &(level, ref f) in edit.new_files.iter() {
             let mut f = f.clone();
             f.allowed_seeks = f.size / 16384;
@@ -947,7 +953,7 @@ fn merge_iters<
 fn get_range<'a, C: Cmp, I: Iterator<Item = &'a FileMetaHandle>>(
     c: &C,
     files: I,
-) -> (Vec<u8>, Vec<u8>) {
+) -> (Bytes, Bytes) {
     let mut smallest = None;
     let mut largest = None;
     for f in files {
@@ -982,29 +988,29 @@ mod tests {
         let f1 = FileMetaData {
             num: 1,
             size: 10,
-            smallest: b"f".to_vec(),
-            largest: b"g".to_vec(),
+            smallest: b"f".to_vec().into(),
+            largest: b"g".to_vec().into(),
             ..Default::default()
         };
         let f2 = FileMetaData {
             num: 2,
             size: 20,
-            smallest: b"e".to_vec(),
-            largest: b"f".to_vec(),
+            smallest: b"e".to_vec().into(),
+            largest: b"f".to_vec().into(),
             ..Default::default()
         };
         let f3 = FileMetaData {
             num: 3,
             size: 30,
-            smallest: b"a".to_vec(),
-            largest: b"b".to_vec(),
+            smallest: b"a".to_vec().into(),
+            largest: b"b".to_vec().into(),
             ..Default::default()
         };
         let f4 = FileMetaData {
             num: 4,
             size: 40,
-            smallest: b"q".to_vec(),
-            largest: b"z".to_vec(),
+            smallest: b"q".to_vec().into(),
+            largest: b"z".to_vec().into(),
             ..Default::default()
         };
         vec![f1, f2, f3, f4].into_iter().map(share).collect()
@@ -1029,7 +1035,7 @@ mod tests {
     fn test_version_set_get_range() {
         let cmp = DefaultCmp;
         let fs = example_files();
-        assert_eq!((b"a".to_vec(), b"z".to_vec()), get_range(&cmp, fs.iter()));
+        assert_eq!((Bytes::from(&b"a"[..]), Bytes::from(&b"z"[..])), get_range(&cmp, fs.iter()));
     }
 
     #[test]
@@ -1040,8 +1046,8 @@ mod tests {
         let fmd = FileMetaData {
             num: 21,
             size: 123,
-            smallest: LookupKey::new(b"klm", 777).internal_key().to_vec(),
-            largest: LookupKey::new(b"kop", 700).internal_key().to_vec(),
+            smallest: Bytes::copy_from_slice(LookupKey::new(b"klm", 777).internal_key()),
+            largest: Bytes::copy_from_slice(LookupKey::new(b"kop", 700).internal_key()),
             ..Default::default()
         };
 
@@ -1130,8 +1136,8 @@ mod tests {
             let fmd = FileMetaData {
                 num: 21,
                 size: 123,
-                smallest: LookupKey::new(b"abc", 777).internal_key().to_vec(),
-                largest: LookupKey::new(b"def", 700).internal_key().to_vec(),
+                smallest: LookupKey::new(b"abc", 777).internal_key().to_vec().into(),
+                largest: LookupKey::new(b"def", 700).internal_key().to_vec().into(),
                 ..Default::default()
             };
             ve.add_file(1, fmd);
