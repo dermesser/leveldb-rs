@@ -2,6 +2,7 @@
 name = "write-a-lot"
 version = "0.1.0"
 authors = ["Lewin Bormann <lewin@lewin-bormann.info>"]
+edition =  "2021"
 
 [dependencies]
 rusty-leveldb = { path = "../../" }
