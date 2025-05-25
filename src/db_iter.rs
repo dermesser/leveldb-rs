@@ -308,12 +308,16 @@ mod tests {
             b"val1", b"val2", b"val2", b"val3", b"val4", b"val5", b"val2", b"val3",
         ];
 
+        let mut found = vec![];
         for (k, v) in keys.iter().zip(vals.iter()) {
             assert!(iter.advance());
             assert_eq!((k.to_vec(), v.to_vec()), current_key_val(&iter).unwrap());
             let entry = db.get(*k).expect("key returned by iterator is in database");
             assert_eq!(v.to_vec(), entry);
+            found.push((k.to_vec(), v.to_vec()));
         }
+
+        assert_eq!(found.len(), keys.len());
     }
 
     #[test]
