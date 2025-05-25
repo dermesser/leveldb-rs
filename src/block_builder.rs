@@ -1,8 +1,10 @@
 use std::cmp::Ordering;
+use std::io::Write;
 
 use crate::block::BlockContents;
 use crate::options::Options;
 
+use bytes::BytesMut;
 use integer_encoding::{FixedIntWriter, VarIntWriter};
 
 /// BlockBuilder contains functionality for building a block consisting of consecutive key-value
@@ -79,6 +81,7 @@ impl BlockBuilder {
 
         let non_shared = key.len() - shared;
 
+        // Write the entry header (shared, non_shared, value_length)
         self.buffer
             .write_varint(shared)
             .expect("write to buffer failed");
@@ -88,6 +91,8 @@ impl BlockBuilder {
         self.buffer
             .write_varint(val.len())
             .expect("write to buffer failed");
+        
+        // Write the key and value data
         self.buffer.extend_from_slice(&key[shared..]);
         self.buffer.extend_from_slice(val);
 
@@ -100,6 +105,7 @@ impl BlockBuilder {
     }
 
     pub fn finish(mut self) -> BlockContents {
+        // Reserve space for restarts array and restart count
         self.buffer.reserve(self.restarts.len() * 4 + 4);
 
         // 1. Append RESTARTS
@@ -114,7 +120,8 @@ impl BlockBuilder {
             .write_fixedint(self.restarts.len() as u32)
             .expect("write to buffer failed");
 
-        // done
+        // Instead of using BytesMut conversion which would be efficient in the future,
+        // we're keeping the Vec<u8> approach for now
         self.buffer
     }
 }

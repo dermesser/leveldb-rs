@@ -596,8 +596,8 @@ pub mod testutil {
             allowed_seeks: 10,
             size: 163840,
             num,
-            smallest: LookupKey::new(smallest, smallestix).internal_key().to_vec(),
-            largest: LookupKey::new(largest, largestix).internal_key().to_vec(),
+            smallest: LookupKey::new(smallest, smallestix).internal_key().to_vec().into(),
+            largest: LookupKey::new(largest, largestix).internal_key().to_vec().into(),
         })
     }
 

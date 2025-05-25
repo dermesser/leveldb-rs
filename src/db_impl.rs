@@ -37,6 +37,7 @@ use std::ops::Drop;
 use std::path::Path;
 use std::path::PathBuf;
 use std::rc::Rc;
+use bytes::Bytes;
 
 /// DB contains the actual database implemenation. As opposed to the original, this implementation
 /// is not concurrent (yet).
@@ -647,7 +648,7 @@ impl DB {
                 if let Some(c) = c_ {
                     // Update ifrom to the largest key of the last file in this compaction.
                     let ix = c.num_inputs(0) - 1;
-                    ifrom.clone_from(&c.input(0, ix).largest);
+                    ifrom = c.input(0, ix).largest.to_vec();
                     self.start_compaction(c)?;
                 } else {
                     break;
@@ -869,9 +870,9 @@ impl DB {
                 cs.outputs.push(fmd);
             }
             if cs.builder.as_ref().unwrap().entries() == 0 {
-                cs.current_output().smallest.clone_from(&key);
+                cs.current_output().smallest = Bytes::from(key.clone());
             }
-            cs.current_output().largest.clone_from(&key);
+            cs.current_output().largest = Bytes::from(key.clone());
             cs.builder.as_mut().unwrap().add(&key, &val)?;
             // NOTE: Adjust max file size based on level.
             if cs.builder.as_ref().unwrap().size_estimate() > self.opt.max_file_size {
@@ -1055,8 +1056,8 @@ pub fn build_table<I: LdbIterator, P: AsRef<Path>>(
         Some(key) => {
             md.num = num;
             md.size = opt.env.size_of(Path::new(&filename))?;
-            md.smallest = key;
-            md.largest = kbuf;
+            md.smallest = Bytes::from(key);
+            md.largest = Bytes::from(kbuf);
         }
     }
     Ok(md)
@@ -1468,11 +1469,11 @@ mod tests {
 
         assert_eq!(
             LookupKey::new(b"aabc", 6).internal_key(),
-            f.smallest.as_slice()
+            &f.smallest.to_vec()
         );
         assert_eq!(
             LookupKey::new(b"test123", 7).internal_key(),
-            f.largest.as_slice()
+            &f.largest.to_vec()
         );
         assert_eq!(379, f.size);
         assert_eq!(123, f.num);
