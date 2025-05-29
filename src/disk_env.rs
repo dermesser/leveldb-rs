@@ -161,7 +161,7 @@ impl Env for PosixDiskEnv {
             )
         } else {
             let f = locks.remove(&l.id).unwrap();
-            if f.unlock().is_err() {
+            if FileExt::unlock(&f).is_err() {
                 return err(StatusCode::LockError, &format!("unlock failed: {}", l.id));
             }
             Ok(())
