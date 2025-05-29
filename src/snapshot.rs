@@ -22,6 +22,8 @@ impl Drop for InnerSnapshot {
     }
 }
 
+/// Can be obtained from [`DB::get_snapshot`](crate::DB::get_snapshot), and used
+/// in some methods of the DB.
 #[derive(Clone)]
 pub struct Snapshot {
     inner: Rc<InnerSnapshot>,
