@@ -16,7 +16,7 @@ include = ["src/**/*", "src/*", "Cargo.toml", "LICENSE", "README.md"]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-crc = "3.2"
+crc32c = "0.6.8"
 integer-encoding = "3.0"
 bytes = "1.10.1"
 rand = "0.8.5"
