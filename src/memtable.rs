@@ -6,8 +6,8 @@ use crate::types::{current_key_val, LdbIterator, SequenceNumber};
 
 use std::rc::Rc;
 
-use integer_encoding::FixedInt;
 use bytes::Bytes;
+use integer_encoding::FixedInt;
 
 /// Provides Insert/Get/Iterate, based on the SkipMap implementation.
 /// MemTable uses MemtableKeys internally, that is, it stores key and value in the [Skipmap] key.
@@ -56,7 +56,10 @@ impl MemTable {
             // We only care about user key equality here
             if key.user_key() == &foundkey[fkeyoff..fkeyoff + fkeylen] {
                 if tag & 0xff == ValueType::TypeValue as u64 {
-                    return (Some(foundkey[valoff..valoff + vallen].to_vec().into()), false);
+                    return (
+                        Some(foundkey[valoff..valoff + vallen].to_vec().into()),
+                        false,
+                    );
                 } else {
                     return (None, true);
                 }
@@ -121,7 +124,8 @@ impl LdbIterator for MemtableIterator {
 
         if let Some((key_bytes, _val_bytes)) = self.skipmapiter.current() {
             let (keylen, keyoff, _, vallen, valoff) = parse_memtable_key(&key_bytes);
-            let internal_key = Bytes::copy_from_slice(&key_bytes[keyoff..keyoff + keylen + u64::required_space()]);
+            let internal_key =
+                Bytes::copy_from_slice(&key_bytes[keyoff..keyoff + keylen + u64::required_space()]);
             let value = Bytes::copy_from_slice(&key_bytes[valoff..valoff + vallen]);
             Some((internal_key, value))
         } else {

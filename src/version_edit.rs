@@ -4,6 +4,7 @@ use crate::types::{FileMetaData, FileNum, SequenceNumber};
 
 use integer_encoding::{VarIntReader, VarIntWriter};
 
+use bytes::Bytes;
 use std::collections::HashSet;
 use std::io::{Read, Write};
 
@@ -11,7 +12,7 @@ use std::io::{Read, Write};
 pub struct CompactionPointer {
     pub level: usize,
     // This key is in InternalKey format.
-    pub key: Vec<u8>,
+    pub key: Bytes,
 }
 
 enum EditTag {
@@ -118,7 +119,7 @@ impl VersionEdit {
     pub fn set_compact_pointer(&mut self, level: usize, key: InternalKey) {
         self.compaction_ptrs.push(CompactionPointer {
             level,
-            key: Vec::from(key),
+            key: key.to_vec().into(),
         })
     }
 
@@ -233,7 +234,7 @@ impl VersionEdit {
                     EditTag::CompactPointer => {
                         // Monads by indentation...
                         if let Ok(lvl) = reader.read_varint() {
-                            let key = read_length_prefixed(&mut reader)?;
+                            let key = read_length_prefixed(&mut reader)?.into();
 
                             ve.compaction_ptrs
                                 .push(CompactionPointer { level: lvl, key });
@@ -258,8 +259,8 @@ impl VersionEdit {
                         if let Ok(lvl) = reader.read_varint() {
                             if let Ok(num) = reader.read_varint() {
                                 if let Ok(size) = reader.read_varint() {
-                                    let smallest = read_length_prefixed(&mut reader)?;
-                                    let largest = read_length_prefixed(&mut reader)?;
+                                    let smallest = read_length_prefixed(&mut reader)?.into();
+                                    let largest = read_length_prefixed(&mut reader)?.into();
                                     ve.new_files.push((
                                         lvl,
                                         FileMetaData {
@@ -323,8 +324,8 @@ mod tests {
                 allowed_seeks: 12345,
                 num: 901,
                 size: 234,
-                smallest: vec![5, 6, 7],
-                largest: vec![8, 9, 0],
+                smallest: vec![5, 6, 7].into(),
+                largest: vec![8, 9, 0].into(),
             },
         );
         ve.delete_file(1, 132);
@@ -341,21 +342,21 @@ mod tests {
             decoded.compaction_ptrs[0],
             CompactionPointer {
                 level: 0,
-                key: vec![0, 1, 2],
+                key: vec![0, 1, 2].into(),
             }
         );
         assert_eq!(
             decoded.compaction_ptrs[1],
             CompactionPointer {
                 level: 1,
-                key: vec![3, 4, 5],
+                key: vec![3, 4, 5].into(),
             }
         );
         assert_eq!(
             decoded.compaction_ptrs[2],
             CompactionPointer {
                 level: 2,
-                key: vec![6, 7, 8],
+                key: vec![6, 7, 8].into(),
             }
         );
         assert_eq!(decoded.new_files.len(), 1);
@@ -367,8 +368,8 @@ mod tests {
                     allowed_seeks: 0,
                     num: 901,
                     size: 234,
-                    smallest: vec![5, 6, 7],
-                    largest: vec![8, 9, 0],
+                    smallest: vec![5, 6, 7].into(),
+                    largest: vec![8, 9, 0].into(),
                 }
             )
         );

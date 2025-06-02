@@ -1,8 +1,8 @@
 use crate::cmp::{Cmp, DefaultCmp};
 use crate::types::{current_key_val, LdbIterator};
 
-use std::cmp::Ordering;
 use bytes::Bytes;
+use std::cmp::Ordering;
 
 /// TestLdbIter is an LdbIterator over a vector, to be used for testing purposes.
 pub struct TestLdbIter<'a> {
@@ -40,7 +40,10 @@ impl<'a> LdbIterator for TestLdbIter<'a> {
     }
     fn current(&self) -> Option<(Bytes, Bytes)> {
         if self.init && self.ix < self.v.len() {
-            Some((Bytes::copy_from_slice(self.v[self.ix].0), Bytes::copy_from_slice(self.v[self.ix].1)))
+            Some((
+                Bytes::copy_from_slice(self.v[self.ix].0),
+                Bytes::copy_from_slice(self.v[self.ix].1),
+            ))
         } else {
             None
         }

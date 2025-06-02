@@ -16,7 +16,7 @@ impl KVService {
         rp.set_content_type("text/plain");
 
         if let Some(val) = val {
-            rp.append(val);
+            rp.append(val.to_vec());
         } else {
             rp.set_status(404);
         }

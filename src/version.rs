@@ -5,10 +5,10 @@ use crate::table_cache::TableCache;
 use crate::table_reader::TableIterator;
 use crate::types::{FileMetaData, FileNum, LdbIterator, Shared, MAX_SEQUENCE_NUMBER, NUM_LEVELS};
 
+use bytes::Bytes;
 use std::cmp::Ordering;
 use std::default::Default;
 use std::rc::Rc;
-use bytes::Bytes;
 
 /// FileMetaHandle is a reference-counted FileMetaData object with interior mutability. This is
 /// necessary to provide a shared metadata container that can be modified while referenced by e.g.
@@ -593,12 +593,20 @@ pub mod testutil {
         largest: &[u8],
         largestix: u64,
     ) -> FileMetaHandle {
+        let smallest_key = LookupKey::new(smallest, smallestix);
+        let largest_key = LookupKey::new(largest, largestix);
         share(FileMetaData {
             allowed_seeks: 10,
             size: 163840,
             num,
-            smallest: LookupKey::new(smallest, smallestix).internal_key().to_vec(),
-            largest: LookupKey::new(largest, largestix).internal_key().to_vec(),
+            smallest: LookupKey::new(smallest, smallestix)
+                .internal_key()
+                .to_vec()
+                .into(),
+            largest: LookupKey::new(largest, largestix)
+                .internal_key()
+                .to_vec()
+                .into(),
         })
     }
 

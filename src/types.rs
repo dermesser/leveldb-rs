@@ -125,8 +125,8 @@ pub struct FileMetaData {
     pub num: FileNum,
     pub size: usize,
     // these are in InternalKey format:
-    pub smallest: Vec<u8>,
-    pub largest: Vec<u8>,
+    pub smallest: Bytes,
+    pub largest: Bytes,
 }
 
 #[derive(Debug, Clone, PartialEq)]

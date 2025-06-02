@@ -15,8 +15,8 @@ use crate::types::{current_key_val, LdbIterator, Shared};
 use std::cmp::Ordering;
 use std::rc::Rc;
 
-use integer_encoding::FixedIntWriter;
 use bytes::Bytes;
+use integer_encoding::FixedIntWriter;
 
 /// Reads the table footer.
 fn read_footer(f: &dyn RandomAccess, size: usize) -> Result<Footer> {
@@ -741,7 +741,10 @@ mod tests {
         for (ref k, ref v) in LdbIteratorIter::wrap(&mut _iter) {
             assert_eq!(k.len(), 3 + 8);
             let (result_k, result_v) = table.get(k).unwrap().unwrap();
-            assert_eq!((k.to_vec(), v.to_vec()), (result_k.to_vec(), result_v.to_vec()));
+            assert_eq!(
+                (k.to_vec(), v.to_vec()),
+                (result_k.to_vec(), result_v.to_vec())
+            );
         }
 
         assert!(table

@@ -1,9 +1,9 @@
 use crate::cmp::Cmp;
 use crate::types::{current_key_val, Direction, LdbIterator};
 
+use bytes::Bytes;
 use std::cmp::Ordering;
 use std::rc::Rc;
-use bytes::Bytes;
 
 // Warning: This module is kinda messy. The original implementation is
 // not that much better though :-)

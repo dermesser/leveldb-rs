@@ -8,7 +8,7 @@ use std::path::Path;
 fn update_count(w: &str, db: &mut leveldb::DB) -> Option<()> {
     let mut count: usize = 0;
     if let Some(v) = db.get(w.as_bytes()) {
-        let s = String::from_utf8(v).unwrap();
+        let s = String::from_utf8(v.into()).unwrap();
         count = s.parse::<usize>().unwrap();
     }
     count += 1;

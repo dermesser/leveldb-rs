@@ -5,10 +5,10 @@ use crate::snapshot::Snapshot;
 use crate::types::{Direction, LdbIterator, Shared};
 use crate::version_set::VersionSet;
 
+use bytes::Bytes;
 use std::cmp::Ordering;
 use std::mem;
 use std::rc::Rc;
-use bytes::Bytes;
 
 const READ_BYTES_PERIOD: isize = 1048576;
 
@@ -215,7 +215,10 @@ impl LdbIterator for DBIterator {
                 None
             }
         } else {
-            Some((Bytes::copy_from_slice(&self.savedkey), Bytes::copy_from_slice(&self.savedval)))
+            Some((
+                Bytes::copy_from_slice(&self.savedkey),
+                Bytes::copy_from_slice(&self.savedval),
+            ))
         }
     }
     fn prev(&mut self) -> bool {

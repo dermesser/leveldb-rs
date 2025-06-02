@@ -3,11 +3,11 @@ use crate::rand::rngs::StdRng;
 use crate::rand::{RngCore, SeedableRng};
 use crate::types::LdbIterator;
 
+use bytes::Bytes;
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::mem::{replace, size_of};
 use std::rc::Rc;
-use bytes::Bytes;
 
 const MAX_HEIGHT: usize = 12;
 const BRANCHING_FACTOR: u32 = 4;
@@ -434,36 +434,20 @@ pub mod tests {
             b"aba"
         );
         assert_eq!(
-            &*skm.map
-                .borrow()
-                .get_greater_or_equal(b"ab")
-                .unwrap()
-                .key,
+            &*skm.map.borrow().get_greater_or_equal(b"ab").unwrap().key,
             b"aba"
         );
         assert_eq!(
-            &*skm.map
-                .borrow()
-                .get_greater_or_equal(b"abc")
-                .unwrap()
-                .key,
+            &*skm.map.borrow().get_greater_or_equal(b"abc").unwrap().key,
             b"abc"
         );
         assert!(skm.map.borrow().get_next_smaller(b"ab0").is_none());
         assert_eq!(
-            &*skm.map
-                .borrow()
-                .get_next_smaller(b"abd")
-                .unwrap()
-                .key,
+            &*skm.map.borrow().get_next_smaller(b"abd").unwrap().key,
             b"abc"
         );
         assert_eq!(
-            &*skm.map
-                .borrow()
-                .get_next_smaller(b"ab{")
-                .unwrap()
-                .key,
+            &*skm.map.borrow().get_next_smaller(b"ab{").unwrap().key,
             b"abz"
         );
     }

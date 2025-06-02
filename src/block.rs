@@ -5,9 +5,9 @@ use std::rc::Rc;
 use crate::options::Options;
 use crate::types::LdbIterator;
 
+use bytes::Bytes;
 use integer_encoding::FixedInt;
 use integer_encoding::VarInt;
-use bytes::Bytes;
 
 pub type BlockContents = Bytes;
 

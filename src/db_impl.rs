@@ -30,6 +30,7 @@ use crate::version_set::{
 };
 use crate::write_batch::WriteBatch;
 
+use bytes::Bytes;
 use std::cmp::Ordering;
 use std::io::{self, BufWriter, Write};
 use std::mem;
@@ -37,7 +38,6 @@ use std::ops::Drop;
 use std::path::Path;
 use std::path::PathBuf;
 use std::rc::Rc;
-use bytes::Bytes;
 
 /// DB contains the actual database implemenation. As opposed to the original, this implementation
 /// is not concurrent (yet).
@@ -648,7 +648,7 @@ impl DB {
                 if let Some(c) = c_ {
                     // Update ifrom to the largest key of the last file in this compaction.
                     let ix = c.num_inputs(0) - 1;
-                    ifrom.clone_from(&c.input(0, ix).largest);
+                    ifrom.clone_from(&c.input(0, ix).largest.into());
                     self.start_compaction(c)?;
                 } else {
                     break;
@@ -805,7 +805,6 @@ impl DB {
         let mut input = self.vset.borrow().make_input_iterator(&cs.compaction);
         input.seek_to_first();
 
-        let (mut key, mut val);
         let mut last_seq_for_key = MAX_SEQUENCE_NUMBER;
 
         let mut have_ukey = false;
@@ -814,19 +813,15 @@ impl DB {
         while input.valid() {
             // TODO: Do we need to do a memtable compaction here? Probably not, in the sequential
             // case.
-            if let Some((key_bytes, val_bytes)) = input.current() {
-                key = key_bytes.to_vec();
-                val = val_bytes.to_vec();
-            } else {
-                panic!("Iterator should be valid here");
-            }
-            if cs.compaction.should_stop_before(&key) && cs.builder.is_some() {
+            let (key_bytes, val_bytes) = input.current().expect("Iterator should be valid here");
+
+            if cs.compaction.should_stop_before(&key_bytes) && cs.builder.is_some() {
                 self.finish_compaction_output(cs)?;
             }
-            let (ktyp, seq, ukey) = parse_internal_key(&key);
+            let (ktyp, seq, ukey) = parse_internal_key(&key_bytes);
             if seq == 0 {
                 // Parsing failed.
-                log!(self.opt.log, "Encountered seq=0 in key: {:?}", &key);
+                log!(self.opt.log, "Encountered seq=0 in key: {:?}", &key_bytes);
                 last_seq_for_key = MAX_SEQUENCE_NUMBER;
                 have_ukey = false;
                 current_ukey.clear();
@@ -875,10 +870,10 @@ impl DB {
                 cs.outputs.push(fmd);
             }
             if cs.builder.as_ref().unwrap().entries() == 0 {
-                cs.current_output().smallest.clone_from(&key);
+                cs.current_output().smallest.clone_from(&key_bytes);
             }
-            cs.current_output().largest.clone_from(&key);
-            cs.builder.as_mut().unwrap().add(&key, &val)?;
+            cs.current_output().largest.clone_from(&key_bytes);
+            cs.builder.as_mut().unwrap().add(&key_bytes, &val_bytes)?;
             // NOTE: Adjust max file size based on level.
             if cs.builder.as_ref().unwrap().size_estimate() > self.opt.max_file_size {
                 self.finish_compaction_output(cs)?;
@@ -1066,8 +1061,8 @@ pub fn build_table<I: LdbIterator, P: AsRef<Path>>(
         Some(key) => {
             md.num = num;
             md.size = opt.env.size_of(Path::new(&filename))?;
-            md.smallest = key;
-            md.largest = kbuf;
+            md.smallest = key.into();
+            md.largest = kbuf.into();
         }
     }
     Ok(md)
@@ -1331,10 +1326,7 @@ mod tests {
             assert!(!env.exists(&Path::new("db").join("000006.log")).unwrap());
             // Log is reused, so memtable should contain last written entry from above.
             assert_eq!(1, db.mem.len());
-            assert_eq!(
-                b"def",
-                &*db.mem.get(&LookupKey::new(b"abe", 3)).0.unwrap()
-            );
+            assert_eq!(b"def", &*db.mem.get(&LookupKey::new(b"abe", 3)).0.unwrap());
         }
     }
 
@@ -1477,14 +1469,8 @@ mod tests {
         let f = build_table("db", &opt, mt.iter(), 123).unwrap();
         let path = &Path::new("db").join("000123.ldb");
 
-        assert_eq!(
-            LookupKey::new(b"aabc", 6).internal_key(),
-            &f.smallest
-        );
-        assert_eq!(
-            LookupKey::new(b"test123", 7).internal_key(),
-            &f.largest
-        );
+        assert_eq!(LookupKey::new(b"aabc", 6).internal_key(), &f.smallest);
+        assert_eq!(LookupKey::new(b"test123", 7).internal_key(), &f.largest);
         assert_eq!(379, f.size);
         assert_eq!(123, f.num);
         assert!(opt.env.exists(path).unwrap());
@@ -1789,20 +1775,35 @@ mod tests {
             db.put(b"xx4", b"222").unwrap();
             let ss2 = db.get_snapshot();
 
-            assert_eq!(Some(b"113".to_vec()), db.get_at(&ss, b"xx3").unwrap().map(|b| b.to_vec()));
+            assert_eq!(
+                Some(b"113".to_vec()),
+                db.get_at(&ss, b"xx3").unwrap().map(|b| b.to_vec())
+            );
             assert_eq!(None, db.get_at(&ss, b"xx2").unwrap());
             assert_eq!(None, db.get_at(&ss, b"xx5").unwrap());
 
-            assert_eq!(Some(b"114".to_vec()), db.get_at(&ss, b"xx4").unwrap().map(|b| b.to_vec()));
-            assert_eq!(Some(b"222".to_vec()), db.get_at(&ss2, b"xx4").unwrap().map(|b| b.to_vec()));
+            assert_eq!(
+                Some(b"114".to_vec()),
+                db.get_at(&ss, b"xx4").unwrap().map(|b| b.to_vec())
+            );
+            assert_eq!(
+                Some(b"222".to_vec()),
+                db.get_at(&ss2, b"xx4").unwrap().map(|b| b.to_vec())
+            );
         }
 
         {
             let mut db = DB::open("db", opt).unwrap();
 
             let ss = db.get_snapshot();
-            assert_eq!(Some(b"113".to_vec()), db.get_at(&ss, b"xx3").unwrap().map(|b| b.to_vec()));
-            assert_eq!(Some(b"222".to_vec()), db.get_at(&ss, b"xx4").unwrap().map(|b| b.to_vec()));
+            assert_eq!(
+                Some(b"113".to_vec()),
+                db.get_at(&ss, b"xx3").unwrap().map(|b| b.to_vec())
+            );
+            assert_eq!(
+                Some(b"222".to_vec()),
+                db.get_at(&ss, b"xx4").unwrap().map(|b| b.to_vec())
+            );
             assert_eq!(None, db.get_at(&ss, b"xx2").unwrap());
         }
     }
