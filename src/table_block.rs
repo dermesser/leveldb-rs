@@ -73,7 +73,7 @@ pub fn read_table_block(
 
     Ok(Block::new(
         opt,
-        compressor_list.get(compress[0])?.decode(buf)?,
+        compressor_list.get(compress[0])?.decode(buf)?.into(),
     ))
 }
 

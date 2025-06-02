@@ -115,10 +115,10 @@ pub struct FilterBlockReader {
 
 impl FilterBlockReader {
     pub fn new_owned(pol: BoxedFilterPolicy, data: Vec<u8>) -> FilterBlockReader {
-        FilterBlockReader::new(pol, Rc::new(data))
+        FilterBlockReader::new(pol, Rc::new(data.into()))
     }
 
-    pub fn new(pol: BoxedFilterPolicy, data: Rc<Vec<u8>>) -> FilterBlockReader {
+    pub fn new(pol: BoxedFilterPolicy, data: Rc<BlockContents>) -> FilterBlockReader {
         assert!(data.len() >= 5);
 
         let fbase = data[data.len() - 1] as u32;

@@ -7,8 +7,9 @@ use crate::types::LdbIterator;
 
 use integer_encoding::FixedInt;
 use integer_encoding::VarInt;
+use bytes::Bytes;
 
-pub type BlockContents = Vec<u8>;
+pub type BlockContents = Bytes;
 
 /// A Block is an immutable ordered set of key/value entries.
 ///
