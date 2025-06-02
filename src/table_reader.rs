@@ -16,6 +16,7 @@ use std::cmp::Ordering;
 use std::rc::Rc;
 
 use integer_encoding::FixedIntWriter;
+use bytes::Bytes;
 
 /// Reads the table footer.
 fn read_footer(f: &dyn RandomAccess, size: usize) -> Result<Footer> {
@@ -191,7 +192,7 @@ impl Table {
     /// This is done this way because some key types, like internal keys, will not result in an
     /// exact match; it depends on other comparators than the one that the table reader knows
     /// whether a match is acceptable.
-    pub fn get(&self, key: InternalKey<'_>) -> Result<Option<(Vec<u8>, Vec<u8>)>> {
+    pub fn get(&self, key: InternalKey<'_>) -> Result<Option<(Bytes, Bytes)>> {
         let mut index_iter = self.indexblock.iter();
         index_iter.seek(key);
 
@@ -223,7 +224,7 @@ impl Table {
         iter.seek(key);
         if let Some((k, v)) = current_key_val(&iter) {
             if self.opt.cmp.cmp(&k, key) >= Ordering::Equal {
-                return Ok(Some((k, v)));
+                return Ok(Some((k.into(), v.into())));
             }
         }
         Ok(None)
@@ -372,11 +373,11 @@ impl LdbIterator for TableIterator {
         self.current_block.is_some() && (self.current_block.as_ref().unwrap().valid())
     }
 
-    fn current(&self, key: &mut Vec<u8>, val: &mut Vec<u8>) -> bool {
+    fn current(&self) -> Option<(Bytes, Bytes)> {
         if let Some(ref cb) = self.current_block {
-            cb.current(key, val)
+            cb.current()
         } else {
-            false
+            None
         }
     }
 }
@@ -704,7 +705,7 @@ mod tests {
         // Test that all of the table's entries are reachable via get()
         for (k, v) in LdbIteratorIter::wrap(&mut _iter) {
             let r = table2.get(&k);
-            assert_eq!(Ok(Some((k, v))), r);
+            assert_eq!(Ok(Some((k.into(), v.into()))), r);
         }
 
         assert_eq!(bc.borrow().count(), 3);
@@ -739,7 +740,8 @@ mod tests {
         let mut _iter = table.iter();
         for (ref k, ref v) in LdbIteratorIter::wrap(&mut _iter) {
             assert_eq!(k.len(), 3 + 8);
-            assert_eq!((k.to_vec(), v.to_vec()), table.get(k).unwrap().unwrap());
+            let (result_k, result_v) = table.get(k).unwrap().unwrap();
+            assert_eq!((k.to_vec(), v.to_vec()), (result_k.to_vec(), result_v.to_vec()));
         }
 
         assert!(table

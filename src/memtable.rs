@@ -7,6 +7,7 @@ use crate::types::{current_key_val, LdbIterator, SequenceNumber};
 use std::rc::Rc;
 
 use integer_encoding::FixedInt;
+use bytes::Bytes;
 
 /// Provides Insert/Get/Iterate, based on the SkipMap implementation.
 /// MemTable uses MemtableKeys internally, that is, it stores key and value in the [Skipmap] key.
@@ -44,7 +45,7 @@ impl MemTable {
     /// get returns the value for the given entry and whether the entry is marked as deleted. This
     /// is to distinguish between not-found and found-deleted.
     #[allow(unused_variables)]
-    pub fn get(&self, key: &LookupKey) -> (Option<Vec<u8>>, bool) {
+    pub fn get(&self, key: &LookupKey) -> (Option<Bytes>, bool) {
         let mut iter = self.map.iter();
         iter.seek(key.memtable_key());
 
@@ -55,7 +56,7 @@ impl MemTable {
             // We only care about user key equality here
             if key.user_key() == &foundkey[fkeyoff..fkeyoff + fkeylen] {
                 if tag & 0xff == ValueType::TypeValue as u64 {
-                    return (Some(foundkey[valoff..valoff + vallen].to_vec()), false);
+                    return (Some(foundkey[valoff..valoff + vallen].to_vec().into()), false);
                 } else {
                     return (None, true);
                 }
@@ -92,12 +93,11 @@ impl LdbIterator for MemtableIterator {
     }
     fn prev(&mut self) -> bool {
         // Make sure this is actually needed (skipping deleted values?).
-        let (mut key, mut val) = (vec![], vec![]);
         loop {
             if !self.skipmapiter.prev() {
                 return false;
             }
-            if self.skipmapiter.current(&mut key, &mut val) {
+            if let Some((key, _val)) = self.skipmapiter.current() {
                 let (_, _, tag, _, _) = parse_memtable_key(&key);
 
                 if tag & 0xff == ValueType::TypeValue as u64 {
@@ -113,23 +113,19 @@ impl LdbIterator for MemtableIterator {
     fn valid(&self) -> bool {
         self.skipmapiter.valid()
     }
-    /// current places the current key (in InternalKey format) and value into the supplied vectors.
-    fn current(&self, key: &mut Vec<u8>, val: &mut Vec<u8>) -> bool {
+    /// current returns the current key (in InternalKey format) and value.
+    fn current(&self) -> Option<(Bytes, Bytes)> {
         if !self.valid() {
-            return false;
+            return None;
         }
 
-        if self.skipmapiter.current(key, val) {
-            let (keylen, keyoff, _, vallen, valoff) = parse_memtable_key(key);
-            val.clear();
-            val.extend_from_slice(&key[valoff..valoff + vallen]);
-            // zero-allocation truncation.
-            shift_left(key, keyoff);
-            // Truncate key to key+tag.
-            key.truncate(keylen + u64::required_space());
-            true
+        if let Some((key_bytes, _val_bytes)) = self.skipmapiter.current() {
+            let (keylen, keyoff, _, vallen, valoff) = parse_memtable_key(&key_bytes);
+            let internal_key = Bytes::copy_from_slice(&key_bytes[keyoff..keyoff + keylen + u64::required_space()]);
+            let value = Bytes::copy_from_slice(&key_bytes[valoff..valoff + vallen]);
+            Some((internal_key, value))
         } else {
-            panic!("should not happen");
+            None
         }
     }
     /// seek takes an InternalKey.

@@ -297,15 +297,14 @@ impl LdbIterator for BlockIter {
         !self.key.is_empty() && self.val_offset > 0 && self.val_offset <= self.restarts_off
     }
 
-    fn current(&self, key: &mut Vec<u8>, val: &mut Vec<u8>) -> bool {
+    fn current(&self) -> Option<(Bytes, Bytes)> {
         if self.valid() {
-            key.clear();
-            val.clear();
-            key.extend_from_slice(&self.key);
-            val.extend_from_slice(&self.block[self.val_offset..self.offset]);
-            true
+            Some((
+                Bytes::copy_from_slice(&self.key),
+                Bytes::copy_from_slice(&self.block[self.val_offset..self.offset]),
+            ))
         } else {
-            false
+            None
         }
     }
 }

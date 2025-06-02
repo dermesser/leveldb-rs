@@ -8,6 +8,7 @@ use crate::types::{FileMetaData, FileNum, LdbIterator, Shared, MAX_SEQUENCE_NUMB
 use std::cmp::Ordering;
 use std::default::Default;
 use std::rc::Rc;
+use bytes::Bytes;
 
 /// FileMetaHandle is a reference-counted FileMetaData object with interior mutability. This is
 /// necessary to provide a shared metadata container that can be modified while referenced by e.g.
@@ -59,7 +60,7 @@ impl Version {
     /// get returns the value for the specified key using the persistent tables contained in this
     /// Version.
     #[allow(unused_assignments)]
-    pub fn get(&self, key: InternalKey<'_>) -> Result<Option<(Vec<u8>, GetStats)>> {
+    pub fn get(&self, key: InternalKey<'_>) -> Result<Option<(Bytes, GetStats)>> {
         let levels = self.get_overlapping(key);
         let ikey = key;
         let ukey = parse_internal_key(ikey).2;
@@ -90,7 +91,7 @@ impl Version {
                     if typ == ValueType::TypeValue
                         && self.user_cmp.cmp(foundkey, ukey) == Ordering::Equal
                     {
-                        return Ok(Some((v, stats)));
+                        return Ok(Some((v.into(), stats)));
                     } else if typ == ValueType::TypeDeletion {
                         // Skip looking once we have found a deletion.
                         return Ok(None);
@@ -441,11 +442,11 @@ impl LdbIterator for VersionIter {
         }
         self.advance()
     }
-    fn current(&self, key: &mut Vec<u8>, val: &mut Vec<u8>) -> bool {
+    fn current(&self) -> Option<(Bytes, Bytes)> {
         if let Some(ref t) = self.current {
-            t.current(key, val)
+            t.current()
         } else {
-            false
+            None
         }
     }
     fn seek(&mut self, key: &[u8]) {

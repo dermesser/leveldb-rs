@@ -7,6 +7,7 @@ use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::mem::{replace, size_of};
 use std::rc::Rc;
+use bytes::Bytes;
 
 const MAX_HEIGHT: usize = 12;
 const BRANCHING_FACTOR: u32 = 4;
@@ -16,8 +17,8 @@ const BRANCHING_FACTOR: u32 = 4;
 struct Node {
     skips: Vec<Option<*mut Node>>,
     next: Option<Box<Node>>,
-    key: Vec<u8>,
-    value: Vec<u8>,
+    key: Bytes,
+    value: Bytes,
 }
 
 /// Implements the backing store for a `MemTable`. The important methods are `insert()` and
@@ -63,8 +64,8 @@ impl SkipMap {
                 head: Box::new(Node {
                     skips: s,
                     next: None,
-                    key: Vec::new(),
-                    value: Vec::new(),
+                    key: Bytes::new(),
+                    value: Bytes::new(),
                 }),
                 rand: StdRng::seed_from_u64(0xdeadbeef),
                 len: 0,
@@ -134,7 +135,7 @@ impl InnerSkipMap {
         loop {
             unsafe {
                 if let Some(next) = (*current).skips[level] {
-                    let ord = self.cmp.cmp((*next).key.as_slice(), key);
+                    let ord = self.cmp.cmp(&(*next).key, key);
 
                     match ord {
                         Ordering::Less => {
@@ -177,7 +178,7 @@ impl InnerSkipMap {
         loop {
             unsafe {
                 if let Some(next) = (*current).skips[level] {
-                    let ord = self.cmp.cmp((*next).key.as_slice(), key);
+                    let ord = self.cmp.cmp(&(*next).key, key);
 
                     if let Ordering::Less = ord {
                         current = next;
@@ -252,8 +253,8 @@ impl InnerSkipMap {
         let mut new = Box::new(Node {
             skips: new_skips,
             next: None,
-            key,
-            value: val,
+            key: key.into(),
+            value: val.into(),
         });
         let newp = new.as_mut() as *mut Node;
 
@@ -339,17 +340,16 @@ impl LdbIterator for SkipMapIter {
     fn valid(&self) -> bool {
         self.current != self.map.borrow().head.as_ref()
     }
-    fn current(&self, key: &mut Vec<u8>, val: &mut Vec<u8>) -> bool {
+    fn current(&self) -> Option<(Bytes, Bytes)> {
         if self.valid() {
-            key.clear();
-            val.clear();
             unsafe {
-                key.extend_from_slice(&(*self.current).key);
-                val.extend_from_slice(&(*self.current).value);
+                Some((
+                    Bytes::copy_from_slice(&(*self.current).key),
+                    Bytes::copy_from_slice(&(*self.current).value),
+                ))
             }
-            true
         } else {
-            false
+            None
         }
     }
     fn prev(&mut self) -> bool {
@@ -425,49 +425,45 @@ pub mod tests {
     fn test_find() {
         let skm = make_skipmap();
         assert_eq!(
-            skm.map.borrow().get_greater_or_equal(b"abf").unwrap().key,
+            &*skm.map.borrow().get_greater_or_equal(b"abf").unwrap().key,
             b"abf"
         );
         assert!(skm.map.borrow().get_greater_or_equal(b"ab{").is_none());
         assert_eq!(
-            skm.map.borrow().get_greater_or_equal(b"aaa").unwrap().key,
+            &*skm.map.borrow().get_greater_or_equal(b"aaa").unwrap().key,
             b"aba"
         );
         assert_eq!(
-            skm.map
+            &*skm.map
                 .borrow()
                 .get_greater_or_equal(b"ab")
                 .unwrap()
-                .key
-                .as_slice(),
+                .key,
             b"aba"
         );
         assert_eq!(
-            skm.map
+            &*skm.map
                 .borrow()
                 .get_greater_or_equal(b"abc")
                 .unwrap()
-                .key
-                .as_slice(),
+                .key,
             b"abc"
         );
         assert!(skm.map.borrow().get_next_smaller(b"ab0").is_none());
         assert_eq!(
-            skm.map
+            &*skm.map
                 .borrow()
                 .get_next_smaller(b"abd")
                 .unwrap()
-                .key
-                .as_slice(),
+                .key,
             b"abc"
         );
         assert_eq!(
-            skm.map
+            &*skm.map
                 .borrow()
                 .get_next_smaller(b"ab{")
                 .unwrap()
-                .key
-                .as_slice(),
+                .key,
             b"abz"
         );
     }
