@@ -5,7 +5,7 @@ use std::rc::Rc;
 use crate::options::Options;
 use crate::types::LdbIterator;
 
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
 use integer_encoding::FixedInt;
 use integer_encoding::VarInt;
 
@@ -55,7 +55,7 @@ impl Block {
             current_entry_offset: 0,
             current_restart_ix: 0,
 
-            key: Vec::new(),
+            key: BytesMut::new(),
             val_offset: 0,
         }
     }
@@ -91,7 +91,7 @@ pub struct BlockIter {
     current_restart_ix: usize,
 
     /// We assemble the key from two parts usually, so we keep the current full key here.
-    key: Vec<u8>,
+    key: BytesMut,
     /// Offset of the current value within the block.
     val_offset: usize,
 }
@@ -159,8 +159,11 @@ impl BlockIter {
     /// Only self.key is mutated.
     fn assemble_key(&mut self, off: usize, shared: usize, non_shared: usize) {
         self.key.truncate(shared);
-        self.key
-            .extend_from_slice(&self.block[off..off + non_shared]);
+        if non_shared > 0 {
+            let block_slice_ref: &[u8] = self.block.as_ref();
+            self.key
+                .extend_from_slice(&block_slice_ref[off..off + non_shared]);
+        }
     }
 
     pub fn seek_to_last(&mut self) -> Option<()> {
@@ -300,8 +303,8 @@ impl LdbIterator for BlockIter {
     fn current(&self) -> Option<(Bytes, Bytes)> {
         if self.valid() {
             Some((
-                Bytes::copy_from_slice(&self.key),
-                Bytes::copy_from_slice(&self.block[self.val_offset..self.offset]),
+                self.key.clone().freeze(),
+                self.block.slice(self.val_offset..self.offset),
             ))
         } else {
             None

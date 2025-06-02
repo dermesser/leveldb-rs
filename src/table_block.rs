@@ -12,9 +12,16 @@ use crate::table_builder;
 use integer_encoding::FixedInt;
 
 /// Reads the data for the specified block handle from a file.
-fn read_bytes(f: &dyn RandomAccess, location: &BlockHandle) -> Result<Vec<u8>> {
-    let mut buf = vec![0; location.size()];
-    f.read_at(location.offset(), &mut buf).map(|_| buf)
+fn read_bytes_from_file(f: &dyn RandomAccess, offset: usize, size: usize) -> Result<Vec<u8>> {
+    let mut buf = vec![0; size];
+    let bytes_read = f.read_at(offset, &mut buf)?;
+    if bytes_read != size {
+        return err(
+            StatusCode::IOError,
+            "Failed to read complete data from file",
+        );
+    }
+    Ok(buf)
 }
 
 /// Reads a serialized filter block from a file and returns a FilterBlockReader.
@@ -29,7 +36,7 @@ pub fn read_filter_block(
             "no filter block in empty location",
         );
     }
-    let buf = read_bytes(src, location)?;
+    let buf = read_bytes_from_file(src, location.offset(), location.size())?;
     Ok(FilterBlockReader::new_owned(policy, buf))
 }
 
@@ -41,26 +48,29 @@ pub fn read_table_block(
     f: &dyn RandomAccess,
     location: &BlockHandle,
 ) -> Result<Block> {
-    // The block is denoted by offset and length in BlockHandle. A block in an encoded
-    // table is followed by 1B compression type and 4B checksum.
-    // The checksum refers to the compressed contents.
-    let buf = read_bytes(f, location)?;
-    let compress = read_bytes(
-        f,
-        &BlockHandle::new(
-            location.offset() + location.size(),
-            table_builder::TABLE_BLOCK_COMPRESS_LEN,
-        ),
-    )?;
-    let cksum = read_bytes(
-        f,
-        &BlockHandle::new(
-            location.offset() + location.size() + table_builder::TABLE_BLOCK_COMPRESS_LEN,
-            table_builder::TABLE_BLOCK_CKSUM_LEN,
-        ),
-    )?;
+    let data_size = location.size();
+    let trailer_size =
+        table_builder::TABLE_BLOCK_COMPRESS_LEN + table_builder::TABLE_BLOCK_CKSUM_LEN;
+    let total_read_size = data_size + trailer_size;
 
-    if !verify_table_block(&buf, compress[0], unmask_crc(u32::decode_fixed(&cksum))) {
+    let mut combined_buf = vec![0; total_read_size];
+    let bytes_read = f.read_at(location.offset(), &mut combined_buf)?;
+
+    if bytes_read != total_read_size {
+        return err(
+            StatusCode::IOError,
+            "Failed to read complete block and trailer",
+        );
+    }
+
+    let block_data_slice = &combined_buf[0..data_size];
+    let compress_type = combined_buf[data_size];
+    let cksum_slice =
+        &combined_buf[data_size + table_builder::TABLE_BLOCK_COMPRESS_LEN..total_read_size];
+
+    let expected_cksum = unmask_crc(u32::decode_fixed(cksum_slice));
+
+    if !verify_table_block(block_data_slice, compress_type, expected_cksum) {
         return err(
             StatusCode::Corruption,
             &format!(
@@ -71,10 +81,13 @@ pub fn read_table_block(
     }
     let compressor_list = opt.compressor_list.clone();
 
-    Ok(Block::new(
-        opt,
-        compressor_list.get(compress[0])?.decode(buf)?.into(),
-    ))
+    // The compressor's decode method expects a Vec<u8>.
+    // If block_data_slice is empty, to_vec() is fine.
+    let decoded_data = compressor_list
+        .get(compress_type)?
+        .decode(block_data_slice.to_vec())?;
+
+    Ok(Block::new(opt, decoded_data.into()))
 }
 
 /// Verify checksum of block
