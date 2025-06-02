@@ -465,7 +465,7 @@ impl DB {
                 if current.update_stats(st) {
                     do_compaction = true;
                 }
-                result = Some(v.into())
+                result = Some(v)
             }
         }
 
@@ -486,11 +486,7 @@ impl DB {
     /// get is a simplified version of get_at(), translating errors to None.
     pub fn get(&mut self, key: &[u8]) -> Option<Bytes> {
         let seq = self.vset.borrow().last_seq;
-        if let Ok(v) = self.get_internal(seq, key) {
-            v
-        } else {
-            None
-        }
+        self.get_internal(seq, key).unwrap_or_default()
     }
 }
 

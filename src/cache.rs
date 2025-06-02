@@ -215,7 +215,7 @@ impl<T> Cache<T> {
         match self.map.get(key) {
             None => None,
             Some((elem, lru_handle)) => {
-                self.list.reinsert_front(&lru_handle);
+                self.list.reinsert_front(lru_handle);
                 Some(elem)
             }
         }

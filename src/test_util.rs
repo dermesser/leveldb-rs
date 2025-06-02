@@ -21,7 +21,7 @@ impl<'a> TestLdbIter<'a> {
     }
 }
 
-impl<'a> LdbIterator for TestLdbIter<'a> {
+impl LdbIterator for TestLdbIter<'_> {
     fn advance(&mut self) -> bool {
         if self.ix == self.v.len() - 1 {
             self.ix += 1;
@@ -80,7 +80,7 @@ impl<'a, It: LdbIterator> LdbIteratorIter<'a, It> {
     }
 }
 
-impl<'a, It: LdbIterator> Iterator for LdbIteratorIter<'a, It> {
+impl<It: LdbIterator> Iterator for LdbIteratorIter<'_, It> {
     type Item = (Vec<u8>, Vec<u8>);
     fn next(&mut self) -> Option<Self::Item> {
         LdbIterator::next(self.inner)

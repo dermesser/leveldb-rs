@@ -367,7 +367,7 @@ mod tests {
         let (keylen, keyoff, tag, vallen, valoff) = parse_memtable_key(&key);
         assert_eq!(keylen, 3);
         assert_eq!(&key[keyoff..keyoff + keylen], vec![1, 2, 3].as_slice());
-        assert_eq!(tag, 123 << 8 | 1);
+        assert_eq!(tag, (123 << 8) | 1);
         assert_eq!(vallen, 3);
         assert_eq!(&key[valoff..valoff + vallen], vec![4, 5, 6].as_slice());
     }

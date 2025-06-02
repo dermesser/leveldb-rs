@@ -91,7 +91,7 @@ impl Version {
                     if typ == ValueType::TypeValue
                         && self.user_cmp.cmp(foundkey, ukey) == Ordering::Equal
                     {
-                        return Ok(Some((v.into(), stats)));
+                        return Ok(Some((v, stats)));
                     } else if typ == ValueType::TypeDeletion {
                         // Skip looking once we have found a deletion.
                         return Ok(None);

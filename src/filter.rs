@@ -139,7 +139,7 @@ impl FilterPolicy for BloomPolicy {
         // Add all keys to the filter.
         offset_data_iterate(keys, key_offsets, |key| {
             let mut h = self.bloom_hash(key);
-            let delta = (h >> 17) | (h << 15);
+            let delta = h.rotate_left(15);
             for _ in 0..self.k {
                 let bitpos = (h % adj_filter_bits) as usize;
                 filter[bitpos / 8] |= 1 << (bitpos % 8);
@@ -163,7 +163,7 @@ impl FilterPolicy for BloomPolicy {
         }
 
         let mut h = self.bloom_hash(key);
-        let delta = (h >> 17) | (h << 15);
+        let delta = h.rotate_left(15);
         for _ in 0..k {
             let bitpos = (h % bits) as usize;
             if (filter_adj[bitpos / 8] & (1 << (bitpos % 8))) == 0 {
