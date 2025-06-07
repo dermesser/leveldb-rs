@@ -100,5 +100,5 @@ fn main() {
     let mut db = DB::open(PATH, opt).unwrap();
     db.put(b"~local_player", b"NBT data goes here").unwrap();
     let value = db.get(b"~local_player").unwrap();
-    assert_eq!(&value, b"NBT data goes here")
+    assert_eq!(&*value, b"NBT data goes here")
 }

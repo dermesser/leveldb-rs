@@ -115,7 +115,7 @@ impl BlockBuilder {
             .expect("write to buffer failed");
 
         // done
-        self.buffer
+        self.buffer.into()
     }
 }
 

@@ -187,7 +187,8 @@ impl AsyncDB {
                                 send_response(message.resp_channel, Response::Error(e));
                             }
                             Ok(v) => {
-                                send_response(message.resp_channel, Response::Value(v));
+                                let v_vec = v.map(|bytes| bytes.to_vec());
+                                send_response(message.resp_channel, Response::Value(v_vec));
                             }
                         };
                     } else {
@@ -201,7 +202,7 @@ impl AsyncDB {
                     }
                 }
                 Request::Get { key } => {
-                    let r = db.get(&key);
+                    let r = db.get(&key).map(|bytes| bytes.to_vec());
                     send_response(message.resp_channel, Response::Value(r));
                 }
                 Request::GetSnapshot => {

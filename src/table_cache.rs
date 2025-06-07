@@ -12,6 +12,7 @@ use crate::types::{FileNum, Shared};
 
 use integer_encoding::FixedIntWriter;
 
+use bytes::Bytes;
 use std::convert::AsRef;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -56,9 +57,10 @@ impl TableCache {
         &mut self,
         file_num: FileNum,
         key: InternalKey<'_>,
-    ) -> Result<Option<(Vec<u8>, Vec<u8>)>> {
+    ) -> Result<Option<(Bytes, Bytes)>> {
         let tbl = self.get_table(file_num)?;
         tbl.get(key)
+            .map(|opt| opt)
     }
 
     /// Return a table from cache, or open the backing file, then cache and return it.
