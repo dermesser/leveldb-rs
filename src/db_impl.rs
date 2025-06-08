@@ -1531,7 +1531,7 @@ mod tests {
         assert!(db.get_at(&old_ss, b"xyz").unwrap().is_none());
 
         // memtable get
-        assert_eq!(b"123", &*db.get(b"xyz").unwrap());
+        assert_eq!(b"123", db.get(b"xyz").unwrap().as_ref());
         assert!(db.get_internal(31, b"xyy").unwrap().is_some());
         assert!(db.get_internal(32, b"xyy").unwrap().is_some());
 
@@ -1539,17 +1539,17 @@ mod tests {
         assert!(db.get_internal(32, b"xyz").unwrap().is_some());
 
         // table get
-        assert_eq!(b"val2", &*db.get(b"eab").unwrap());
+        assert_eq!(b"val2", db.get(b"eab").unwrap().as_ref());
         assert!(db.get_internal(3, b"eab").unwrap().is_none());
         assert!(db.get_internal(32, b"eab").unwrap().is_some());
 
         {
             let ss = db.get_snapshot();
-            assert_eq!(b"val2", &*db.get_at(&ss, b"eab").unwrap().unwrap());
+            assert_eq!(b"val2", db.get_at(&ss, b"eab").unwrap().unwrap().as_ref());
         }
 
         // from table.
-        assert_eq!(b"val2", &*db.get(b"cab").unwrap());
+        assert_eq!(b"val2", db.get(b"cab").unwrap().as_ref());
     }
 
     #[test]

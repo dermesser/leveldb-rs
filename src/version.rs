@@ -593,8 +593,6 @@ pub mod testutil {
         largest: &[u8],
         largestix: u64,
     ) -> FileMetaHandle {
-        let smallest_key = LookupKey::new(smallest, smallestix);
-        let largest_key = LookupKey::new(largest, largestix);
         share(FileMetaData {
             allowed_seeks: 10,
             size: 163840,

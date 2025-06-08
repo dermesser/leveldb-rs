@@ -60,7 +60,6 @@ impl TableCache {
     ) -> Result<Option<(Bytes, Bytes)>> {
         let tbl = self.get_table(file_num)?;
         tbl.get(key)
-            .map(|opt| opt)
     }
 
     /// Return a table from cache, or open the backing file, then cache and return it.
