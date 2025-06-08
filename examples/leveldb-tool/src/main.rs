@@ -34,7 +34,7 @@ fn iter(db: &mut DB) {
     let (mut k, mut v) = (vec![], vec![]);
     let mut out = io::BufWriter::new(io::stdout());
     while it.advance() {
-        it.current();
+        (k, v) = it.current();
         out.write_all(&k).unwrap();
         out.write_all(b" => ").unwrap();
         out.write_all(&v).unwrap();
