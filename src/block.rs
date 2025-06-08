@@ -1,7 +1,5 @@
 use std::cmp::Ordering;
 
-use std::rc::Rc;
-
 use crate::options::Options;
 use crate::types::LdbIterator;
 
