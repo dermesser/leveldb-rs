@@ -9,7 +9,7 @@
 //! let mut db = DB::open("mydatabase", opt).unwrap();
 //!
 //! db.put(b"Hello", b"World").unwrap();
-//! assert_eq!(b"World", db.get(b"Hello").unwrap().as_slice());
+//! assert_eq!(b"World", &*db.get(b"Hello").unwrap());
 //!
 //! let mut iter = db.new_iter().unwrap();
 //! // Note: For efficiency reasons, it's recommended to use advance() and current() instead of

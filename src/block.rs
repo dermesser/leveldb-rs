@@ -1,14 +1,13 @@
 use std::cmp::Ordering;
 
-use std::rc::Rc;
-
 use crate::options::Options;
 use crate::types::LdbIterator;
 
+use bytes::{Bytes, BytesMut};
 use integer_encoding::FixedInt;
 use integer_encoding::VarInt;
 
-pub type BlockContents = Vec<u8>;
+pub type BlockContents = Bytes;
 
 /// A Block is an immutable ordered set of key/value entries.
 ///
@@ -32,7 +31,7 @@ pub type BlockContents = Vec<u8>;
 /// N_RESTARTS contains the number of restarts.
 #[derive(Clone)]
 pub struct Block {
-    block: Rc<BlockContents>,
+    block: BlockContents,
     opt: Options,
 }
 
@@ -54,19 +53,19 @@ impl Block {
             current_entry_offset: 0,
             current_restart_ix: 0,
 
-            key: Vec::new(),
+            key: BytesMut::new(),
             val_offset: 0,
         }
     }
 
-    pub fn contents(&self) -> Rc<BlockContents> {
+    pub fn contents(&self) -> BlockContents {
         self.block.clone()
     }
 
     pub fn new(opt: Options, contents: BlockContents) -> Block {
         assert!(contents.len() > 4);
         Block {
-            block: Rc::new(contents),
+            block: contents,
             opt,
         }
     }
@@ -77,7 +76,7 @@ impl Block {
 pub struct BlockIter {
     /// The underlying block contents.
     /// TODO: Maybe (probably...) this needs an Arc.
-    block: Rc<BlockContents>,
+    block: BlockContents,
     opt: Options,
     /// offset of restarts area within the block.
     restarts_off: usize,
@@ -90,7 +89,7 @@ pub struct BlockIter {
     current_restart_ix: usize,
 
     /// We assemble the key from two parts usually, so we keep the current full key here.
-    key: Vec<u8>,
+    key: BytesMut,
     /// Offset of the current value within the block.
     val_offset: usize,
 }
@@ -158,8 +157,11 @@ impl BlockIter {
     /// Only self.key is mutated.
     fn assemble_key(&mut self, off: usize, shared: usize, non_shared: usize) {
         self.key.truncate(shared);
-        self.key
-            .extend_from_slice(&self.block[off..off + non_shared]);
+        if non_shared > 0 {
+            let block_slice_ref: &[u8] = self.block.as_ref();
+            self.key
+                .extend_from_slice(&block_slice_ref[off..off + non_shared]);
+        }
     }
 
     pub fn seek_to_last(&mut self) -> Option<()> {
@@ -296,15 +298,14 @@ impl LdbIterator for BlockIter {
         !self.key.is_empty() && self.val_offset > 0 && self.val_offset <= self.restarts_off
     }
 
-    fn current(&self, key: &mut Vec<u8>, val: &mut Vec<u8>) -> bool {
+    fn current(&self) -> Option<(Bytes, Bytes)> {
         if self.valid() {
-            key.clear();
-            val.clear();
-            key.extend_from_slice(&self.key);
-            val.extend_from_slice(&self.block[self.val_offset..self.offset]);
-            true
+            Some((
+                self.key.clone().freeze(),
+                self.block.slice(self.val_offset..self.offset),
+            ))
         } else {
-            false
+            None
         }
     }
 }
