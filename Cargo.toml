@@ -1,6 +1,6 @@
 [package]
 name = "rusty-leveldb"
-version = "3.0.3"
+version = "4.0.0"
 authors = ["Lewin Bormann <lbo@spheniscida.de>"]
 description = "A compatible re-implementation of LevelDB in Rust"
 homepage = "https://github.com/dermesser/leveldb-rs"
@@ -46,12 +46,12 @@ path = "src/benches/maps_bench.rs"
 
 [workspace]
 members = [
-    "examples/write-a-lot",
-    "examples/leveldb-tool",
-    "examples/word-analyze",
-    "examples/stresstest",
-    "examples/asyncdb-tokio",
-    "examples/asyncdb-async-std",
-    "examples/mcpe",
-    "examples/kvserver",
+  "examples/write-a-lot",
+  "examples/leveldb-tool",
+  "examples/word-analyze",
+  "examples/stresstest",
+  "examples/asyncdb-tokio",
+  "examples/asyncdb-async-std",
+  "examples/mcpe",
+  "examples/kvserver",
 ]
