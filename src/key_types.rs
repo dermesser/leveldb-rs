@@ -60,7 +60,7 @@ impl LookupKey {
                 .expect("write to slice failed");
             writer.write_all(k).expect("write to slice failed");
             writer
-                .write_fixedint(s << 8 | t as u64)
+                .write_fixedint((s << 8) | t as u64)
                 .expect("write to slice failed");
         }
 

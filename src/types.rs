@@ -6,6 +6,8 @@ use std::cell::RefCell;
 use std::path::Path;
 use std::rc::Rc;
 
+use bytes::Bytes;
+
 pub const NUM_LEVELS: usize = 7;
 
 /// Represents a sequence number of a single entry.
@@ -44,7 +46,7 @@ pub trait LdbIterator {
     /// becomes invalid (i.e. as if reset() had been called).
     fn advance(&mut self) -> bool;
     /// Return the current item (i.e. the item most recently returned by `next()`).
-    fn current(&self, key: &mut Vec<u8>, val: &mut Vec<u8>) -> bool;
+    fn current(&self) -> Option<(Bytes, Bytes)>;
     /// Seek the iterator to `key` or the next bigger key. If the seek is invalid (past last
     /// element, or before first element), the iterator is `reset()` and not valid.
     fn seek(&mut self, key: &[u8]);
@@ -67,9 +69,8 @@ pub trait LdbIterator {
         if !self.advance() {
             return None;
         }
-        let (mut key, mut val) = (vec![], vec![]);
-        if self.current(&mut key, &mut val) {
-            Some((key, val))
+        if let Some((key, val)) = self.current() {
+            Some((key.to_vec(), val.to_vec()))
         } else {
             None
         }
@@ -85,9 +86,8 @@ pub trait LdbIterator {
 /// current_key_val is a helper allocating two vectors and filling them with the current key/value
 /// of the specified iterator.
 pub fn current_key_val<It: LdbIterator + ?Sized>(it: &It) -> Option<(Vec<u8>, Vec<u8>)> {
-    let (mut k, mut v) = (vec![], vec![]);
-    if it.current(&mut k, &mut v) {
-        Some((k, v))
+    if let Some((k, v)) = it.current() {
+        Some((k.to_vec(), v.to_vec()))
     } else {
         None
     }
@@ -97,8 +97,8 @@ impl LdbIterator for Box<dyn LdbIterator> {
     fn advance(&mut self) -> bool {
         self.as_mut().advance()
     }
-    fn current(&self, key: &mut Vec<u8>, val: &mut Vec<u8>) -> bool {
-        self.as_ref().current(key, val)
+    fn current(&self) -> Option<(Bytes, Bytes)> {
+        self.as_ref().current()
     }
     fn seek(&mut self, key: &[u8]) {
         self.as_mut().seek(key)
@@ -125,8 +125,8 @@ pub struct FileMetaData {
     pub num: FileNum,
     pub size: usize,
     // these are in InternalKey format:
-    pub smallest: Vec<u8>,
-    pub largest: Vec<u8>,
+    pub smallest: Bytes,
+    pub largest: Bytes,
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -5,6 +5,7 @@ use crate::snapshot::Snapshot;
 use crate::types::{Direction, LdbIterator, Shared};
 use crate::version_set::VersionSet;
 
+use bytes::Bytes;
 use std::cmp::Ordering;
 use std::mem;
 use std::rc::Rc;
@@ -74,25 +75,28 @@ impl DBIterator {
         assert!(self.dir == Direction::Forward);
 
         while self.iter.valid() {
-            self.iter.current(&mut self.keybuf, &mut self.savedval);
-            let len = self.keybuf.len() + self.savedval.len();
-            self.record_read_sample(len);
-            let (typ, seq, ukey) = parse_internal_key(&self.keybuf);
+            if let Some((key_bytes, val_bytes)) = self.iter.current() {
+                self.keybuf = key_bytes.to_vec();
+                self.savedval = val_bytes.to_vec();
+                let len = self.keybuf.len() + self.savedval.len();
+                self.record_read_sample(len);
+                let (typ, seq, ukey) = parse_internal_key(&self.keybuf);
 
-            // Skip keys with a sequence number after our snapshot.
-            if seq <= self.ss.sequence() {
-                if typ == ValueType::TypeDeletion {
-                    // Mark current (deleted) key to be skipped.
-                    self.savedkey.clear();
-                    self.savedkey.extend_from_slice(ukey);
-                    skipping = true;
-                } else if typ == ValueType::TypeValue {
-                    if skipping && self.cmp.cmp(ukey, &self.savedkey) <= Ordering::Equal {
-                        // Entry hidden, because it's smaller than the key to be skipped.
-                    } else {
-                        self.valid = true;
+                // Skip keys with a sequence number after our snapshot.
+                if seq <= self.ss.sequence() {
+                    if typ == ValueType::TypeDeletion {
+                        // Mark current (deleted) key to be skipped.
                         self.savedkey.clear();
-                        return true;
+                        self.savedkey.extend_from_slice(ukey);
+                        skipping = true;
+                    } else if typ == ValueType::TypeValue {
+                        if skipping && self.cmp.cmp(ukey, &self.savedkey) <= Ordering::Equal {
+                            // Entry hidden, because it's smaller than the key to be skipped.
+                        } else {
+                            self.valid = true;
+                            self.savedkey.clear();
+                            return true;
+                        }
                     }
                 }
             }
@@ -122,27 +126,30 @@ impl DBIterator {
         // then break. The key and value of the latest entry for the desired key have been stored
         // in the previous iteration to savedkey and savedval.
         while self.iter.valid() {
-            self.iter.current(&mut self.keybuf, &mut self.valbuf);
-            let len = self.keybuf.len() + self.valbuf.len();
-            self.record_read_sample(len);
-            let (typ, seq, ukey) = parse_internal_key(&self.keybuf);
+            if let Some((key_bytes, val_bytes)) = self.iter.current() {
+                self.keybuf = key_bytes.to_vec();
+                self.valbuf = val_bytes.to_vec();
+                let len = self.keybuf.len() + self.valbuf.len();
+                self.record_read_sample(len);
+                let (typ, seq, ukey) = parse_internal_key(&self.keybuf);
 
-            if seq > 0 && seq <= self.ss.sequence() {
-                if value_type != ValueType::TypeDeletion
-                    && self.cmp.cmp(ukey, &self.savedkey) == Ordering::Less
-                {
-                    // We found a non-deleted entry for a previous key (in the previous iteration)
-                    break;
-                }
-                value_type = typ;
-                if value_type == ValueType::TypeDeletion {
-                    self.savedkey.clear();
-                    self.savedval.clear();
-                } else {
-                    self.savedkey.clear();
-                    self.savedkey.extend_from_slice(ukey);
+                if seq > 0 && seq <= self.ss.sequence() {
+                    if value_type != ValueType::TypeDeletion
+                        && self.cmp.cmp(ukey, &self.savedkey) == Ordering::Less
+                    {
+                        // We found a non-deleted entry for a previous key (in the previous iteration)
+                        break;
+                    }
+                    value_type = typ;
+                    if value_type == ValueType::TypeDeletion {
+                        self.savedkey.clear();
+                        self.savedval.clear();
+                    } else {
+                        self.savedkey.clear();
+                        self.savedkey.extend_from_slice(ukey);
 
-                    mem::swap(&mut self.savedval, &mut self.valbuf);
+                        mem::swap(&mut self.savedval, &mut self.valbuf);
+                    }
                 }
             }
             self.iter.prev();
@@ -181,29 +188,37 @@ impl LdbIterator for DBIterator {
             }
         } else {
             // Save current user key.
-            assert!(self.iter.current(&mut self.savedkey, &mut self.savedval));
-            truncate_to_userkey(&mut self.savedkey);
+            if let Some((key_bytes, val_bytes)) = self.iter.current() {
+                self.savedkey = key_bytes.to_vec();
+                self.savedval = val_bytes.to_vec();
+                truncate_to_userkey(&mut self.savedkey);
+            } else {
+                panic!("Iterator should be valid here");
+            }
         }
         self.find_next_user_entry(
             // skipping=
             true,
         )
     }
-    fn current(&self, key: &mut Vec<u8>, val: &mut Vec<u8>) -> bool {
+    fn current(&self) -> Option<(Bytes, Bytes)> {
         if !self.valid() {
-            return false;
+            return None;
         }
         // If direction is forward, savedkey and savedval are not used.
         if self.dir == Direction::Forward {
-            self.iter.current(key, val);
-            truncate_to_userkey(key);
-            true
+            if let Some((key_bytes, val_bytes)) = self.iter.current() {
+                let mut key = key_bytes.to_vec();
+                truncate_to_userkey(&mut key);
+                Some((Bytes::from(key), val_bytes))
+            } else {
+                None
+            }
         } else {
-            key.clear();
-            key.extend_from_slice(&self.savedkey);
-            val.clear();
-            val.extend_from_slice(&self.savedval);
-            true
+            Some((
+                Bytes::copy_from_slice(&self.savedkey),
+                Bytes::copy_from_slice(&self.savedval),
+            ))
         }
     }
     fn prev(&mut self) -> bool {
@@ -216,8 +231,11 @@ impl LdbIterator for DBIterator {
             // find_prev_user_entry() wants savedkey to be the key of the entry that is supposed to
             // be left in savedkey/savedval, which is why we have to go to the previous entry before
             // calling it.
-            self.iter.current(&mut self.savedkey, &mut self.savedval);
-            truncate_to_userkey(&mut self.savedkey);
+            if let Some((key_bytes, val_bytes)) = self.iter.current() {
+                self.savedkey = key_bytes.to_vec();
+                self.savedval = val_bytes.to_vec();
+                truncate_to_userkey(&mut self.savedkey);
+            }
             loop {
                 self.iter.prev();
                 if !self.iter.valid() {
@@ -227,8 +245,10 @@ impl LdbIterator for DBIterator {
                     return false;
                 }
                 // Scan until we hit the next-smaller key.
-                self.iter.current(&mut self.keybuf, &mut self.savedval);
-                truncate_to_userkey(&mut self.keybuf);
+                if let Some((key_bytes, _val_bytes)) = self.iter.current() {
+                    self.keybuf = key_bytes.to_vec();
+                    truncate_to_userkey(&mut self.keybuf);
+                }
                 if self.cmp.cmp(&self.keybuf, &self.savedkey) == Ordering::Less {
                     break;
                 }
@@ -312,7 +332,7 @@ mod tests {
         for (k, v) in keys.iter().zip(vals.iter()) {
             assert!(iter.advance());
             assert_eq!((k.to_vec(), v.to_vec()), current_key_val(&iter).unwrap());
-            let entry = db.get(*k).expect("key returned by iterator is in database");
+            let entry = db.get(k).expect("key returned by iterator is in database");
             assert_eq!(v.to_vec(), entry);
             found.push((k.to_vec(), v.to_vec()));
         }

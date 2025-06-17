@@ -5,6 +5,7 @@ use crate::table_cache::TableCache;
 use crate::table_reader::TableIterator;
 use crate::types::{FileMetaData, FileNum, LdbIterator, Shared, MAX_SEQUENCE_NUMBER, NUM_LEVELS};
 
+use bytes::Bytes;
 use std::cmp::Ordering;
 use std::default::Default;
 use std::rc::Rc;
@@ -59,7 +60,7 @@ impl Version {
     /// get returns the value for the specified key using the persistent tables contained in this
     /// Version.
     #[allow(unused_assignments)]
-    pub fn get(&self, key: InternalKey<'_>) -> Result<Option<(Vec<u8>, GetStats)>> {
+    pub fn get(&self, key: InternalKey<'_>) -> Result<Option<(Bytes, GetStats)>> {
         let levels = self.get_overlapping(key);
         let ikey = key;
         let ukey = parse_internal_key(ikey).2;
@@ -441,11 +442,11 @@ impl LdbIterator for VersionIter {
         }
         self.advance()
     }
-    fn current(&self, key: &mut Vec<u8>, val: &mut Vec<u8>) -> bool {
+    fn current(&self) -> Option<(Bytes, Bytes)> {
         if let Some(ref t) = self.current {
-            t.current(key, val)
+            t.current()
         } else {
-            false
+            None
         }
     }
     fn seek(&mut self, key: &[u8]) {
@@ -596,8 +597,14 @@ pub mod testutil {
             allowed_seeks: 10,
             size: 163840,
             num,
-            smallest: LookupKey::new(smallest, smallestix).internal_key().to_vec(),
-            largest: LookupKey::new(largest, largestix).internal_key().to_vec(),
+            smallest: LookupKey::new(smallest, smallestix)
+                .internal_key()
+                .to_vec()
+                .into(),
+            largest: LookupKey::new(largest, largestix)
+                .internal_key()
+                .to_vec()
+                .into(),
         })
     }
 

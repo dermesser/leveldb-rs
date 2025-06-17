@@ -206,7 +206,7 @@ impl<Dst: Write> TableBuilder<Dst> {
         compressor_id_pair: (u8, &dyn Compressor),
     ) -> Result<BlockHandle> {
         let (ctype, compressor) = compressor_id_pair;
-        let data = compressor.encode(block)?;
+        let data = compressor.encode(block.to_vec())?;
 
         let mut digest = crc::digest();
 
@@ -251,7 +251,7 @@ impl<Dst: Write> TableBuilder<Dst> {
             let filter_key = format!("filter.{}", fblock.filter_name());
             let fblock_data = fblock.finish();
             let fblock_handle = self.write_block(
-                fblock_data,
+                fblock_data.into(),
                 (compressor::NoneCompressor::ID, &compressor::NoneCompressor),
             )?;
 

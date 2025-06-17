@@ -1,6 +1,7 @@
 use crate::cmp::Cmp;
 use crate::types::{current_key_val, Direction, LdbIterator};
 
+use bytes::Bytes;
 use std::cmp::Ordering;
 use std::rc::Rc;
 
@@ -53,9 +54,6 @@ impl MergingIter {
             return;
         }
 
-        let mut keybuf = vec![];
-        let mut valbuf = vec![];
-
         if let Some((key, _)) = current_key_val(self) {
             if let Some(current) = self.current {
                 match d {
@@ -67,10 +65,10 @@ impl MergingIter {
                                 // This doesn't work if two iterators are returning the exact same
                                 // keys. However, in reality, two entries will always have differing
                                 // sequence numbers.
-                                if self.iters[i].current(&mut keybuf, &mut valbuf)
-                                    && self.cmp.cmp(&keybuf, &key) == Ordering::Equal
-                                {
-                                    self.iters[i].advance();
+                                if let Some((current_key, _)) = self.iters[i].current() {
+                                    if self.cmp.cmp(&current_key, &key) == Ordering::Equal {
+                                        self.iters[i].advance();
+                                    }
                                 }
                             }
                         }
@@ -115,12 +113,11 @@ impl MergingIter {
         };
 
         let mut next_ix = 0;
-        let (mut current, mut smallest, mut valscratch) = (vec![], vec![], vec![]);
 
         for i in 1..self.iters.len() {
-            if self.iters[i].current(&mut current, &mut valscratch) {
-                if self.iters[next_ix].current(&mut smallest, &mut valscratch) {
-                    if self.cmp.cmp(&current, &smallest) == ord {
+            if let Some((current_key, _)) = self.iters[i].current() {
+                if let Some((smallest_key, _)) = self.iters[next_ix].current() {
+                    if self.cmp.cmp(&current_key, &smallest_key) == ord {
                         next_ix = i;
                     }
                 } else {
@@ -168,11 +165,11 @@ impl LdbIterator for MergingIter {
         }
         self.current = None;
     }
-    fn current(&self, key: &mut Vec<u8>, val: &mut Vec<u8>) -> bool {
+    fn current(&self) -> Option<(Bytes, Bytes)> {
         if let Some(ix) = self.current {
-            self.iters[ix].current(key, val)
+            self.iters[ix].current()
         } else {
-            false
+            None
         }
     }
     fn prev(&mut self) -> bool {

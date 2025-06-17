@@ -1,6 +1,7 @@
 use crate::cmp::{Cmp, DefaultCmp};
 use crate::types::{current_key_val, LdbIterator};
 
+use bytes::Bytes;
 use std::cmp::Ordering;
 
 /// TestLdbIter is an LdbIterator over a vector, to be used for testing purposes.
@@ -20,7 +21,7 @@ impl<'a> TestLdbIter<'a> {
     }
 }
 
-impl<'a> LdbIterator for TestLdbIter<'a> {
+impl LdbIterator for TestLdbIter<'_> {
     fn advance(&mut self) -> bool {
         if self.ix == self.v.len() - 1 {
             self.ix += 1;
@@ -37,15 +38,14 @@ impl<'a> LdbIterator for TestLdbIter<'a> {
         self.ix = 0;
         self.init = false;
     }
-    fn current(&self, key: &mut Vec<u8>, val: &mut Vec<u8>) -> bool {
+    fn current(&self) -> Option<(Bytes, Bytes)> {
         if self.init && self.ix < self.v.len() {
-            key.clear();
-            val.clear();
-            key.extend_from_slice(self.v[self.ix].0);
-            val.extend_from_slice(self.v[self.ix].1);
-            true
+            Some((
+                Bytes::copy_from_slice(self.v[self.ix].0),
+                Bytes::copy_from_slice(self.v[self.ix].1),
+            ))
         } else {
-            false
+            None
         }
     }
     fn valid(&self) -> bool {
@@ -80,7 +80,7 @@ impl<'a, It: LdbIterator> LdbIteratorIter<'a, It> {
     }
 }
 
-impl<'a, It: LdbIterator> Iterator for LdbIteratorIter<'a, It> {
+impl<It: LdbIterator> Iterator for LdbIteratorIter<'_, It> {
     type Item = (Vec<u8>, Vec<u8>);
     fn next(&mut self) -> Option<Self::Item> {
         LdbIterator::next(self.inner)
