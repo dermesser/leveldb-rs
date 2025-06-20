@@ -109,5 +109,6 @@ pub use filter::{BloomPolicy, FilterPolicy};
 pub use mem_env::MemEnv;
 pub use options::{in_memory, CompressorList, Options};
 pub use skipmap::SkipMap;
+pub use snapshot::Snapshot;
 pub use types::LdbIterator;
 pub use write_batch::WriteBatch;

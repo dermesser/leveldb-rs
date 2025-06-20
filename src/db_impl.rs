@@ -280,7 +280,6 @@ impl DB {
                 save_manifest = true;
                 mem = MemTable::new(cmp.clone());
             }
-            batch.clear();
         }
 
         // Check if we can reuse the last log file.
