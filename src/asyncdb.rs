@@ -1,14 +1,14 @@
 use std::collections::hash_map::HashMap;
 
 use crate::{
-    send_response, send_response_result, AsyncDB, Message, Result, Status, StatusCode, WriteBatch,
-    DB,
+    send_response, send_response_result, snapshot::Snapshot, AsyncDB, Message, Result, Status,
+    StatusCode, WriteBatch, DB,
 };
 
 pub(crate) const CHANNEL_BUFFER_SIZE: usize = 32;
 
 #[derive(Clone, Copy)]
-pub struct SnapshotRef(usize);
+pub struct SnapshotRef(pub(crate) usize);
 
 /// A request sent to the database thread.
 pub(crate) enum Request {
@@ -151,6 +151,78 @@ impl AsyncDB {
         }
     }
 
+    pub(crate) fn match_message(
+        db: &mut DB,
+        mut recv: impl ReceiverExt<Message>,
+        snapshots: &mut HashMap<usize, Snapshot>,
+        snapshot_counter: &mut usize,
+        message: Message,
+    ) {
+        match message.req {
+            Request::Close => {
+                send_response(message.resp_channel, Response::OK);
+                recv.close();
+                return;
+            }
+            Request::Put { key, val } => {
+                let ok = db.put(&key, &val);
+                send_response_result(message.resp_channel, ok);
+            }
+            Request::Delete { key } => {
+                let ok = db.delete(&key);
+                send_response_result(message.resp_channel, ok);
+            }
+            Request::Write { batch, sync } => {
+                let ok = db.write(batch, sync);
+                send_response_result(message.resp_channel, ok);
+            }
+            Request::Flush => {
+                let ok = db.flush();
+                send_response_result(message.resp_channel, ok);
+            }
+            Request::GetAt { snapshot, key } => {
+                let snapshot_id = snapshot.0;
+                if let Some(snapshot) = snapshots.get(&snapshot_id) {
+                    let ok = db.get_at(snapshot, &key);
+                    match ok {
+                        Err(e) => {
+                            send_response(message.resp_channel, Response::Error(e));
+                        }
+                        Ok(v) => {
+                            send_response(message.resp_channel, Response::Value(v));
+                        }
+                    };
+                } else {
+                    send_response(
+                        message.resp_channel,
+                        Response::Error(Status {
+                            code: StatusCode::AsyncError,
+                            err: "Unknown snapshot reference: this is a bug".to_string(),
+                        }),
+                    );
+                }
+            }
+            Request::Get { key } => {
+                let r = db.get(&key);
+                send_response(message.resp_channel, Response::Value(r));
+            }
+            Request::GetSnapshot => {
+                snapshots.insert(*snapshot_counter, db.get_snapshot());
+                let sref = SnapshotRef(*snapshot_counter);
+                *snapshot_counter += 1;
+                send_response(message.resp_channel, Response::Snapshot(sref));
+            }
+            Request::DropSnapshot { snapshot } => {
+                snapshots.remove(&snapshot.0);
+                send_response_result(message.resp_channel, Ok(()));
+            }
+            Request::CompactRange { from, to } => {
+                let ok = db.compact_range(&from, &to);
+                send_response_result(message.resp_channel, ok);
+            }
+        }
+    }
+
     pub(crate) fn run_server(mut db: DB, mut recv: impl ReceiverExt<Message>) {
         let mut snapshots = HashMap::new();
         let mut snapshot_counter: usize = 0;
@@ -226,5 +298,8 @@ impl AsyncDB {
 
 pub(crate) trait ReceiverExt<T> {
     fn blocking_recv(&mut self) -> Option<T>;
+    async fn recv(&mut self) -> Option<T> {
+        self.blocking_recv()
+    }
     fn close(&mut self);
 }
