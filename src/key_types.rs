@@ -71,17 +71,17 @@ impl LookupKey {
     }
 
     /// Returns the full memtable-formatted key.
-    pub fn memtable_key(&self) -> MemtableKey {
+    pub fn memtable_key<'a>(&'a self) -> MemtableKey<'a> {
         self.key.as_slice()
     }
 
     /// Returns only the user key portion.
-    pub fn user_key(&self) -> UserKey {
+    pub fn user_key<'a>(&'a self) -> UserKey<'a> {
         &self.key[self.key_offset..self.key.len() - 8]
     }
 
     /// Returns key and tag.
-    pub fn internal_key(&self) -> InternalKey {
+    pub fn internal_key<'a>(&'a self) -> InternalKey<'a> {
         &self.key[self.key_offset..]
     }
 }

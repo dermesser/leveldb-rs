@@ -86,7 +86,7 @@ impl WriteBatch {
         u64::decode_fixed(&self.entries[SEQNUM_OFFSET..SEQNUM_OFFSET + 8])
     }
 
-    pub fn iter(&self) -> WriteBatchIter {
+    pub fn iter<'a>(&'a self) -> WriteBatchIter<'a> {
         WriteBatchIter {
             batch: self,
             ix: HEADER_SIZE,
