@@ -133,20 +133,20 @@ impl InnerSkipMap {
         let mut level = self.head.skips.len() - 1;
 
         loop {
-            unsafe {
-                if let Some(next) = (*current).skips[level] {
-                    let ord = self.cmp.cmp(&(*next).key, key);
+            let current_node = unsafe { &*current };
+            if let Some(next) = current_node.skips[level] {
+                let next = unsafe { &*next };
+                let ord = self.cmp.cmp(next.key.iter().as_slice(), key);
 
-                    match ord {
-                        Ordering::Less => {
-                            current = next;
-                            continue;
-                        }
-                        Ordering::Equal => return Some(&(*next)),
-                        Ordering::Greater => {
-                            if level == 0 {
-                                return Some(&(*next));
-                            }
+                match ord {
+                    Ordering::Less => {
+                        current = next;
+                        continue;
+                    }
+                    Ordering::Equal => return Some(next),
+                    Ordering::Greater => {
+                        if level == 0 {
+                            return Some(next);
                         }
                     }
                 }
@@ -176,16 +176,17 @@ impl InnerSkipMap {
         let mut level = self.head.skips.len() - 1;
 
         loop {
-            unsafe {
-                if let Some(next) = (*current).skips[level] {
-                    let ord = self.cmp.cmp(&(*next).key, key);
+            let current_node = unsafe { &*current };
+            if let Some(next) = current_node.skips[level] {
+                let next = unsafe { &*next };
+                let ord = self.cmp.cmp(next.key.iter().as_slice(), key);
 
-                    if let Ordering::Less = ord {
-                        current = next;
-                        continue;
-                    }
+                if let Ordering::Less = ord {
+                    current = next;
+                    continue;
                 }
             }
+
             if level == 0 {
                 break;
             }
@@ -222,17 +223,17 @@ impl InnerSkipMap {
         // Find the node after which we want to insert the new node; this is the node with the key
         // immediately smaller than the key to be inserted.
         loop {
-            unsafe {
-                if let Some(next) = (*current).skips[level] {
-                    // If the wanted position is after the current node
-                    let ord = self.cmp.cmp(&(*next).key, &key);
+            let current_node = unsafe { &*current };
+            if let Some(next) = current_node.skips[level] {
+                let next = unsafe { &mut *next };
+                // If the wanted position is after the current node
+                let ord = self.cmp.cmp(next.key.iter().as_slice(), &key);
 
-                    assert!(ord != Ordering::Equal, "No duplicates allowed");
+                assert!(ord != Ordering::Equal, "No duplicates allowed");
 
-                    if ord == Ordering::Less {
-                        current = next;
-                        continue;
-                    }
+                if ord == Ordering::Less {
+                    current = next;
+                    continue;
                 }
             }
 
@@ -260,10 +261,9 @@ impl InnerSkipMap {
 
         (0..new_height).for_each(|i| {
             if let Some(prev) = prevs[i] {
-                unsafe {
-                    new.skips[i] = (*prev).skips[i];
-                    (*prev).skips[i] = Some(newp);
-                }
+                let prev = unsafe { &mut *prev };
+                new.skips[i] = prev.skips[i];
+                prev.skips[i] = Some(newp);
             }
         });
 
@@ -286,19 +286,15 @@ impl InnerSkipMap {
     fn dbg_print(&self) {
         let mut current = self.head.as_ref() as *const Node;
         loop {
-            unsafe {
-                eprintln!(
-                    "{:?} {:?}/{:?} - {:?}",
-                    current,
-                    (*current).key,
-                    (*current).value,
-                    (*current).skips
-                );
-                if let Some(next) = (*current).skips[0] {
-                    current = next;
-                } else {
-                    break;
-                }
+            let current_node = unsafe { &*current };
+            eprintln!(
+                "{:?} {:?}/{:?} - {:?}",
+                current, current_node.key, current_node.value, current_node.skips
+            );
+            if let Some(next) = current_node.skips[0] {
+                current = next;
+            } else {
+                break;
             }
         }
     }
