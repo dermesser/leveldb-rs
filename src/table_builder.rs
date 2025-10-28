@@ -79,7 +79,6 @@ impl Footer {
 /// The FOOTER consists of a BlockHandle that points to the metaindex block, another pointing to
 /// the index block, padding to fill up to 40 B and at the end the 8B magic number
 /// 0xdb4775248b80fb57.
-
 pub struct TableBuilder<Dst: Write> {
     opt: Options,
     dst: Dst,

@@ -151,9 +151,9 @@ impl BlockIter {
     /// Assemble the current key from shared and non-shared parts (an entry usually contains only
     /// the part of the key that is different from the previous key).
     ///
-    /// `off` is the offset of the key string within the whole block (self.current_entry_offset
-    /// + entry header length); `shared` and `non_shared` are the lengths of the shared
-    /// respectively non-shared parts of the key.
+    /// `off` is the offset of the key string within the whole block
+    /// (self.current_entry_offset + entry header length); `shared` and
+    /// `non_shared` are the lengths of the shared respectively non-shared parts of the key.
     /// Only self.key is mutated.
     fn assemble_key(&mut self, off: usize, shared: usize, non_shared: usize) {
         self.key.truncate(shared);
@@ -270,7 +270,7 @@ impl LdbIterator for BlockIter {
 
         // Do a binary search over the restart points.
         while left < right {
-            let middle = (left + right + 1) / 2;
+            let middle = (left + right).div_ceil(2);
             self.seek_to_restart_point(middle);
 
             let c = self.opt.cmp.cmp(&self.key, to);

@@ -175,14 +175,10 @@ impl<R: Read> LogReader<R> {
 
             dst_offset += length as usize;
 
-            if typ == RecordType::Full as u8 {
+            if typ == RecordType::Full as u8 || typ == RecordType::Last as u8 {
                 return Ok(dst_offset);
-            } else if typ == RecordType::First as u8 {
+            } else if typ == RecordType::First as u8 || typ == RecordType::Middle as u8 {
                 continue;
-            } else if typ == RecordType::Middle as u8 {
-                continue;
-            } else if typ == RecordType::Last as u8 {
-                return Ok(dst_offset);
             }
         }
     }

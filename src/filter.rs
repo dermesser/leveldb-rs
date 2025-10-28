@@ -73,11 +73,7 @@ impl BloomPolicy {
     fn new_unwrapped(bits_per_key: u32) -> BloomPolicy {
         let mut k = (bits_per_key as f32 * 0.69) as u32;
 
-        if k < 1 {
-            k = 1;
-        } else if k > 30 {
-            k = 30;
-        }
+        k = k.clamp(1, 30);
 
         BloomPolicy { bits_per_key, k }
     }
@@ -127,8 +123,8 @@ impl FilterPolicy for BloomPolicy {
             filter = Vec::with_capacity(8 + 1);
             filter.resize(8, 0);
         } else {
-            filter = Vec::with_capacity(1 + ((filter_bits + 7) / 8));
-            filter.resize((filter_bits + 7) / 8, 0);
+            filter = Vec::with_capacity(1 + filter_bits.div_ceil(8));
+            filter.resize(filter_bits.div_ceil(8), 0);
         }
 
         let adj_filter_bits = (filter.len() * 8) as u32;
@@ -139,7 +135,7 @@ impl FilterPolicy for BloomPolicy {
         // Add all keys to the filter.
         offset_data_iterate(keys, key_offsets, |key| {
             let mut h = self.bloom_hash(key);
-            let delta = (h >> 17) | (h << 15);
+            let delta = h.rotate_left(15);
             for _ in 0..self.k {
                 let bitpos = (h % adj_filter_bits) as usize;
                 filter[bitpos / 8] |= 1 << (bitpos % 8);
@@ -163,7 +159,7 @@ impl FilterPolicy for BloomPolicy {
         }
 
         let mut h = self.bloom_hash(key);
-        let delta = (h >> 17) | (h << 15);
+        let delta = h.rotate_left(15);
         for _ in 0..k {
             let bitpos = (h % bits) as usize;
             if (filter_adj[bitpos / 8] & (1 << (bitpos % 8))) == 0 {

@@ -576,17 +576,18 @@ impl DB {
                 .opt
                 .env
                 .open_writable_file(Path::new(&log_file_name(&self.path, logn)));
-            if logf.is_err() {
-                self.vset.borrow_mut().reuse_file_number(logn);
-                Err(logf.err().unwrap())
-            } else {
-                self.log = Some(LogWriter::new(BufWriter::new(logf.unwrap())));
+
+            if let Ok(log) = logf {
+                self.log = Some(LogWriter::new(BufWriter::new(log)));
                 self.log_num = Some(logn);
 
                 let mut imm = MemTable::new(self.opt.cmp.clone());
                 mem::swap(&mut imm, &mut self.mem);
                 self.imm = Some(imm);
                 self.maybe_do_compaction()
+            } else {
+                self.vset.borrow_mut().reuse_file_number(logn);
+                Err(logf.err().unwrap())
             }
         }
     }

@@ -6,7 +6,7 @@ use crate::types::LdbIterator;
 use bytes::Bytes;
 use std::cell::RefCell;
 use std::cmp::Ordering;
-use std::mem::{replace, size_of};
+use std::mem::size_of;
 use std::rc::Rc;
 
 const MAX_HEIGHT: usize = 12;
@@ -110,7 +110,7 @@ impl InnerSkipMap {
     fn random_height(&mut self) -> usize {
         let mut height = 1;
 
-        while height < MAX_HEIGHT && self.rand.next_u32() % BRANCHING_FACTOR == 0 {
+        while height < MAX_HEIGHT && self.rand.next_u32().is_multiple_of(BRANCHING_FACTOR) {
             height += 1;
         }
 
@@ -158,9 +158,9 @@ impl InnerSkipMap {
         }
 
         unsafe {
-            if current.is_null() || current == self.head.as_ref() {
-                None
-            } else if self.cmp.cmp(&(*current).key, key) == Ordering::Less {
+            if (current.is_null() || current == self.head.as_ref())
+                || (self.cmp.cmp(&(*current).key, key) == Ordering::Less)
+            {
                 None
             } else {
                 Some(&(*current))
@@ -279,7 +279,7 @@ impl InnerSkipMap {
         new.next = unsafe { (*current).next.take() };
         // ...and then setting the previous element's next field to the new node
         unsafe {
-            let _ = replace(&mut (*current).next, Some(new));
+            let _ = (*current).next.replace(new);
         };
     }
     /// Runs through the skipmap and prints everything including addresses
