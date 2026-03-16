@@ -299,7 +299,7 @@ impl LdbIterator for DBIterator {
 }
 
 fn random_period() -> isize {
-    rand::random::<isize>() % (2 * READ_BYTES_PERIOD)
+    (rand::random::<usize>() % (2 * READ_BYTES_PERIOD as usize)) as isize
 }
 
 #[cfg(test)]
