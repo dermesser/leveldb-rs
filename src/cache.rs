@@ -93,6 +93,10 @@ impl<T> LRUList<T> {
             if current.next.is_some() {
                 // Update next node's predecessor.
                 current.next.as_mut().unwrap().prev = current.prev.take();
+            } else {
+                // Removing the tail: update head.prev to reflect the new tail.
+                // When removing the only element (count == 1), set head.prev to None.
+                self.head.prev = if self.count > 1 { Some(prev) } else { None };
             }
             (*prev).next = current.next.take();
 
