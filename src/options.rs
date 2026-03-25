@@ -34,10 +34,7 @@ pub struct Options {
     pub block_cache_capacity_bytes: usize,
     pub block_size: usize,
     pub block_restart_interval: usize,
-    /// Compressor id in compressor list
-    ///
-    /// Note: you have to open a database with the same compression type as it was written to, in
-    /// order to not lose data! (this is a bug and will be fixed)
+    /// Compressor id in CompressorList
     pub compressor: u8,
 
     pub compressor_list: Rc<CompressorList>,
