@@ -13,10 +13,9 @@ const MAX_HEIGHT: usize = 12;
 const BRANCHING_FACTOR: u32 = 4;
 
 /// A node in a skipmap contains links to the next node and others that are further away (skips);
-/// `skips[0]` is the immediate element after, that is, the element contained in `next`.
+/// `skips[0]` is the immediate element after.
 struct Node {
-    skips: Vec<Option<*mut Node>>,
-    next: Option<Box<Node>>,
+    skips: [Option<usize>; MAX_HEIGHT],
     key: Bytes,
     value: Bytes,
 }
@@ -26,22 +25,13 @@ struct Node {
 /// `seek()` to the key to look up (this is as fast as any lookup in a skip map), and then call
 /// `current()`.
 struct InnerSkipMap {
-    head: Box<Node>,
+    nodes: Vec<Node>,
+    head: usize,
     rand: StdRng,
     len: usize,
     // approximation of memory used.
     approx_mem: usize,
     cmp: Arc<Box<dyn Cmp>>,
-}
-
-impl Drop for InnerSkipMap {
-    // Avoid possible stack overflow caused by dropping many nodes.
-    fn drop(&mut self) {
-        let mut next_node = self.head.next.take();
-        while let Some(mut boxed_node) = next_node {
-            next_node = boxed_node.next.take();
-        }
-    }
 }
 
 pub struct SkipMap {
@@ -56,20 +46,19 @@ impl SkipMap {
 
     /// Returns a SkipMap that uses the specified comparator.
     pub fn new(cmp: Arc<Box<dyn Cmp>>) -> SkipMap {
-        let mut s = Vec::new();
-        s.resize(MAX_HEIGHT, None);
+        let head_node = Node {
+            skips: [None; MAX_HEIGHT],
+            key: Bytes::new(),
+            value: Bytes::new(),
+        };
 
         SkipMap {
             map: Arc::new(RwLock::new(InnerSkipMap {
-                head: Box::new(Node {
-                    skips: s,
-                    next: None,
-                    key: Bytes::new(),
-                    value: Bytes::new(),
-                }),
+                nodes: vec![head_node],
+                head: 0,
                 rand: StdRng::seed_from_u64(0xdeadbeef),
                 len: 0,
-                approx_mem: size_of::<Self>() + MAX_HEIGHT * size_of::<Option<*mut Node>>(),
+                approx_mem: size_of::<Self>() + size_of::<InnerSkipMap>() + size_of::<Node>(),
                 cmp,
             })),
         }
@@ -92,7 +81,7 @@ impl SkipMap {
         self.map.read().unwrap().contains(key)
     }
 
-    /// inserts a key into the table. key may not be empty.
+    /// Inserts a key into the table. `key` may not be empty.
     pub fn insert(&mut self, key: Vec<u8>, val: Vec<u8>) {
         assert!(!key.is_empty());
         self.map.write().unwrap().insert(key, val);
@@ -101,7 +90,7 @@ impl SkipMap {
     pub fn iter(&self) -> SkipMapIter {
         SkipMapIter {
             map: self.map.clone(),
-            current: self.map.read().unwrap().head.as_ref() as *const Node,
+            current: 0, // head
         }
     }
 }
@@ -109,17 +98,15 @@ impl SkipMap {
 impl InnerSkipMap {
     fn random_height(&mut self) -> usize {
         let mut height = 1;
-
         while height < MAX_HEIGHT && self.rand.next_u32().is_multiple_of(BRANCHING_FACTOR) {
             height += 1;
         }
-
         height
     }
 
     fn contains(&self, key: &[u8]) -> bool {
-        if let Some(n) = self.get_greater_or_equal(key) {
-            n.key.starts_with(key)
+        if let Some(n_idx) = self.get_greater_or_equal(key) {
+            self.nodes[n_idx].key.starts_with(key)
         } else {
             false
         }
@@ -127,16 +114,14 @@ impl InnerSkipMap {
 
     /// Returns the node with key or the next greater one
     /// Returns None if the given key lies past the greatest key in the table.
-    fn get_greater_or_equal<'a>(&'a self, key: &[u8]) -> Option<&'a Node> {
+    fn get_greater_or_equal(&self, key: &[u8]) -> Option<usize> {
         // Start at the highest skip link of the head node, and work down from there
-        let mut current = self.head.as_ref() as *const Node;
-        let mut level = self.head.skips.len() - 1;
+        let mut current = self.head;
+        let mut level = self.nodes[self.head].skips.len() - 1;
 
         loop {
-            let current_node = unsafe { &*current };
-            if let Some(next) = current_node.skips[level] {
-                let next = unsafe { &*next };
-                let ord = self.cmp.cmp(next.key.iter().as_slice(), key);
+            if let Some(next) = self.nodes[current].skips[level] {
+                let ord = self.cmp.cmp(self.nodes[next].key.iter().as_slice(), key);
 
                 match ord {
                     Ordering::Less => {
@@ -157,29 +142,23 @@ impl InnerSkipMap {
             level -= 1;
         }
 
-        unsafe {
-            if (current.is_null() || current == self.head.as_ref())
-                || (self.cmp.cmp(&(*current).key, key) == Ordering::Less)
-            {
-                None
-            } else {
-                Some(&(*current))
-            }
+        if current == self.head || self.cmp.cmp(&self.nodes[current].key, key) == Ordering::Less {
+            None
+        } else {
+            Some(current)
         }
     }
 
     /// Finds the node immediately before the node with key.
     /// Returns None if no smaller key was found.
-    fn get_next_smaller<'a>(&'a self, key: &[u8]) -> Option<&'a Node> {
+    fn get_next_smaller(&self, key: &[u8]) -> Option<usize> {
         // Start at the highest skip link of the head node, and work down from there
-        let mut current = self.head.as_ref() as *const Node;
-        let mut level = self.head.skips.len() - 1;
+        let mut current = self.head;
+        let mut level = self.nodes[self.head].skips.len() - 1;
 
         loop {
-            let current_node = unsafe { &*current };
-            if let Some(next) = current_node.skips[level] {
-                let next = unsafe { &*next };
-                let ord = self.cmp.cmp(next.key.iter().as_slice(), key);
+            if let Some(next) = self.nodes[current].skips[level] {
+                let ord = self.cmp.cmp(self.nodes[next].key.iter().as_slice(), key);
 
                 if let Ordering::Less = ord {
                     current = next;
@@ -193,15 +172,13 @@ impl InnerSkipMap {
             level -= 1;
         }
 
-        unsafe {
-            if current.is_null() || current == self.head.as_ref() {
-                // If we're past the end for some reason or at the head
-                None
-            } else if self.cmp.cmp(&(*current).key, key) != Ordering::Less {
-                None
-            } else {
-                Some(&(*current))
-            }
+        if current == self.head {
+            // If we're past the end for some reason or at the head
+            None
+        } else if self.cmp.cmp(&self.nodes[current].key, key) != Ordering::Less {
+            None
+        } else {
+            Some(current)
         }
     }
 
@@ -209,26 +186,23 @@ impl InnerSkipMap {
         assert!(!key.is_empty());
 
         // Keeping track of skip entries that will need to be updated
-        let mut prevs: [Option<*mut Node>; MAX_HEIGHT] = [None; MAX_HEIGHT];
+        let mut prevs = [0; MAX_HEIGHT];
         let new_height = self.random_height();
-        let prevs = &mut prevs[0..new_height];
 
         let mut level = MAX_HEIGHT - 1;
-        let mut current = self.head.as_mut() as *mut Node;
+        let mut current = self.head;
+
         // Set previous node for all levels to current node.
-        (0..prevs.len()).for_each(|i| {
-            prevs[i] = Some(current);
-        });
+        for prev in prevs.iter_mut().take(new_height) {
+            *prev = current;
+        }
 
         // Find the node after which we want to insert the new node; this is the node with the key
         // immediately smaller than the key to be inserted.
         loop {
-            let current_node = unsafe { &*current };
-            if let Some(next) = current_node.skips[level] {
-                let next = unsafe { &mut *next };
+            if let Some(next) = self.nodes[current].skips[level] {
                 // If the wanted position is after the current node
-                let ord = self.cmp.cmp(next.key.iter().as_slice(), &key);
-
+                let ord = self.cmp.cmp(self.nodes[next].key.iter().as_slice(), &key);
                 assert!(ord != Ordering::Equal, "No duplicates allowed");
 
                 if ord == Ordering::Less {
@@ -238,7 +212,7 @@ impl InnerSkipMap {
             }
 
             if level < new_height {
-                prevs[level] = Some(current);
+                prevs[level] = current;
             }
 
             if level == 0 {
@@ -249,46 +223,36 @@ impl InnerSkipMap {
         }
 
         // Construct new node
-        let mut new_skips = Vec::new();
-        new_skips.resize(new_height, None);
-        let mut new = Box::new(Node {
-            skips: new_skips,
-            next: None,
+        let new_idx = self.nodes.len();
+
+        let new_node = Node {
+            skips: [None; MAX_HEIGHT],
             key: key.into(),
             value: val.into(),
-        });
-        let newp = new.as_mut() as *mut Node;
+        };
 
-        (0..new_height).for_each(|i| {
-            if let Some(prev) = prevs[i] {
-                let prev = unsafe { &mut *prev };
-                new.skips[i] = prev.skips[i];
-                prev.skips[i] = Some(newp);
-            }
-        });
-
-        let added_mem = size_of::<Node>()
-            + size_of::<Option<*mut Node>>() * new.skips.len()
-            + new.key.len()
-            + new.value.len();
+        let added_mem = size_of::<Node>() + new_node.key.len() + new_node.value.len();
         self.approx_mem += added_mem;
         self.len += 1;
 
+        self.nodes.push(new_node);
+
         // Insert new node by first replacing the previous element's next field with None and
         // assigning its value to new.next...
-        new.next = unsafe { (*current).next.take() };
         // ...and then setting the previous element's next field to the new node
-        unsafe {
-            let _ = (*current).next.replace(new);
-        };
+        for (i, &prev) in prevs.iter().enumerate().take(new_height) {
+            self.nodes[new_idx].skips[i] = self.nodes[prev].skips[i];
+            self.nodes[prev].skips[i] = Some(new_idx);
+        }
     }
-    /// Runs through the skipmap and prints everything including addresses
+
+    /// Runs through the skipmap and prints everything including indices
     fn dbg_print(&self) {
-        let mut current = self.head.as_ref() as *const Node;
+        let mut current = self.head;
         loop {
-            let current_node = unsafe { &*current };
+            let current_node = &self.nodes[current];
             eprintln!(
-                "{:?} {:?}/{:?} - {:?}",
+                "{} {:?}/{:?} - {:?}",
                 current, current_node.key, current_node.value, current_node.skips
             );
             if let Some(next) = current_node.skips[0] {
@@ -302,21 +266,20 @@ impl InnerSkipMap {
 
 pub struct SkipMapIter {
     map: Arc<RwLock<InnerSkipMap>>,
-    current: *const Node,
+    current: usize,
 }
 
 impl LdbIterator for SkipMapIter {
     fn advance(&mut self) -> bool {
         // we first go to the next element, then return that -- in order to skip the head node
-        let r = unsafe {
-            (*self.current)
-                .next
-                .as_ref()
-                .map(|next| {
-                    self.current = next.as_ref() as *const Node;
-                    true
-                })
-                .unwrap_or(false)
+        let r = {
+            let map = self.map.read().unwrap();
+            if let Some(next) = map.nodes[self.current].skips[0] {
+                self.current = next;
+                true
+            } else {
+                false
+            }
         };
         if !r {
             self.reset();
@@ -324,41 +287,39 @@ impl LdbIterator for SkipMapIter {
         r
     }
     fn reset(&mut self) {
-        self.current = self.map.read().unwrap().head.as_ref();
+        self.current = self.map.read().unwrap().head;
     }
     fn seek(&mut self, key: &[u8]) {
-        if let Some(node) = self.map.read().unwrap().get_greater_or_equal(key) {
-            self.current = node as *const Node;
+        let map = self.map.read().unwrap();
+        if let Some(node_idx) = map.get_greater_or_equal(key) {
+            self.current = node_idx;
             return;
         }
+        drop(map);
         self.reset();
     }
     fn valid(&self) -> bool {
-        self.current != self.map.read().unwrap().head.as_ref()
+        self.current != self.map.read().unwrap().head
     }
     fn current(&self) -> Option<(Bytes, Bytes)> {
         if self.valid() {
-            unsafe {
-                Some((
-                    Bytes::copy_from_slice(&(*self.current).key),
-                    Bytes::copy_from_slice(&(*self.current).value),
-                ))
-            }
+            let map = self.map.read().unwrap();
+            let node = &map.nodes[self.current];
+            Some((
+                Bytes::copy_from_slice(&node.key),
+                Bytes::copy_from_slice(&node.value),
+            ))
         } else {
             None
         }
     }
     fn prev(&mut self) -> bool {
-        // Going after the original implementation here; we just seek to the node before current().
         if self.valid() {
-            if let Some(prev) = self
-                .map
-                .read()
-                .unwrap()
-                .get_next_smaller(unsafe { &(*self.current).key })
-            {
-                self.current = prev as *const Node;
-                if !prev.key.is_empty() {
+            // Going after the original implementation here; we just seek to the node before current().
+            let map = self.map.read().unwrap();
+            if let Some(prev_idx) = map.get_next_smaller(&map.nodes[self.current].key) {
+                self.current = prev_idx;
+                if !map.nodes[prev_idx].key.is_empty() {
                     return true;
                 }
             }
@@ -369,9 +330,6 @@ impl LdbIterator for SkipMapIter {
 }
 
 #[cfg(test)]
-unsafe impl Send for SkipMap {}
-unsafe impl Sync for SkipMap {}
-
 pub mod tests {
     use super::*;
     use crate::cmp::MemtableKeyCmp;
@@ -388,7 +346,7 @@ pub mod tests {
         ];
 
         for k in keys {
-            skm.insert(k.as_bytes().to_vec(), "def".as_bytes().to_vec());
+            skm.insert(k.as_bytes().to_vec(), b"def".to_vec());
         }
         skm
     }
@@ -405,8 +363,8 @@ pub mod tests {
     fn test_no_dupes() {
         let mut skm = make_skipmap();
         // this should panic
-        skm.insert("abc".as_bytes().to_vec(), "def".as_bytes().to_vec());
-        skm.insert("abf".as_bytes().to_vec(), "def".as_bytes().to_vec());
+        skm.insert(b"abc".to_vec(), b"def".to_vec());
+        skm.insert(b"abf".to_vec(), b"def".to_vec());
     }
 
     #[test]
@@ -425,13 +383,14 @@ pub mod tests {
     fn test_find() {
         let skm = make_skipmap();
         assert_eq!(
-            &*skm
+            skm.map.read().unwrap().nodes[skm
                 .map
                 .read()
                 .unwrap()
                 .get_greater_or_equal(b"abf")
-                .unwrap()
-                .key,
+                .unwrap()]
+            .key
+            .as_ref(),
             b"abf"
         );
         assert!(skm
@@ -441,54 +400,47 @@ pub mod tests {
             .get_greater_or_equal(b"ab{")
             .is_none());
         assert_eq!(
-            &*skm
+            skm.map.read().unwrap().nodes[skm
                 .map
                 .read()
                 .unwrap()
                 .get_greater_or_equal(b"aaa")
-                .unwrap()
-                .key,
+                .unwrap()]
+            .key
+            .as_ref(),
             b"aba"
         );
         assert_eq!(
-            &*skm
-                .map
-                .read()
-                .unwrap()
-                .get_greater_or_equal(b"ab")
-                .unwrap()
-                .key,
+            skm.map.read().unwrap().nodes
+                [skm.map.read().unwrap().get_greater_or_equal(b"ab").unwrap()]
+            .key
+            .as_ref(),
             b"aba"
         );
         assert_eq!(
-            &*skm
+            skm.map.read().unwrap().nodes[skm
                 .map
                 .read()
                 .unwrap()
                 .get_greater_or_equal(b"abc")
-                .unwrap()
-                .key,
+                .unwrap()]
+            .key
+            .as_ref(),
             b"abc"
         );
         assert!(skm.map.read().unwrap().get_next_smaller(b"ab0").is_none());
         assert_eq!(
-            &*skm
-                .map
-                .read()
-                .unwrap()
-                .get_next_smaller(b"abd")
-                .unwrap()
-                .key,
+            skm.map.read().unwrap().nodes
+                [skm.map.read().unwrap().get_next_smaller(b"abd").unwrap()]
+            .key
+            .as_ref(),
             b"abc"
         );
         assert_eq!(
-            &*skm
-                .map
-                .read()
-                .unwrap()
-                .get_next_smaller(b"ab{")
-                .unwrap()
-                .key,
+            skm.map.read().unwrap().nodes
+                [skm.map.read().unwrap().get_next_smaller(b"ab{").unwrap()]
+            .key
+            .as_ref(),
             b"abz"
         );
     }
@@ -554,11 +506,11 @@ pub mod tests {
 
         iter.next();
         assert!(iter.valid());
-        assert_eq!(current_key_val(&iter).unwrap().0, "aba".as_bytes().to_vec());
+        assert_eq!(current_key_val(&iter).unwrap().0, b"aba".to_vec());
         iter.seek(b"abz");
         assert_eq!(
             current_key_val(&iter).unwrap(),
-            ("abz".as_bytes().to_vec(), "def".as_bytes().to_vec())
+            (b"abz".to_vec(), b"def".to_vec())
         );
         // go back to beginning
         iter.seek(b"aba");
@@ -583,7 +535,7 @@ pub mod tests {
         let mut skm = SkipMap::new(options::for_test().cmp);
         let keys = vec!["aba", "abb", "abc", "abd"];
         for k in keys {
-            skm.insert(k.as_bytes().to_vec(), "def".as_bytes().to_vec());
+            skm.insert(k.as_bytes().to_vec(), b"def".to_vec());
         }
         test_iterator_properties(skm.iter());
     }
@@ -601,7 +553,7 @@ pub mod tests {
         iter.prev();
         assert_eq!(
             current_key_val(&iter).unwrap(),
-            ("abb".as_bytes().to_vec(), "def".as_bytes().to_vec())
+            (b"abb".to_vec(), b"def".to_vec())
         );
     }
 
@@ -613,10 +565,10 @@ pub mod tests {
         let mut iter = skm.iter();
 
         assert!(iter.advance());
-        skm.insert("abccc".as_bytes().to_vec(), "defff".as_bytes().to_vec());
+        skm.insert(b"abccc".to_vec(), b"defff".to_vec());
         // Assert that value inserted after obtaining iterator is present.
         for (k, _) in LdbIteratorIter::wrap(&mut iter) {
-            if k == "abccc".as_bytes() {
+            if k == b"abccc" {
                 return;
             }
         }
