@@ -56,7 +56,7 @@ use asyncdb_async_std::{send_response, send_response_result, Message};
 mod block;
 mod block_builder;
 mod blockhandle;
-mod cache;
+pub mod cache;
 mod cmp;
 mod crc;
 
