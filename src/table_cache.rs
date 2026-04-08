@@ -15,7 +15,7 @@ use integer_encoding::FixedIntWriter;
 use bytes::Bytes;
 use std::convert::AsRef;
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
+use std::sync::Arc;
 
 pub fn table_file_name<P: AsRef<Path>>(name: P, num: FileNum) -> PathBuf {
     assert!(num > 0);
@@ -30,7 +30,7 @@ fn filenum_to_key(num: FileNum) -> cache::CacheKey {
 
 pub struct TableCache {
     dbname: PathBuf,
-    cache: Cache<Table>,
+    cache: std::sync::Mutex<Cache<Table>>,
     block_cache: Shared<Cache<Block>>,
     opts: Options,
 }
@@ -47,47 +47,52 @@ impl TableCache {
     ) -> TableCache {
         TableCache {
             dbname: db.as_ref().to_owned(),
-            cache: Cache::new(entries),
+            cache: std::sync::Mutex::new(Cache::new(entries)),
             block_cache,
             opts: opt,
         }
     }
 
-    pub fn get(
-        &mut self,
-        file_num: FileNum,
-        key: InternalKey<'_>,
-    ) -> Result<Option<(Bytes, Bytes)>> {
+    pub fn get(&self, file_num: FileNum, key: InternalKey<'_>) -> Result<Option<(Bytes, Bytes)>> {
         let tbl = self.get_table(file_num)?;
         tbl.get(key)
     }
 
     /// Return a table from cache, or open the backing file, then cache and return it.
-    pub fn get_table(&mut self, file_num: FileNum) -> Result<Table> {
+    pub fn get_table(&self, file_num: FileNum) -> Result<Table> {
         let key = filenum_to_key(file_num);
-        if let Some(t) = self.cache.get(&key) {
+        if let Some(t) = self.cache.lock().unwrap().get(&key) {
             return Ok(t.clone());
         }
         self.open_table(file_num)
     }
 
     /// Open a table on the file system and read it.
-    fn open_table(&mut self, file_num: FileNum) -> Result<Table> {
+    fn open_table(&self, file_num: FileNum) -> Result<Table> {
         let name = table_file_name(&self.dbname, file_num);
         let path = Path::new(&name);
         let file_size = self.opts.env.size_of(path)?;
         if file_size == 0 {
             return err(StatusCode::InvalidData, "file is empty");
         }
-        let file = Rc::new(self.opts.env.open_random_access_file(path)?);
+        let file = Arc::new(self.opts.env.open_random_access_file(path)?);
         // No SSTable file name compatibility.
         let table = Table::new(self.opts.clone(), self.block_cache.clone(), file, file_size)?;
-        self.cache.insert(&filenum_to_key(file_num), table.clone());
+        self.cache
+            .lock()
+            .unwrap()
+            .insert(&filenum_to_key(file_num), table.clone());
         Ok(table)
     }
 
-    pub fn evict(&mut self, file_num: FileNum) -> Result<()> {
-        if self.cache.remove(&filenum_to_key(file_num)).is_some() {
+    pub fn evict(&self, file_num: FileNum) -> Result<()> {
+        if self
+            .cache
+            .lock()
+            .unwrap()
+            .remove(&filenum_to_key(file_num))
+            .is_some()
+        {
             Ok(())
         } else {
             err(StatusCode::NotFound, "table not present in cache")
@@ -147,7 +152,7 @@ mod tests {
         // Tests that a table can be written to a MemFS file, read back by the table cache and
         // parsed/iterated by the table reader.
         let mut opt = options::for_test();
-        opt.env = Rc::new(Box::new(MemEnv::new()));
+        opt.env = Arc::new(Box::new(MemEnv::new()));
         let bc = share(Cache::new(128));
         let dbname = Path::new("testdb1");
         let tablename = table_file_name(dbname, 123);
@@ -157,8 +162,13 @@ mod tests {
         assert!(opt.env.exists(tblpath).unwrap());
         assert!(opt.env.size_of(tblpath).unwrap() > 20);
 
-        let mut cache = TableCache::new(dbname, opt.clone(), bc, 10);
-        assert!(cache.cache.get(&filenum_to_key(123)).is_none());
+        let cache = TableCache::new(dbname, opt.clone(), bc, 10);
+        assert!(cache
+            .cache
+            .lock()
+            .unwrap()
+            .get(&filenum_to_key(123))
+            .is_none());
         assert_eq!(
             LdbIteratorIter::wrap(&mut cache.get_table(123).unwrap().iter()).count(),
             4
@@ -169,9 +179,19 @@ mod tests {
             4
         );
 
-        assert!(cache.cache.get(&filenum_to_key(123)).is_some());
+        assert!(cache
+            .cache
+            .lock()
+            .unwrap()
+            .get(&filenum_to_key(123))
+            .is_some());
         assert!(cache.evict(123).is_ok());
         assert!(cache.evict(123).is_err());
-        assert!(cache.cache.get(&filenum_to_key(123)).is_none());
+        assert!(cache
+            .cache
+            .lock()
+            .unwrap()
+            .get(&filenum_to_key(123))
+            .is_none());
     }
 }

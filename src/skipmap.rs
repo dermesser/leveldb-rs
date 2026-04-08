@@ -4,10 +4,10 @@ use crate::rand::{RngCore, SeedableRng};
 use crate::types::LdbIterator;
 
 use bytes::Bytes;
-use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::mem::size_of;
-use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::RwLock;
 
 const MAX_HEIGHT: usize = 12;
 const BRANCHING_FACTOR: u32 = 4;
@@ -31,7 +31,7 @@ struct InnerSkipMap {
     len: usize,
     // approximation of memory used.
     approx_mem: usize,
-    cmp: Rc<Box<dyn Cmp>>,
+    cmp: Arc<Box<dyn Cmp>>,
 }
 
 impl Drop for InnerSkipMap {
@@ -45,22 +45,22 @@ impl Drop for InnerSkipMap {
 }
 
 pub struct SkipMap {
-    map: Rc<RefCell<InnerSkipMap>>,
+    map: Arc<RwLock<InnerSkipMap>>,
 }
 
 impl SkipMap {
     /// Returns a SkipMap that wraps the comparator inside a MemtableKeyCmp.
-    pub fn new_memtable_map(cmp: Rc<Box<dyn Cmp>>) -> SkipMap {
-        SkipMap::new(Rc::new(Box::new(MemtableKeyCmp(cmp))))
+    pub fn new_memtable_map(cmp: Arc<Box<dyn Cmp>>) -> SkipMap {
+        SkipMap::new(Arc::new(Box::new(MemtableKeyCmp(cmp))))
     }
 
     /// Returns a SkipMap that uses the specified comparator.
-    pub fn new(cmp: Rc<Box<dyn Cmp>>) -> SkipMap {
+    pub fn new(cmp: Arc<Box<dyn Cmp>>) -> SkipMap {
         let mut s = Vec::new();
         s.resize(MAX_HEIGHT, None);
 
         SkipMap {
-            map: Rc::new(RefCell::new(InnerSkipMap {
+            map: Arc::new(RwLock::new(InnerSkipMap {
                 head: Box::new(Node {
                     skips: s,
                     next: None,
@@ -76,7 +76,7 @@ impl SkipMap {
     }
 
     pub fn len(&self) -> usize {
-        self.map.borrow().len
+        self.map.read().unwrap().len
     }
 
     #[must_use]
@@ -85,23 +85,23 @@ impl SkipMap {
     }
 
     pub fn approx_memory(&self) -> usize {
-        self.map.borrow().approx_mem
+        self.map.read().unwrap().approx_mem
     }
 
     pub fn contains(&self, key: &[u8]) -> bool {
-        self.map.borrow().contains(key)
+        self.map.read().unwrap().contains(key)
     }
 
     /// inserts a key into the table. key may not be empty.
     pub fn insert(&mut self, key: Vec<u8>, val: Vec<u8>) {
         assert!(!key.is_empty());
-        self.map.borrow_mut().insert(key, val);
+        self.map.write().unwrap().insert(key, val);
     }
 
     pub fn iter(&self) -> SkipMapIter {
         SkipMapIter {
             map: self.map.clone(),
-            current: self.map.borrow().head.as_ref() as *const Node,
+            current: self.map.read().unwrap().head.as_ref() as *const Node,
         }
     }
 }
@@ -301,7 +301,7 @@ impl InnerSkipMap {
 }
 
 pub struct SkipMapIter {
-    map: Rc<RefCell<InnerSkipMap>>,
+    map: Arc<RwLock<InnerSkipMap>>,
     current: *const Node,
 }
 
@@ -324,17 +324,17 @@ impl LdbIterator for SkipMapIter {
         r
     }
     fn reset(&mut self) {
-        self.current = self.map.borrow().head.as_ref();
+        self.current = self.map.read().unwrap().head.as_ref();
     }
     fn seek(&mut self, key: &[u8]) {
-        if let Some(node) = self.map.borrow().get_greater_or_equal(key) {
+        if let Some(node) = self.map.read().unwrap().get_greater_or_equal(key) {
             self.current = node as *const Node;
             return;
         }
         self.reset();
     }
     fn valid(&self) -> bool {
-        self.current != self.map.borrow().head.as_ref()
+        self.current != self.map.read().unwrap().head.as_ref()
     }
     fn current(&self) -> Option<(Bytes, Bytes)> {
         if self.valid() {
@@ -353,7 +353,8 @@ impl LdbIterator for SkipMapIter {
         if self.valid() {
             if let Some(prev) = self
                 .map
-                .borrow()
+                .read()
+                .unwrap()
                 .get_next_smaller(unsafe { &(*self.current).key })
             {
                 self.current = prev as *const Node;
@@ -368,6 +369,9 @@ impl LdbIterator for SkipMapIter {
 }
 
 #[cfg(test)]
+unsafe impl Send for SkipMap {}
+unsafe impl Sync for SkipMap {}
+
 pub mod tests {
     use super::*;
     use crate::cmp::MemtableKeyCmp;
@@ -393,7 +397,7 @@ pub mod tests {
     fn test_insert() {
         let skm = make_skipmap();
         assert_eq!(skm.len(), 26);
-        skm.map.borrow().dbg_print();
+        skm.map.read().unwrap().dbg_print();
     }
 
     #[test]
@@ -421,29 +425,70 @@ pub mod tests {
     fn test_find() {
         let skm = make_skipmap();
         assert_eq!(
-            &*skm.map.borrow().get_greater_or_equal(b"abf").unwrap().key,
+            &*skm
+                .map
+                .read()
+                .unwrap()
+                .get_greater_or_equal(b"abf")
+                .unwrap()
+                .key,
             b"abf"
         );
-        assert!(skm.map.borrow().get_greater_or_equal(b"ab{").is_none());
+        assert!(skm
+            .map
+            .read()
+            .unwrap()
+            .get_greater_or_equal(b"ab{")
+            .is_none());
         assert_eq!(
-            &*skm.map.borrow().get_greater_or_equal(b"aaa").unwrap().key,
+            &*skm
+                .map
+                .read()
+                .unwrap()
+                .get_greater_or_equal(b"aaa")
+                .unwrap()
+                .key,
             b"aba"
         );
         assert_eq!(
-            &*skm.map.borrow().get_greater_or_equal(b"ab").unwrap().key,
+            &*skm
+                .map
+                .read()
+                .unwrap()
+                .get_greater_or_equal(b"ab")
+                .unwrap()
+                .key,
             b"aba"
         );
         assert_eq!(
-            &*skm.map.borrow().get_greater_or_equal(b"abc").unwrap().key,
+            &*skm
+                .map
+                .read()
+                .unwrap()
+                .get_greater_or_equal(b"abc")
+                .unwrap()
+                .key,
             b"abc"
         );
-        assert!(skm.map.borrow().get_next_smaller(b"ab0").is_none());
+        assert!(skm.map.read().unwrap().get_next_smaller(b"ab0").is_none());
         assert_eq!(
-            &*skm.map.borrow().get_next_smaller(b"abd").unwrap().key,
+            &*skm
+                .map
+                .read()
+                .unwrap()
+                .get_next_smaller(b"abd")
+                .unwrap()
+                .key,
             b"abc"
         );
         assert_eq!(
-            &*skm.map.borrow().get_next_smaller(b"ab{").unwrap().key,
+            &*skm
+                .map
+                .read()
+                .unwrap()
+                .get_next_smaller(b"ab{")
+                .unwrap()
+                .key,
             b"abz"
         );
     }
@@ -451,7 +496,7 @@ pub mod tests {
     #[test]
     fn test_empty_skipmap_find_memtable_cmp() {
         // Regression test: Make sure comparator isn't called with empty key.
-        let cmp: Rc<Box<dyn Cmp>> = Rc::new(Box::new(MemtableKeyCmp(options::for_test().cmp)));
+        let cmp: Arc<Box<dyn Cmp>> = Arc::new(Box::new(MemtableKeyCmp(options::for_test().cmp)));
         let skm = SkipMap::new(cmp);
 
         let mut it = skm.iter();

@@ -13,7 +13,7 @@ use crate::table_builder::{self, Footer};
 use crate::types::{current_key_val, LdbIterator, Shared};
 
 use std::cmp::Ordering;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use bytes::Bytes;
 use integer_encoding::FixedIntWriter;
@@ -33,7 +33,7 @@ fn read_footer(f: &dyn RandomAccess, size: usize) -> Result<Footer> {
 
 #[derive(Clone)]
 pub struct Table {
-    file: Rc<Box<dyn RandomAccess>>,
+    file: Arc<Box<dyn RandomAccess>>,
     file_size: usize,
     cache_id: cache::CacheID,
 
@@ -50,7 +50,7 @@ impl Table {
     fn new_raw(
         opt: Options,
         block_cache: Shared<Cache<Block>>,
-        file: Rc<Box<dyn RandomAccess>>,
+        file: Arc<Box<dyn RandomAccess>>,
         size: usize,
     ) -> Result<Table> {
         let footer = read_footer(file.as_ref().as_ref(), size)?;
@@ -61,7 +61,7 @@ impl Table {
 
         let filter_block_reader =
             Table::read_filter_block(&metaindexblock, file.as_ref().as_ref(), &opt)?;
-        let cache_id = block_cache.borrow_mut().new_cache_id();
+        let cache_id = block_cache.write().unwrap().new_cache_id();
 
         Ok(Table {
             file,
@@ -116,11 +116,11 @@ impl Table {
     pub fn new(
         mut opt: Options,
         block_cache: Shared<Cache<Block>>,
-        file: Rc<Box<dyn RandomAccess>>,
+        file: Arc<Box<dyn RandomAccess>>,
         size: usize,
     ) -> Result<Table> {
-        opt.cmp = Rc::new(Box::new(InternalKeyCmp(opt.cmp.clone())));
-        opt.filter_policy = Rc::new(Box::new(filter::InternalFilterPolicy::new(
+        opt.cmp = Arc::new(Box::new(InternalKeyCmp(opt.cmp.clone())));
+        opt.filter_policy = Arc::new(Box::new(filter::InternalFilterPolicy::new(
             opt.filter_policy,
         )));
         Table::new_raw(opt, block_cache, file, size)
@@ -143,16 +143,19 @@ impl Table {
     /// cache.
     fn read_block(&self, location: &BlockHandle) -> Result<Block> {
         let cachekey = self.block_cache_handle(location.offset());
-        if let Some(block) = self.block_cache.borrow_mut().get(&cachekey) {
+        if let Some(block) = self.block_cache.write().unwrap().get(&cachekey) {
             return Ok(block.clone());
         }
 
-        // Two times as_ref(): First time to get a ref from Rc<>, then one from Box<>.
+        // Two times as_ref(): First time to get a ref from Arc<>, then one from Box<>.
         let b =
             table_block::read_table_block(self.opt.clone(), self.file.as_ref().as_ref(), location)?;
 
         // insert a cheap copy (Rc).
-        self.block_cache.borrow_mut().insert(&cachekey, b.clone());
+        self.block_cache
+            .write()
+            .unwrap()
+            .insert(&cachekey, b.clone());
 
         Ok(b)
     }
@@ -384,7 +387,7 @@ impl LdbIterator for TableIterator {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::RefCell;
+    use std::sync::RwLock;
 
     use crate::compressor::CompressorId;
     use crate::filter::BloomPolicy;
@@ -441,7 +444,7 @@ mod tests {
         let mut opt = options::for_test();
         opt.block_restart_interval = 1;
         opt.block_size = 32;
-        opt.filter_policy = Rc::new(Box::new(BloomPolicy::new(4)));
+        opt.filter_policy = Arc::new(Box::new(BloomPolicy::new(4)));
 
         let mut i = 1_u64;
         let data: Vec<(Vec<u8>, &'static str)> = build_data()
@@ -468,8 +471,8 @@ mod tests {
         (d, size)
     }
 
-    fn wrap_buffer(src: Vec<u8>) -> Rc<Box<dyn RandomAccess>> {
-        Rc::new(Box::new(src))
+    fn wrap_buffer(src: Vec<u8>) -> Arc<Box<dyn RandomAccess>> {
+        Arc::new(Box::new(src))
     }
 
     #[test]
@@ -502,21 +505,21 @@ mod tests {
             let mut iter = table.iter();
 
             // index/metaindex blocks are not cached. That'd be a waste of memory.
-            assert_eq!(bc.borrow().count(), 0);
+            assert_eq!(bc.read().unwrap().count(), 0);
             iter.next();
-            assert_eq!(bc.borrow().count(), 1);
+            assert_eq!(bc.read().unwrap().count(), 1);
             // This may fail if block parameters or data change. In that case, adapt it.
             iter.next();
             iter.next();
             iter.next();
             iter.next();
-            assert_eq!(bc.borrow().count(), 2);
+            assert_eq!(bc.read().unwrap().count(), 2);
         }
 
         println!(
             "weak = {}, strong = {}",
-            std::rc::Rc::<RefCell<cache::Cache<block::Block>>>::weak_count(&bc),
-            std::rc::Rc::<RefCell<cache::Cache<block::Block>>>::strong_count(&bc)
+            std::sync::Arc::<RwLock<cache::Cache<block::Block>>>::weak_count(&bc),
+            std::sync::Arc::<RwLock<cache::Cache<block::Block>>>::strong_count(&bc)
         );
     }
 
@@ -708,7 +711,7 @@ mod tests {
             assert_eq!(Ok(Some((k.into(), v.into()))), r);
         }
 
-        assert_eq!(bc.borrow().count(), 3);
+        assert_eq!(bc.read().unwrap().count(), 3);
 
         // test that filters work and don't return anything at all.
         assert!(table.get(b"aaa").unwrap().is_none());

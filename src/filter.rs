@@ -1,11 +1,11 @@
-use std::rc::Rc;
+use std::sync::Arc;
 
 use integer_encoding::FixedInt;
 
 /// Encapsulates a filter algorithm allowing to search for keys more efficiently.
 /// Usually, policies are used as a BoxedFilterPolicy (see below), so they
 /// can be easily cloned and nested.
-pub trait FilterPolicy {
+pub trait FilterPolicy: Send + Sync {
     /// Returns a string identifying this policy.
     fn name(&self) -> &'static str;
     /// Create a filter matching the given keys. Keys are given as a long byte array that is
@@ -17,7 +17,7 @@ pub trait FilterPolicy {
 
 /// A boxed and refcounted filter policy (reference-counted because a Box with unsized content
 /// couldn't be cloned otherwise)
-pub type BoxedFilterPolicy = Rc<Box<dyn FilterPolicy>>;
+pub type BoxedFilterPolicy = Arc<Box<dyn FilterPolicy>>;
 
 impl FilterPolicy for BoxedFilterPolicy {
     fn name(&self) -> &'static str {
@@ -258,7 +258,7 @@ mod tests {
 
     /// Creates a filter using the keys from input_data() but converted to InternalKey format.
     fn create_internalkey_filter() -> Vec<u8> {
-        let fpol = Rc::new(Box::new(InternalFilterPolicy::new(BloomPolicy::new(
+        let fpol = Arc::new(Box::new(InternalFilterPolicy::new(BloomPolicy::new(
             _BITS_PER_KEY,
         ))));
         let (data, offs) = input_data();

@@ -4,7 +4,7 @@ use crate::key_types::{LookupKey, UserKey};
 use crate::skipmap::{SkipMap, SkipMapIter};
 use crate::types::{current_key_val, LdbIterator, SequenceNumber};
 
-use std::rc::Rc;
+use std::sync::Arc;
 
 use bytes::Bytes;
 use integer_encoding::FixedInt;
@@ -18,12 +18,12 @@ pub struct MemTable {
 impl MemTable {
     /// Returns a new MemTable.
     /// This wraps opt.cmp inside a MemtableKey-specific comparator.
-    pub fn new(cmp: Rc<Box<dyn Cmp>>) -> MemTable {
-        MemTable::new_raw(Rc::new(Box::new(MemtableKeyCmp(cmp))))
+    pub fn new(cmp: Arc<Box<dyn Cmp>>) -> MemTable {
+        MemTable::new_raw(Arc::new(Box::new(MemtableKeyCmp(cmp))))
     }
 
     /// Doesn't wrap the comparator in a MemtableKeyCmp.
-    fn new_raw(cmp: Rc<Box<dyn Cmp>>) -> MemTable {
+    fn new_raw(cmp: Arc<Box<dyn Cmp>>) -> MemTable {
         MemTable {
             map: SkipMap::new(cmp),
         }

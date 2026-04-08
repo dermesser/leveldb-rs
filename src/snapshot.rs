@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::types::{share, SequenceNumber, Shared, MAX_SEQUENCE_NUMBER};
 
-use std::rc::Rc;
+use std::sync::Arc;
 
 /// Opaque snapshot handle; Represents index to SnapshotList.map
 type SnapshotHandle = u64;
@@ -18,13 +18,13 @@ struct InnerSnapshot {
 
 impl Drop for InnerSnapshot {
     fn drop(&mut self) {
-        self.sl.borrow_mut().delete(self.id);
+        self.sl.write().unwrap().delete(self.id);
     }
 }
 
 #[derive(Clone)]
 pub struct Snapshot {
-    inner: Rc<InnerSnapshot>,
+    inner: Arc<InnerSnapshot>,
 }
 
 impl Snapshot {
@@ -57,7 +57,7 @@ impl SnapshotList {
 
     pub fn new_snapshot(&mut self, seq: SequenceNumber) -> Snapshot {
         let inner = self.inner.clone();
-        let mut sl = self.inner.borrow_mut();
+        let mut sl = self.inner.write().unwrap();
 
         sl.newest += 1;
         let newest = sl.newest;
@@ -68,7 +68,7 @@ impl SnapshotList {
         }
 
         Snapshot {
-            inner: Rc::new(InnerSnapshot {
+            inner: Arc::new(InnerSnapshot {
                 id: sl.newest,
                 seq,
                 sl: inner,
@@ -79,15 +79,16 @@ impl SnapshotList {
     /// oldest returns the lowest sequence number of all snapshots. It returns 0 if no snapshots
     /// are present.
     pub fn oldest(&self) -> SequenceNumber {
-        let oldest = self
-            .inner
-            .borrow()
-            .map
-            .iter()
-            .fold(
-                MAX_SEQUENCE_NUMBER,
-                |s, (seq, _)| if *seq < s { *seq } else { s },
-            );
+        let oldest =
+            self.inner
+                .read()
+                .unwrap()
+                .map
+                .iter()
+                .fold(
+                    MAX_SEQUENCE_NUMBER,
+                    |s, (seq, _)| if *seq < s { *seq } else { s },
+                );
         if oldest == MAX_SEQUENCE_NUMBER {
             0
         } else {
@@ -99,14 +100,15 @@ impl SnapshotList {
     /// returns 0.
     pub fn newest(&self) -> SequenceNumber {
         self.inner
-            .borrow()
+            .read()
+            .unwrap()
             .map
             .iter()
             .fold(0, |s, (seq, _)| if *seq > s { *seq } else { s })
     }
 
     pub fn empty(&self) -> bool {
-        self.inner.borrow().oldest == 0
+        self.inner.read().unwrap().oldest == 0
     }
 }
 

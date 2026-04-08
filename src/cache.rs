@@ -238,6 +238,9 @@ impl<T> Cache<T> {
 }
 
 #[cfg(test)]
+unsafe impl<T> Send for Cache<T> {}
+unsafe impl<T> Sync for Cache<T> {}
+
 mod tests {
     use super::LRUList;
     use super::*;

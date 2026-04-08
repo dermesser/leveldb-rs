@@ -3,7 +3,7 @@ use crate::types::{current_key_val, Direction, LdbIterator};
 
 use bytes::Bytes;
 use std::cmp::Ordering;
-use std::rc::Rc;
+use std::sync::Arc;
 
 // Warning: This module is kinda messy. The original implementation is
 // not that much better though :-)
@@ -21,12 +21,12 @@ pub struct MergingIter {
     iters: Vec<Box<dyn LdbIterator>>,
     current: Option<usize>,
     direction: Direction,
-    cmp: Rc<Box<dyn Cmp>>,
+    cmp: Arc<Box<dyn Cmp>>,
 }
 
 impl MergingIter {
     /// Construct a new merging iterator.
-    pub fn new(cmp: Rc<Box<dyn Cmp>>, iters: Vec<Box<dyn LdbIterator>>) -> MergingIter {
+    pub fn new(cmp: Arc<Box<dyn Cmp>>, iters: Vec<Box<dyn LdbIterator>>) -> MergingIter {
         MergingIter {
             iters,
             current: None,
@@ -203,7 +203,7 @@ mod tests {
         let iter = skm.iter();
         let mut iter2 = skm.iter();
 
-        let mut miter = MergingIter::new(Rc::new(Box::new(DefaultCmp)), vec![Box::new(iter)]);
+        let mut miter = MergingIter::new(Arc::new(Box::new(DefaultCmp)), vec![Box::new(iter)]);
 
         while let Some((k, v)) = miter.next() {
             if let Some((k2, v2)) = iter2.next() {
@@ -222,7 +222,7 @@ mod tests {
         let iter2 = skm.iter();
 
         let mut miter = MergingIter::new(
-            Rc::new(Box::new(DefaultCmp)),
+            Arc::new(Box::new(DefaultCmp)),
             vec![Box::new(iter), Box::new(iter2)],
         );
 
@@ -238,7 +238,7 @@ mod tests {
 
     #[test]
     fn test_merging_zero() {
-        let mut miter = MergingIter::new(Rc::new(Box::new(DefaultCmp)), vec![]);
+        let mut miter = MergingIter::new(Arc::new(Box::new(DefaultCmp)), vec![]);
         assert_eq!(0, LdbIteratorIter::wrap(&mut miter).count());
     }
 
@@ -248,7 +248,7 @@ mod tests {
         let iter = TestLdbIter::new(vec![(b("aba"), val), (b("abc"), val)]);
         let iter2 = TestLdbIter::new(vec![(b("abb"), val), (b("abd"), val)]);
         let miter = MergingIter::new(
-            Rc::new(Box::new(DefaultCmp)),
+            Arc::new(Box::new(DefaultCmp)),
             vec![Box::new(iter), Box::new(iter2)],
         );
         test_iterator_properties(miter);
@@ -261,7 +261,7 @@ mod tests {
         let iter2 = TestLdbIter::new(vec![(b("abb"), val), (b("abd"), val)]);
 
         let mut miter = MergingIter::new(
-            Rc::new(Box::new(DefaultCmp)),
+            Arc::new(Box::new(DefaultCmp)),
             vec![Box::new(iter), Box::new(iter2)],
         );
 
@@ -309,7 +309,7 @@ mod tests {
         let expected = [b("aba"), b("abb"), b("abc"), b("abd"), b("abe")];
 
         let mut iter = MergingIter::new(
-            Rc::new(Box::new(DefaultCmp)),
+            Arc::new(Box::new(DefaultCmp)),
             vec![Box::new(it1), Box::new(it2)],
         );
 
@@ -326,7 +326,7 @@ mod tests {
         let it2 = TestLdbIter::new(vec![(b("abb"), val), (b("abd"), val)]);
 
         let mut iter = MergingIter::new(
-            Rc::new(Box::new(DefaultCmp)),
+            Arc::new(Box::new(DefaultCmp)),
             vec![Box::new(it1), Box::new(it2)],
         );
 

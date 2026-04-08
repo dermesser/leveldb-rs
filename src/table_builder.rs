@@ -13,7 +13,7 @@ use crate::options::Options;
 
 use std::cmp::Ordering;
 use std::io::Write;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use integer_encoding::FixedIntWriter;
 
@@ -94,7 +94,7 @@ pub struct TableBuilder<Dst: Write> {
 
 impl<Dst: Write> TableBuilder<Dst> {
     pub fn new_no_filter(mut opt: Options, dst: Dst) -> TableBuilder<Dst> {
-        opt.filter_policy = Rc::new(Box::new(NoFilterPolicy::new()));
+        opt.filter_policy = Arc::new(Box::new(NoFilterPolicy::new()));
         TableBuilder::new(opt, dst)
     }
 }
@@ -106,8 +106,8 @@ impl<Dst: Write> TableBuilder<Dst> {
     /// The comparator in opt will be wrapped in a InternalKeyCmp, and the filter policy
     /// in an InternalFilterPolicy.
     pub fn new(mut opt: Options, dst: Dst) -> TableBuilder<Dst> {
-        opt.cmp = Rc::new(Box::new(InternalKeyCmp(opt.cmp.clone())));
-        opt.filter_policy = Rc::new(Box::new(InternalFilterPolicy::new(opt.filter_policy)));
+        opt.cmp = Arc::new(Box::new(InternalKeyCmp(opt.cmp.clone())));
+        opt.filter_policy = Arc::new(Box::new(InternalFilterPolicy::new(opt.filter_policy)));
         TableBuilder::new_raw(opt, dst)
     }
 
