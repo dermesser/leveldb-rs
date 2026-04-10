@@ -17,14 +17,14 @@ use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
+use std::sync::Arc;
 
 pub struct Compaction {
     level: usize,
     max_file_size: usize,
     input_version: Option<Shared<Version>>,
     level_ixs: [usize; NUM_LEVELS],
-    cmp: Rc<Box<dyn Cmp>>,
+    cmp: Arc<Box<dyn Cmp>>,
     icmp: InternalKeyCmp,
 
     manual: bool,
@@ -72,7 +72,7 @@ impl Compaction {
     pub fn input(&self, parent: usize, ix: usize) -> FileMetaData {
         assert!(parent < 2);
         assert!(ix < self.inputs[parent].len());
-        self.inputs[parent][ix].borrow().clone()
+        self.inputs[parent][ix].read().unwrap().clone()
     }
 
     pub fn num_inputs(&self, parent: usize) -> usize {
@@ -92,7 +92,8 @@ impl Compaction {
     pub fn add_input_deletions(&mut self) {
         for parent in 0..2 {
             for f in &self.inputs[parent] {
-                self.edit.delete_file(self.level + parent, f.borrow().num);
+                self.edit
+                    .delete_file(self.level + parent, f.read().unwrap().num);
             }
         }
     }
@@ -104,9 +105,9 @@ impl Compaction {
         assert!(self.input_version.is_some());
         let inp_version = self.input_version.as_ref().unwrap();
         for level in self.level + 2..NUM_LEVELS {
-            let files = &inp_version.borrow().files[level];
+            let files = &inp_version.read().unwrap().files[level];
             while self.level_ixs[level] < files.len() {
-                let f = files[self.level_ixs[level]].borrow();
+                let f = files[self.level_ixs[level]].read().unwrap();
                 if self.cmp.cmp(k, parse_internal_key(&f.largest).2) <= Ordering::Equal {
                     if self.cmp.cmp(k, parse_internal_key(&f.smallest).2) >= Ordering::Equal {
                         // key is in this file's range, so this is not the base level.
@@ -142,13 +143,13 @@ impl Compaction {
         }
         let grandparents = self.grandparents.as_ref().unwrap();
         while self.grandparent_ix < grandparents.len()
-            && self
-                .icmp
-                .cmp(k, &grandparents[self.grandparent_ix].borrow().largest)
-                == Ordering::Greater
+            && self.icmp.cmp(
+                k,
+                &grandparents[self.grandparent_ix].read().unwrap().largest,
+            ) == Ordering::Greater
         {
             if self.seen_key {
-                self.overlapped_bytes += grandparents[self.grandparent_ix].borrow().size;
+                self.overlapped_bytes += grandparents[self.grandparent_ix].read().unwrap().size;
             }
             self.grandparent_ix += 1;
         }
@@ -180,7 +181,7 @@ pub struct VersionSet {
     current: Option<Shared<Version>>,
     compaction_ptrs: [Bytes; NUM_LEVELS],
 
-    descriptor_log: Option<LogWriter<Box<dyn Write>>>,
+    descriptor_log: Option<LogWriter<Box<dyn std::io::Write + Send + Sync>>>,
 }
 
 impl VersionSet {
@@ -207,7 +208,12 @@ impl VersionSet {
     }
 
     pub fn current_summary(&self) -> String {
-        self.current.as_ref().unwrap().borrow().level_summary()
+        self.current
+            .as_ref()
+            .unwrap()
+            .read()
+            .unwrap()
+            .level_summary()
     }
 
     /// live_files returns the files that are currently active.
@@ -215,8 +221,8 @@ impl VersionSet {
         let mut files = HashSet::new();
         if let Some(ref version) = self.current {
             for level in 0..NUM_LEVELS {
-                for file in &version.borrow().files[level] {
-                    files.insert(file.borrow().num);
+                for file in &version.read().unwrap().files[level] {
+                    files.insert(file.read().unwrap().num);
                 }
             }
         }
@@ -255,22 +261,23 @@ impl VersionSet {
     pub fn needs_compaction(&self) -> bool {
         assert!(self.current.is_some());
         let v = self.current.as_ref().unwrap();
-        let v = v.borrow();
+        let v = v.read().unwrap();
         v.compaction_score.unwrap_or(0.0) >= 1.0 || v.file_to_compact.is_some()
     }
 
     fn approximate_offset(&self, v: &Shared<Version>, key: InternalKey<'_>) -> usize {
         let mut offset = 0;
         for level in 0..NUM_LEVELS {
-            for f in &v.borrow().files[level] {
-                if self.opt.cmp.cmp(&f.borrow().largest, key) <= Ordering::Equal {
-                    offset += f.borrow().size;
-                } else if self.opt.cmp.cmp(&f.borrow().smallest, key) == Ordering::Greater {
+            for f in &v.read().unwrap().files[level] {
+                if self.opt.cmp.cmp(&f.read().unwrap().largest, key) <= Ordering::Equal {
+                    offset += f.read().unwrap().size;
+                } else if self.opt.cmp.cmp(&f.read().unwrap().smallest, key) == Ordering::Greater {
                     // In higher levels, files are sorted; we don't need to search further.
                     if level > 0 {
                         break;
                     }
-                } else if let Ok(tbl) = self.cache.borrow_mut().get_table(f.borrow().num) {
+                } else if let Ok(tbl) = self.cache.read().unwrap().get_table(f.read().unwrap().num)
+                {
                     offset += tbl.approx_offset_of(key);
                 }
             }
@@ -281,7 +288,7 @@ impl VersionSet {
     pub fn pick_compaction(&mut self) -> Option<Compaction> {
         assert!(self.current.is_some());
         let current = self.current();
-        let current = current.borrow();
+        let current = current.read().unwrap();
 
         let mut c = Compaction::new(&self.opt, 0, self.current.clone());
         let level;
@@ -295,7 +302,7 @@ impl VersionSet {
                 if self.compaction_ptrs[level].is_empty()
                     || self
                         .cmp
-                        .cmp(&f.borrow().largest, &self.compaction_ptrs[level])
+                        .cmp(&f.read().unwrap().largest, &self.compaction_ptrs[level])
                         == Ordering::Greater
                 {
                     c.add_input(0, f.clone());
@@ -340,7 +347,8 @@ impl VersionSet {
             .current
             .as_ref()
             .unwrap()
-            .borrow()
+            .read()
+            .unwrap()
             .overlapping_inputs(level, from, to);
         if inputs.is_empty() {
             return None;
@@ -349,7 +357,7 @@ impl VersionSet {
         if level > 0 {
             let mut total = 0;
             for i in 0..inputs.len() {
-                total += inputs[i].borrow().size;
+                total += inputs[i].read().unwrap().size;
                 if total > self.opt.max_file_size {
                     inputs.truncate(i + 1);
                     break;
@@ -367,7 +375,7 @@ impl VersionSet {
     fn setup_other_inputs(&mut self, compaction: &mut Compaction) {
         assert!(self.current.is_some());
         let current = self.current.as_ref().unwrap();
-        let current = current.borrow();
+        let current = current.read().unwrap();
 
         let level = compaction.level;
         let (mut smallest, mut largest) = get_range(&self.cmp, compaction.inputs[0].iter());
@@ -428,11 +436,13 @@ impl VersionSet {
         // Set the list of grandparent (l+2) inputs to the files overlapped by the current overall
         // range.
         if level + 2 < NUM_LEVELS {
-            let grandparents = self.current.as_ref().unwrap().borrow().overlapping_inputs(
-                level + 2,
-                &allstart,
-                &alllimit,
-            );
+            let grandparents = self
+                .current
+                .as_ref()
+                .unwrap()
+                .read()
+                .unwrap()
+                .overlapping_inputs(level + 2, &allstart, &alllimit);
             compaction.grandparents = Some(grandparents);
         }
 
@@ -462,12 +472,12 @@ impl VersionSet {
             }
         }
 
-        let current = self.current.as_ref().unwrap().borrow();
+        let current = self.current.as_ref().unwrap().read().unwrap();
         // Save files.
         for level in 0..NUM_LEVELS {
             let fs = &current.files[level];
             for f in fs {
-                edit.add_file(level, f.borrow().clone());
+                edit.add_file(level, f.read().unwrap().clone());
             }
         }
         self.descriptor_log
@@ -714,14 +724,14 @@ impl VersionSet {
                 // Add individual iterators for L0 tables.
                 for fi in 0..c.num_inputs(i) {
                     let f = &c.inputs[i][fi];
-                    let s = self.cache.borrow_mut().get_table(f.borrow().num);
+                    let s = self.cache.read().unwrap().get_table(f.read().unwrap().num);
                     if let Ok(tbl) = s {
                         iters.push(Box::new(tbl.iter()));
                     } else {
                         log!(
                             self.opt.log,
                             "error opening table {}: {}",
-                            f.borrow().num,
+                            f.read().unwrap().num,
                             s.err().unwrap()
                         );
                     }
@@ -736,7 +746,7 @@ impl VersionSet {
             }
         }
         assert!(iters.len() <= cap);
-        let cmp: Rc<Box<dyn Cmp>> = Rc::new(Box::new(self.cmp.clone()));
+        let cmp: Arc<Box<dyn Cmp>> = Arc::new(Box::new(self.cmp.clone()));
         Box::new(MergingIter::new(cmp, iters))
     }
 }
@@ -789,7 +799,10 @@ impl Builder {
         f: FileMetaHandle,
     ) {
         // Only add file if it's not already deleted.
-        if self.deleted[level].iter().any(|d| *d == f.borrow().num) {
+        if self.deleted[level]
+            .iter()
+            .any(|d| *d == f.read().unwrap().num)
+        {
             return;
         }
         {
@@ -798,8 +811,8 @@ impl Builder {
                 // File must be after last file in level.
                 assert_eq!(
                     cmp.cmp(
-                        &files[files.len() - 1].borrow().largest,
-                        &f.borrow().smallest
+                        &files[files.len() - 1].read().unwrap().largest,
+                        &f.read().unwrap().smallest
                     ),
                     Ordering::Less
                 );
@@ -814,16 +827,16 @@ impl Builder {
         for level in 0..NUM_LEVELS {
             sort_files_by_smallest(cmp, &mut self.added[level]);
             // The base version should already have sorted files.
-            sort_files_by_smallest(cmp, &mut base.borrow_mut().files[level]);
+            sort_files_by_smallest(cmp, &mut base.write().unwrap().files[level]);
 
             let added = self.added[level].clone();
-            let basefiles = base.borrow().files[level].clone();
+            let basefiles = base.read().unwrap().files[level].clone();
             v.files[level].reserve(basefiles.len() + self.added[level].len());
 
             let iadded = added.into_iter();
             let ibasefiles = basefiles.into_iter();
             let merged = merge_iters(iadded, ibasefiles, |a, b| {
-                cmp.cmp(&a.borrow().smallest, &b.borrow().smallest)
+                cmp.cmp(&a.read().unwrap().smallest, &b.read().unwrap().smallest)
             });
             for m in merged {
                 self.maybe_add_file(cmp, v, level, m);
@@ -835,8 +848,8 @@ impl Builder {
             }
             for i in 1..v.files[level].len() {
                 let (prev_end, this_begin) = (
-                    &v.files[level][i - 1].borrow().largest,
-                    &v.files[level][i].borrow().smallest,
+                    &v.files[level][i - 1].read().unwrap().largest,
+                    &v.files[level][i].read().unwrap().smallest,
                 );
                 assert!(cmp.cmp(prev_end, this_begin) < Ordering::Equal);
             }
@@ -897,7 +910,7 @@ pub fn set_current_file<P: AsRef<Path>>(
 
 /// sort_files_by_smallest sorts the list of files by the smallest keys of the files.
 fn sort_files_by_smallest<C: Cmp>(cmp: &C, files: &mut [FileMetaHandle]) {
-    files.sort_by(|a, b| cmp.cmp(&a.borrow().smallest, &b.borrow().smallest))
+    files.sort_by(|a, b| cmp.cmp(&a.read().unwrap().smallest, &b.read().unwrap().smallest))
 }
 
 /// merge_iters merges and collects the items from two sorted iterators.
@@ -953,12 +966,12 @@ fn get_range<'a, C: Cmp, I: Iterator<Item = &'a FileMetaHandle>>(
     let mut largest = None;
     for f in files {
         if smallest.is_none() {
-            smallest = Some(f.borrow().smallest.clone());
+            smallest = Some(f.read().unwrap().smallest.clone());
         }
         if largest.is_none() {
-            largest = Some(f.borrow().largest.clone());
+            largest = Some(f.read().unwrap().largest.clone());
         }
-        let f = f.borrow();
+        let f = f.read().unwrap();
         if c.cmp(&f.smallest, smallest.as_ref().unwrap()) == Ordering::Less {
             smallest = Some(f.smallest.clone());
         }
@@ -1081,7 +1094,7 @@ mod tests {
         assert_eq!(1, v2.files[0].len());
         // File was added to L1.
         assert_eq!(4, v2.files[1].len());
-        assert_eq!(21, v2.files[1][3].borrow().num);
+        assert_eq!(21, v2.files[1][3].read().unwrap().num);
     }
 
     #[test]
@@ -1122,8 +1135,14 @@ mod tests {
             assert_eq!(10, vs.log_num);
             assert_eq!(21, vs.next_file_num);
             assert_eq!(30, vs.last_seq);
-            assert_eq!(0, vs.current.as_ref().unwrap().borrow().files[0].len());
-            assert_eq!(0, vs.current.as_ref().unwrap().borrow().files[1].len());
+            assert_eq!(
+                0,
+                vs.current.as_ref().unwrap().read().unwrap().files[0].len()
+            );
+            assert_eq!(
+                0,
+                vs.current.as_ref().unwrap().read().unwrap().files[1].len()
+            );
             assert_eq!(35, vs.write_snapshot().unwrap());
         }
 
@@ -1155,8 +1174,14 @@ mod tests {
 
             // The previous "compaction" should have added one file to the first level in the
             // current version.
-            assert_eq!(0, vs.current.as_ref().unwrap().borrow().files[0].len());
-            assert_eq!(1, vs.current.as_ref().unwrap().borrow().files[1].len());
+            assert_eq!(
+                0,
+                vs.current.as_ref().unwrap().read().unwrap().files[0].len()
+            );
+            assert_eq!(
+                1,
+                vs.current.as_ref().unwrap().read().unwrap().files[1].len()
+            );
             assert_eq!(63, vs.write_snapshot().unwrap());
         }
     }
@@ -1175,7 +1200,7 @@ mod tests {
         assert!(vs.live_files().contains(&3));
 
         let v = vs.current();
-        let v = v.borrow();
+        let v = v.read().unwrap();
         // num_level_bytes()
         assert_eq!(483, v.num_level_bytes(0));
         assert_eq!(651, v.num_level_bytes(1));
@@ -1213,12 +1238,12 @@ mod tests {
         // Seek compaction
         {
             let current = vs.current();
-            current.borrow_mut().compaction_score = None;
-            current.borrow_mut().compaction_level = None;
-            current.borrow_mut().file_to_compact_lvl = 1;
+            current.write().unwrap().compaction_score = None;
+            current.write().unwrap().compaction_level = None;
+            current.write().unwrap().file_to_compact_lvl = 1;
 
-            let fmd = current.borrow().files[1][0].clone();
-            current.borrow_mut().file_to_compact = Some(fmd);
+            let fmd = current.read().unwrap().files[1][0].clone();
+            current.write().unwrap().file_to_compact = Some(fmd);
 
             let c = vs.pick_compaction().unwrap();
             assert_eq!(3, c.inputs[0].len()); // inputs on l+0 are expanded.
@@ -1230,7 +1255,7 @@ mod tests {
 
     /// iterator_properties tests that it contains len elements and that they are ordered in
     /// ascending order by cmp.
-    fn iterator_properties<It: LdbIterator>(mut it: It, len: usize, cmp: Rc<Box<dyn Cmp>>) {
+    fn iterator_properties<It: LdbIterator>(mut it: It, len: usize, cmp: Arc<Box<dyn Cmp>>) {
         let mut wr = LdbIteratorIter::wrap(&mut it);
         let first = wr.next().unwrap();
         let mut count = 1;
@@ -1295,7 +1320,7 @@ mod tests {
             iterator_properties(
                 vs.make_input_iterator(&c),
                 12,
-                Rc::new(Box::new(vs.cmp.clone())),
+                Arc::new(Box::new(vs.cmp.clone())),
             );
 
             // Expand input range on higher level.
@@ -1310,7 +1335,7 @@ mod tests {
             iterator_properties(
                 vs.make_input_iterator(&c),
                 12,
-                Rc::new(Box::new(vs.cmp.clone())),
+                Arc::new(Box::new(vs.cmp.clone())),
             );
 
             // is_trivial_move
@@ -1351,7 +1376,7 @@ mod tests {
                 .unwrap();
             for inp in &[(0, 0, 1), (0, 1, 2), (1, 0, 3)] {
                 let f = &c.inputs[inp.0][inp.1];
-                assert_eq!(inp.2, f.borrow().num);
+                assert_eq!(inp.2, f.read().unwrap().num);
             }
             c.add_input_deletions();
             assert_eq!(23, c.edit().encode().len())

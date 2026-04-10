@@ -303,10 +303,10 @@ mod tests {
         loop {
             let r = lr.read(&mut dst);
 
-            if r.is_err() {
-                panic!("{}", r.unwrap_err());
-            } else if r.unwrap() == 0 {
-                break;
+            match r {
+                Err(e) => panic!("{}", e),
+                Ok(0) => break,
+                _ => {}
             }
 
             assert_eq!(dst, data[i]);

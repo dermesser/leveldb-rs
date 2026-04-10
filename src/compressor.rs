@@ -25,7 +25,7 @@
 /// ```
 ///
 /// See [crate::CompressorList] for usage
-pub trait Compressor {
+pub trait Compressor: Send + Sync {
     fn encode(&self, block: Vec<u8>) -> crate::Result<Vec<u8>>;
 
     fn decode(&self, block: Vec<u8>) -> crate::Result<Vec<u8>>;

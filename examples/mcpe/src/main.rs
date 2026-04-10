@@ -2,7 +2,7 @@ use miniz_oxide::deflate::{compress_to_vec, compress_to_vec_zlib, CompressionLev
 use miniz_oxide::inflate::{decompress_to_vec, decompress_to_vec_zlib};
 use rusty_leveldb::compressor::NoneCompressor;
 use rusty_leveldb::{Compressor, CompressorList, Options, DB};
-use std::rc::Rc;
+use std::sync::Arc;
 
 /// A zlib compressor that with zlib wrapper
 ///
@@ -76,7 +76,7 @@ pub fn mcpe_options(compression_level: u8) -> Options {
     list.set_with_id(0, NoneCompressor {});
     list.set_with_id(2, ZlibCompressor::new(compression_level));
     list.set_with_id(4, RawZlibCompressor::new(compression_level));
-    opt.compressor_list = Rc::new(list);
+    opt.compressor_list = Arc::new(list);
 
     // Set compressor
     // Minecraft bedrock may use other id than 4 however default is 4. [Mojang's implementation](https://github.com/reedacartwright/rbedrock/blob/fb32a899da4e15c1aaa0d6de2b459e914e183516/src/leveldb-mcpe/table/table_builder.cc#L152)
@@ -100,5 +100,5 @@ fn main() {
     let mut db = DB::open(PATH, opt).unwrap();
     db.put(b"~local_player", b"NBT data goes here").unwrap();
     let value = db.get(b"~local_player").unwrap();
-    assert_eq!(value, b"NBT data goes here")
+    assert_eq!(value.as_ref(), b"NBT data goes here")
 }

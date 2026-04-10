@@ -8,7 +8,7 @@ use crate::types::{FileMetaData, FileNum, LdbIterator, Shared, MAX_SEQUENCE_NUMB
 use bytes::Bytes;
 use std::cmp::Ordering;
 use std::default::Default;
-use std::rc::Rc;
+use std::sync::Arc;
 
 /// FileMetaHandle is a reference-counted FileMetaData object with interior mutability. This is
 /// necessary to provide a shared metadata container that can be modified while referenced by e.g.
@@ -23,7 +23,7 @@ pub struct GetStats {
 
 pub struct Version {
     table_cache: Shared<TableCache>,
-    user_cmp: Rc<Box<dyn Cmp>>,
+    user_cmp: Arc<Box<dyn Cmp>>,
     pub files: [Vec<FileMetaHandle>; NUM_LEVELS],
 
     pub file_to_compact: Option<FileMetaHandle>,
@@ -35,7 +35,7 @@ pub struct Version {
 struct DoSearchResult(Option<(Vec<u8>, Vec<u8>)>, Vec<FileMetaHandle>);
 
 impl Version {
-    pub fn new(cache: Shared<TableCache>, ucmp: Rc<Box<dyn Cmp>>) -> Version {
+    pub fn new(cache: Shared<TableCache>, ucmp: Arc<Box<dyn Cmp>>) -> Version {
         Version {
             table_cache: cache,
             user_cmp: ucmp,
@@ -84,7 +84,12 @@ impl Version {
                 // We receive both key and value from the table. Because we're using InternalKey
                 // keys, we now need to check whether the found entry's user key is equal to the
                 // one we're looking for (get() just returns the next-bigger key).
-                if let Ok(Some((k, v))) = self.table_cache.borrow_mut().get(f.borrow().num, ikey) {
+                if let Ok(Some((k, v))) = self
+                    .table_cache
+                    .read()
+                    .unwrap()
+                    .get(f.read().unwrap().num, ikey)
+                {
                     // We don't need to check the sequence number; get() will not return an entry
                     // with a higher sequence number than the one in the supplied key.
                     let (typ, _, foundkey) = parse_internal_key(&k);
@@ -111,7 +116,7 @@ impl Version {
         let files = &self.files[0];
         levels[0].reserve(files.len());
         for f_ in files {
-            let f = f_.borrow();
+            let f = f_.read().unwrap();
             let (fsmallest, flargest) = (
                 parse_internal_key(&f.smallest).2,
                 parse_internal_key(&f.largest).2,
@@ -123,13 +128,13 @@ impl Version {
             }
         }
         // Sort by newest first.
-        levels[0].sort_by(|a, b| b.borrow().num.cmp(&a.borrow().num));
+        levels[0].sort_by(|a, b| b.read().unwrap().num.cmp(&a.read().unwrap().num));
 
         let icmp = InternalKeyCmp(self.user_cmp.clone());
         (1..NUM_LEVELS).for_each(|level| {
             let files = &self.files[level];
             if let Some(ix) = find_file(&icmp, files, ikey) {
-                let f = files[ix].borrow();
+                let f = files[ix].read().unwrap();
                 let fsmallest = parse_internal_key(&f.smallest).2;
                 if self.user_cmp.cmp(ukey, fsmallest) >= Ordering::Equal {
                     levels[level].push(files[ix].clone());
@@ -150,7 +155,7 @@ impl Version {
             }
             let filedesc: Vec<(FileNum, usize)> = fs
                 .iter()
-                .map(|f| (f.borrow().num, f.borrow().size))
+                .map(|f| (f.read().unwrap().num, f.read().unwrap().size))
                 .collect();
             let desc = format!(
                 "level {}: {} files, {} bytes ({:?}); ",
@@ -225,12 +230,12 @@ impl Version {
     /// compaction candidates. It returns true if a compaction makes sense.
     pub fn update_stats(&mut self, stats: GetStats) -> bool {
         if let Some(file) = stats.file {
-            if file.borrow().allowed_seeks <= 1 && self.file_to_compact.is_none() {
+            if file.read().unwrap().allowed_seeks <= 1 && self.file_to_compact.is_none() {
                 self.file_to_compact = Some(file);
                 self.file_to_compact_lvl = stats.level;
                 return true;
-            } else if file.borrow().allowed_seeks > 0 {
-                file.borrow_mut().allowed_seeks -= 1;
+            } else if file.read().unwrap().allowed_seeks > 0 {
+                file.write().unwrap().allowed_seeks -= 1;
             }
         }
         false
@@ -242,7 +247,7 @@ impl Version {
         let mut max = 0;
         for lvl in 1..NUM_LEVELS - 1 {
             for f in &self.files[lvl] {
-                let f = f.borrow();
+                let f = f.read().unwrap();
                 let ols = self.overlapping_inputs(lvl + 1, &f.smallest, &f.largest);
                 let sum = total_size(ols.iter());
                 if sum > max {
@@ -313,7 +318,7 @@ impl Version {
         ) -> DoSearchResult {
             let mut inputs = vec![];
             for f_ in myself.files[level].iter() {
-                let f = f_.borrow();
+                let f = f_.read().unwrap();
                 let (fsmallest, flargest) = (
                     parse_internal_key(&f.smallest).2,
                     parse_internal_key(&f.largest).2,
@@ -367,8 +372,9 @@ impl Version {
         for f in &self.files[0] {
             iters.push(Box::new(
                 self.table_cache
-                    .borrow_mut()
-                    .get_table(f.borrow().num)?
+                    .read()
+                    .unwrap()
+                    .get_table(f.read().unwrap().num)?
                     .iter(),
             ));
         }
@@ -388,7 +394,7 @@ impl Version {
 pub fn new_version_iter(
     files: Vec<FileMetaHandle>,
     cache: Shared<TableCache>,
-    ucmp: Rc<Box<dyn Cmp>>,
+    ucmp: Arc<Box<dyn Cmp>>,
 ) -> VersionIter {
     VersionIter {
         files,
@@ -433,8 +439,9 @@ impl LdbIterator for VersionIter {
         // Initialize iterator or load next table.
         if let Ok(tbl) = self
             .cache
-            .borrow_mut()
-            .get_table(self.files[self.current_ix].borrow().num)
+            .write()
+            .unwrap()
+            .get_table(self.files[self.current_ix].read().unwrap().num)
         {
             self.current = Some(tbl.iter());
         } else {
@@ -453,8 +460,9 @@ impl LdbIterator for VersionIter {
         if let Some(ix) = find_file(&self.cmp, &self.files, key) {
             if let Ok(tbl) = self
                 .cache
-                .borrow_mut()
-                .get_table(self.files[ix].borrow().num)
+                .write()
+                .unwrap()
+                .get_table(self.files[ix].read().unwrap().num)
             {
                 let mut iter = tbl.iter();
                 iter.seek(key);
@@ -481,9 +489,9 @@ impl LdbIterator for VersionIter {
             } else if self.current_ix > 0 {
                 let f = &self.files[self.current_ix - 1];
                 // Find previous table, seek to last entry.
-                if let Ok(tbl) = self.cache.borrow_mut().get_table(f.borrow().num) {
+                if let Ok(tbl) = self.cache.read().unwrap().get_table(f.read().unwrap().num) {
                     let mut iter = tbl.iter();
-                    iter.seek(&f.borrow().largest);
+                    iter.seek(&f.read().unwrap().largest);
                     // The saved largest key must be in the table.
                     assert!(iter.valid());
                     self.current_ix -= 1;
@@ -499,19 +507,19 @@ impl LdbIterator for VersionIter {
 
 /// total_size returns the sum of sizes of the given files.
 pub fn total_size<'a, I: Iterator<Item = &'a FileMetaHandle>>(files: I) -> usize {
-    files.fold(0, |a, f| a + f.borrow().size)
+    files.fold(0, |a, f| a + f.read().unwrap().size)
 }
 
 /// key_is_after_file returns true if the given user key is larger than the largest key in f.
 fn key_is_after_file(cmp: &InternalKeyCmp, key: UserKey<'_>, f: &FileMetaHandle) -> bool {
-    let f = f.borrow();
+    let f = f.read().unwrap();
     let ulargest = parse_internal_key(&f.largest).2;
     !key.is_empty() && cmp.cmp_inner(key, ulargest) == Ordering::Greater
 }
 
 /// key_is_before_file returns true if the given user key is larger than the largest key in f.
 fn key_is_before_file(cmp: &InternalKeyCmp, key: UserKey<'_>, f: &FileMetaHandle) -> bool {
-    let f = f.borrow();
+    let f = f.read().unwrap();
     let usmallest = parse_internal_key(&f.smallest).2;
     !key.is_empty() && cmp.cmp_inner(key, usmallest) == Ordering::Less
 }
@@ -527,7 +535,7 @@ fn find_file(
     let (mut left, mut right) = (0, files.len());
     while left < right {
         let mid = (left + right) / 2;
-        if cmp.cmp(&files[mid].borrow().largest, key) == Ordering::Less {
+        if cmp.cmp(&files[mid].read().unwrap().largest, key) == Ordering::Less {
             left = mid + 1;
         } else {
             right = mid;
@@ -641,7 +649,7 @@ pub mod testutil {
             contents[contents.len() - 1].0,
             startseq + (contents.len() - 1) as u64,
         );
-        f.borrow_mut().size = tbl.finish().unwrap();
+        f.write().unwrap().size = tbl.finish().unwrap();
         f
     }
 
@@ -717,7 +725,7 @@ pub mod testutil {
         let t9 = write_table(env.as_ref().as_ref(), f9, 1, 9);
 
         let cache = TableCache::new("db", opts.clone(), share(Cache::new(128)), 100);
-        let mut v = Version::new(share(cache), Rc::new(Box::new(DefaultCmp)));
+        let mut v = Version::new(share(cache), Arc::new(Box::new(DefaultCmp)));
         v.files[0] = vec![t1, t2];
         v.files[1] = vec![t3, t4, t5];
         v.files[2] = vec![t6, t7];
@@ -767,14 +775,14 @@ mod tests {
         let v = make_version().0;
         let iters = v.new_iters().unwrap();
         let mut opt = options::for_test();
-        opt.cmp = Rc::new(Box::new(InternalKeyCmp(Rc::new(Box::new(DefaultCmp)))));
+        opt.cmp = Arc::new(Box::new(InternalKeyCmp(Arc::new(Box::new(DefaultCmp)))));
 
         let mut miter = MergingIter::new(opt.cmp.clone(), iters);
         assert_eq!(LdbIteratorIter::wrap(&mut miter).count(), 30);
 
         // Check that all elements are in order.
         let init = LookupKey::new(b"000", MAX_SEQUENCE_NUMBER);
-        let cmp = InternalKeyCmp(Rc::new(Box::new(DefaultCmp)));
+        let cmp = InternalKeyCmp(Arc::new(Box::new(DefaultCmp)));
         LdbIteratorIter::wrap(&mut miter).fold(init.internal_key().to_vec(), |b, (k, _)| {
             assert!(cmp.cmp(&b, &k) == Ordering::Less);
             k
@@ -791,6 +799,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::type_complexity)]
     fn test_version_get_simple() {
         let v = make_version().0;
         let cases: &[(&[u8], u64, Result<Option<Vec<u8>>>)] = &[
@@ -828,13 +837,13 @@ mod tests {
         // Overlapped by tables 1 and 2.
         let ol = v.get_overlapping(LookupKey::new(b"aay", 50).internal_key());
         // Check that sorting order is newest-first in L0.
-        assert_eq!(2, ol[0][0].borrow().num);
+        assert_eq!(2, ol[0][0].read().unwrap().num);
         // Check that table from L1 matches.
-        assert_eq!(3, ol[1][0].borrow().num);
+        assert_eq!(3, ol[1][0].read().unwrap().num);
 
         let ol = v.get_overlapping(LookupKey::new(b"cb", 50).internal_key());
-        assert_eq!(3, ol[1][0].borrow().num);
-        assert_eq!(6, ol[2][0].borrow().num);
+        assert_eq!(3, ol[1][0].read().unwrap().num);
+        assert_eq!(6, ol[2][0].read().unwrap().num);
 
         let ol = v.get_overlapping(LookupKey::new(b"x", 50).internal_key());
         (0..NUM_LEVELS).for_each(|i| {
@@ -888,8 +897,8 @@ mod tests {
             let to = LookupKey::new("aae".as_bytes(), 0);
             let r = v.overlapping_inputs(0, from.internal_key(), to.internal_key());
             assert_eq!(r.len(), 2);
-            assert_eq!(r[0].borrow().num, 1);
-            assert_eq!(r[1].borrow().num, 2);
+            assert_eq!(r[0].read().unwrap().num, 1);
+            assert_eq!(r[1].read().unwrap().num, 2);
         }
         {
             let from = LookupKey::new("cab".as_bytes(), MAX_SEQUENCE_NUMBER);
@@ -897,7 +906,7 @@ mod tests {
             // expect one file.
             let r = v.overlapping_inputs(1, from.internal_key(), to.internal_key());
             assert_eq!(r.len(), 1);
-            assert_eq!(r[0].borrow().num, 3);
+            assert_eq!(r[0].read().unwrap().num, 3);
         }
         {
             let from = LookupKey::new("cab".as_bytes(), MAX_SEQUENCE_NUMBER);
@@ -905,9 +914,9 @@ mod tests {
             let r = v.overlapping_inputs(1, from.internal_key(), to.internal_key());
             // Assert that correct number of files and correct files were returned.
             assert_eq!(r.len(), 3);
-            assert_eq!(r[0].borrow().num, 3);
-            assert_eq!(r[1].borrow().num, 4);
-            assert_eq!(r[2].borrow().num, 5);
+            assert_eq!(r[0].read().unwrap().num, 3);
+            assert_eq!(r[1].read().unwrap().num, 4);
+            assert_eq!(r[2].read().unwrap().num, 5);
         }
         {
             let from = LookupKey::new("hhh".as_bytes(), MAX_SEQUENCE_NUMBER);
@@ -930,7 +939,7 @@ mod tests {
 
         for fs in v.files.iter() {
             for f in fs {
-                f.borrow_mut().allowed_seeks = 0;
+                f.write().unwrap().allowed_seeks = 0;
             }
         }
         assert!(v.record_read_sample(k.internal_key()));
@@ -940,7 +949,7 @@ mod tests {
     fn test_version_key_ordering() {
         time_test!();
         let fmh = new_file(1, &[1, 0, 0], 0, &[2, 0, 0], 1);
-        let cmp = InternalKeyCmp(Rc::new(Box::new(DefaultCmp)));
+        let cmp = InternalKeyCmp(Arc::new(Box::new(DefaultCmp)));
 
         // Keys before file.
         for k in &[&[0][..], &[1], &[1, 0], &[0, 9, 9, 9]] {
@@ -979,7 +988,7 @@ mod tests {
             new_file(2, &[2, 5, 0], 0, &[4, 0, 0], 1),
             new_file(3, &[3, 5, 1], 0, &[5, 0, 0], 1),
         ];
-        let cmp = InternalKeyCmp(Rc::new(Box::new(DefaultCmp)));
+        let cmp = InternalKeyCmp(Arc::new(Box::new(DefaultCmp)));
 
         assert!(some_file_overlaps_range(
             &cmp,

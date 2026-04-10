@@ -44,6 +44,11 @@ name = "maps_bench"
 harness = false
 path = "src/benches/maps_bench.rs"
 
+[[bench]]
+name = "cache_bench"
+harness = false
+path = "src/benches/cache_bench.rs"
+
 [workspace]
 members = [
   "examples/write-a-lot",

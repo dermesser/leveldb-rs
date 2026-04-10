@@ -2,9 +2,9 @@
 
 use crate::error::{err, Result, StatusCode};
 
-use std::cell::RefCell;
 use std::path::Path;
-use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::RwLock;
 
 use bytes::Bytes;
 
@@ -16,10 +16,10 @@ pub type SequenceNumber = u64;
 pub const MAX_SEQUENCE_NUMBER: SequenceNumber = (1 << 56) - 1;
 
 /// A shared thingy with interior mutability.
-pub type Shared<T> = Rc<RefCell<T>>;
+pub type Shared<T> = Arc<RwLock<T>>;
 
-pub fn share<T>(t: T) -> Rc<RefCell<T>> {
-    Rc::new(RefCell::new(t))
+pub fn share<T>(t: T) -> Arc<RwLock<T>> {
+    Arc::new(RwLock::new(t))
 }
 
 #[derive(PartialEq)]

@@ -6,7 +6,7 @@ use fs2::FileExt;
 
 use std::collections::HashMap;
 use std::fs::{self, File};
-use std::io::{self, ErrorKind, Read, Write};
+use std::io::{self, ErrorKind, Read};
 use std::iter::FromIterator;
 use std::path::{Path, PathBuf};
 
@@ -59,7 +59,7 @@ impl Env for PosixDiskEnv {
             })
             .map_err(|e| map_err_with_name("open (randomaccess)", p, e))
     }
-    fn open_writable_file(&self, p: &Path) -> Result<Box<dyn Write>> {
+    fn open_writable_file(&self, p: &Path) -> Result<Box<dyn std::io::Write + Send + Sync>> {
         Ok(Box::new(
             fs::OpenOptions::new()
                 .create(true)
@@ -70,7 +70,7 @@ impl Env for PosixDiskEnv {
                 .map_err(|e| map_err_with_name("open (write)", p, e))?,
         ))
     }
-    fn open_appendable_file(&self, p: &Path) -> Result<Box<dyn Write>> {
+    fn open_appendable_file(&self, p: &Path) -> Result<Box<dyn std::io::Write + Send + Sync>> {
         Ok(Box::new(
             fs::OpenOptions::new()
                 .create(true)
@@ -115,7 +115,7 @@ impl Env for PosixDiskEnv {
     }
 
     fn lock(&self, p: &Path) -> Result<FileLock> {
-        let mut locks = self.locks.borrow_mut();
+        let mut locks = self.locks.write().unwrap();
 
         if let std::collections::hash_map::Entry::Vacant(e) =
             locks.entry(p.to_str().unwrap().to_string())
@@ -153,7 +153,7 @@ impl Env for PosixDiskEnv {
         }
     }
     fn unlock(&self, l: FileLock) -> Result<()> {
-        let mut locks = self.locks.borrow_mut();
+        let mut locks = self.locks.write().unwrap();
         if !locks.contains_key(&l.id) {
             err(
                 StatusCode::LockError,

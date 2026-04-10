@@ -28,7 +28,7 @@ fn get_default_options() -> Options {
     let mut opts = Options::default();
     #[cfg(feature = "fs")]
     {
-        opts.env = std::rc::Rc::new(Box::new(rusty_leveldb::PosixDiskEnv::new()));
+        opts.env = std::sync::Arc::new(Box::new(rusty_leveldb::PosixDiskEnv::new()));
     }
     opts.create_if_missing = true;
     opts

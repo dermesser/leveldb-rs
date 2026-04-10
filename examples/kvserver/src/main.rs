@@ -2,7 +2,8 @@ struct KVService {
     db: rusty_leveldb::DB,
 }
 
-static mut STORAGE_SERVICE: Option<std::sync::Mutex<KVService>> = None;
+static STORAGE_SERVICE: std::sync::OnceLock<std::sync::Mutex<KVService>> =
+    std::sync::OnceLock::new();
 
 impl KVService {
     fn handle_get(&mut self, req: &canteen::Request) -> canteen::Response {
@@ -36,31 +37,27 @@ impl KVService {
 }
 
 fn get_key_fn(rq: &canteen::Request) -> canteen::Response {
-    unsafe {
-        STORAGE_SERVICE
-            .as_ref()
-            .unwrap()
-            .lock()
-            .unwrap()
-            .handle_get(rq)
-    }
+    STORAGE_SERVICE
+        .get()
+        .unwrap()
+        .lock()
+        .unwrap()
+        .handle_get(rq)
 }
 
 fn put_key_fn(rq: &canteen::Request) -> canteen::Response {
-    unsafe {
-        STORAGE_SERVICE
-            .as_ref()
-            .unwrap()
-            .lock()
-            .unwrap()
-            .handle_put(rq)
-    }
+    STORAGE_SERVICE
+        .get()
+        .unwrap()
+        .lock()
+        .unwrap()
+        .handle_put(rq)
 }
 
 fn main() {
     let db = rusty_leveldb::DB::open("httpdb", rusty_leveldb::Options::default()).unwrap();
     let service = KVService { db };
-    unsafe { STORAGE_SERVICE = Some(std::sync::Mutex::new(service)) };
+    let _ = STORAGE_SERVICE.set(std::sync::Mutex::new(service));
 
     let mut ct = canteen::Canteen::new();
     ct.add_route("/kvs/get/<str:key>", &[canteen::Method::Get], get_key_fn);

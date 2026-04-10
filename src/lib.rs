@@ -48,15 +48,15 @@ mod asyncdb_tokio;
 #[cfg(feature = "asyncdb-tokio")]
 use asyncdb_tokio::{send_response, send_response_result, Message};
 
-#[cfg(feature = "asyncdb-async-std")]
+#[cfg(all(feature = "asyncdb-async-std", not(feature = "asyncdb-tokio")))]
 mod asyncdb_async_std;
-#[cfg(feature = "asyncdb-async-std")]
+#[cfg(all(feature = "asyncdb-async-std", not(feature = "asyncdb-tokio")))]
 use asyncdb_async_std::{send_response, send_response_result, Message};
 
 mod block;
 mod block_builder;
 mod blockhandle;
-mod cache;
+pub mod cache;
 mod cmp;
 mod crc;
 
@@ -92,7 +92,7 @@ mod db_iter;
 pub mod compressor;
 pub mod env;
 
-#[cfg(feature = "asyncdb-async-std")]
+#[cfg(all(feature = "asyncdb-async-std", not(feature = "asyncdb-tokio")))]
 pub use asyncdb_async_std::AsyncDB;
 #[cfg(feature = "asyncdb-tokio")]
 pub use asyncdb_tokio::AsyncDB;

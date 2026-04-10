@@ -1,7 +1,7 @@
 use crate::block::BlockContents;
 use crate::filter::BoxedFilterPolicy;
 
-use std::rc::Rc;
+use std::sync::Arc;
 
 use integer_encoding::FixedInt;
 
@@ -107,7 +107,7 @@ impl FilterBlockBuilder {
 #[derive(Clone)]
 pub struct FilterBlockReader {
     policy: BoxedFilterPolicy,
-    block: Rc<BlockContents>,
+    block: Arc<BlockContents>,
 
     offsets_offset: usize,
     filter_base_lg2: u32,
@@ -115,10 +115,10 @@ pub struct FilterBlockReader {
 
 impl FilterBlockReader {
     pub fn new_owned(pol: BoxedFilterPolicy, data: Vec<u8>) -> FilterBlockReader {
-        FilterBlockReader::new(pol, Rc::new(data.into()))
+        FilterBlockReader::new(pol, Arc::new(data.into()))
     }
 
-    pub fn new(pol: BoxedFilterPolicy, data: Rc<BlockContents>) -> FilterBlockReader {
+    pub fn new(pol: BoxedFilterPolicy, data: Arc<BlockContents>) -> FilterBlockReader {
         assert!(data.len() >= 5);
 
         let fbase = data[data.len() - 1] as u32;
@@ -180,7 +180,7 @@ mod tests {
 
     fn produce_filter_block() -> Vec<u8> {
         let keys = get_keys();
-        let mut bld = FilterBlockBuilder::new(Rc::new(Box::new(BloomPolicy::new(32))));
+        let mut bld = FilterBlockBuilder::new(Arc::new(Box::new(BloomPolicy::new(32))));
 
         bld.start_block(0);
 
@@ -217,7 +217,7 @@ mod tests {
     #[test]
     fn test_filter_block_build_read() {
         let result = produce_filter_block();
-        let reader = FilterBlockReader::new_owned(Rc::new(Box::new(BloomPolicy::new(32))), result);
+        let reader = FilterBlockReader::new_owned(Arc::new(Box::new(BloomPolicy::new(32))), result);
 
         assert_eq!(
             reader.offset_of(get_filter_index(5121, FILTER_BASE_LOG2)),

@@ -2,13 +2,13 @@ use crate::key_types::{self, LookupKey};
 use crate::types;
 
 use std::cmp::Ordering;
-use std::rc::Rc;
+use std::sync::Arc;
 
-type WrappedCmp = Rc<Box<dyn Cmp>>;
+type WrappedCmp = Arc<Box<dyn Cmp>>;
 
 /// Comparator trait, supporting types that can be nested (i.e., add additional functionality on
 /// top of an inner comparator)
-pub trait Cmp {
+pub trait Cmp: Send + Sync {
     /// Compare to byte strings, bytewise.
     fn cmp(&self, a: &[u8], b: &[u8]) -> Ordering;
 
@@ -105,7 +105,7 @@ impl Cmp for DefaultCmp {
 
 /// Same as memtable_key_cmp, but for InternalKeys.
 #[derive(Clone)]
-pub struct InternalKeyCmp(pub Rc<Box<dyn Cmp>>);
+pub struct InternalKeyCmp(pub Arc<Box<dyn Cmp>>);
 
 impl Cmp for InternalKeyCmp {
     fn cmp(&self, a: &[u8], b: &[u8]) -> Ordering {
@@ -154,7 +154,7 @@ impl InternalKeyCmp {
 /// ordering the sequence numbers. (This means that when having an entry abx/4 and seRching for
 /// abx/5, then abx/4 is counted as "greater-or-equal", making snapshot functionality work at all)
 #[derive(Clone)]
-pub struct MemtableKeyCmp(pub Rc<Box<dyn Cmp>>);
+pub struct MemtableKeyCmp(pub Arc<Box<dyn Cmp>>);
 
 impl Cmp for MemtableKeyCmp {
     fn cmp(&self, a: &[u8], b: &[u8]) -> Ordering {
@@ -236,7 +236,7 @@ mod tests {
 
     #[test]
     fn test_cmp_internalkeycmp_shortest_sep() {
-        let cmp = InternalKeyCmp(Rc::new(Box::new(DefaultCmp)));
+        let cmp = InternalKeyCmp(Arc::new(Box::new(DefaultCmp)));
         assert_eq!(
             cmp.find_shortest_sep(
                 LookupKey::new("abcd".as_bytes(), 1).internal_key(),
@@ -290,7 +290,7 @@ mod tests {
 
     #[test]
     fn test_cmp_internalkeycmp() {
-        let cmp = InternalKeyCmp(Rc::new(Box::new(DefaultCmp)));
+        let cmp = InternalKeyCmp(Arc::new(Box::new(DefaultCmp)));
         // a < b < c
         let a = LookupKey::new("abc".as_bytes(), 2).internal_key().to_vec();
         let b = LookupKey::new("abc".as_bytes(), 1).internal_key().to_vec();
@@ -309,7 +309,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_cmp_memtablekeycmp_panics() {
-        let cmp = MemtableKeyCmp(Rc::new(Box::new(DefaultCmp)));
+        let cmp = MemtableKeyCmp(Arc::new(Box::new(DefaultCmp)));
         cmp.cmp(&[1, 2, 3], &[4, 5, 6]);
     }
 }

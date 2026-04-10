@@ -11,7 +11,7 @@ use std::os::unix::fs::FileExt;
 use std::os::windows::fs::FileExt;
 use std::path::{Path, PathBuf};
 
-pub trait RandomAccess {
+pub trait RandomAccess: Send + Sync {
     fn read_at(&self, off: usize, dst: &mut [u8]) -> Result<usize>;
 }
 
@@ -33,11 +33,11 @@ pub struct FileLock {
     pub id: String,
 }
 
-pub trait Env {
+pub trait Env: Send + Sync {
     fn open_sequential_file(&self, _: &Path) -> Result<Box<dyn Read>>;
     fn open_random_access_file(&self, _: &Path) -> Result<Box<dyn RandomAccess>>;
-    fn open_writable_file(&self, _: &Path) -> Result<Box<dyn Write>>;
-    fn open_appendable_file(&self, _: &Path) -> Result<Box<dyn Write>>;
+    fn open_writable_file(&self, _: &Path) -> Result<Box<dyn std::io::Write + Send + Sync>>;
+    fn open_appendable_file(&self, _: &Path) -> Result<Box<dyn std::io::Write + Send + Sync>>;
 
     fn exists(&self, _: &Path) -> Result<bool>;
     fn children(&self, _: &Path) -> Result<Vec<PathBuf>>;
@@ -58,11 +58,11 @@ pub trait Env {
 }
 
 pub struct Logger {
-    dst: Box<dyn Write>,
+    dst: Box<dyn std::io::Write + Send + Sync>,
 }
 
 impl Logger {
-    pub fn new(w: Box<dyn Write>) -> Logger {
+    pub fn new(w: Box<dyn std::io::Write + Send + Sync>) -> Logger {
         Logger { dst: w }
     }
 

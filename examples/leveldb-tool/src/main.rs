@@ -9,7 +9,7 @@ use std::iter::FromIterator;
 fn get(db: &mut DB, k: &str) {
     match db.get(k.as_bytes()) {
         Some(v) => {
-            if let Ok(s) = String::from_utf8(v.to_vec().into()) {
+            if let Ok(s) = String::from_utf8(v.to_vec()) {
                 eprintln!("{} => {}", k, s);
             } else {
                 eprintln!("{} => {:?}", k, v);
@@ -31,14 +31,14 @@ fn delete(db: &mut DB, k: &str) {
 
 fn iter(db: &mut DB) {
     let mut it = db.new_iter().unwrap();
-    let (mut k, mut v) = (vec![], vec![]);
     let mut out = io::BufWriter::new(io::stdout());
     while it.advance() {
-        (k, v) = it.current();
-        out.write_all(&k).unwrap();
-        out.write_all(b" => ").unwrap();
-        out.write_all(&v).unwrap();
-        out.write_all(b"\n").unwrap();
+        if let Some((k, v)) = it.current() {
+            out.write_all(&k).unwrap();
+            out.write_all(b" => ").unwrap();
+            out.write_all(&v).unwrap();
+            out.write_all(b"\n").unwrap();
+        }
     }
 }
 

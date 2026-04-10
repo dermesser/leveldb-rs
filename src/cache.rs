@@ -1,141 +1,154 @@
 use std::collections::HashMap;
-use std::mem::swap;
 
-// No clone, no copy! That asserts that an LRUHandle exists only once.
-struct LRUHandle<T>(*mut LRUNode<T>);
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LRUHandle(usize);
 
 struct LRUNode<T> {
-    next: Option<Box<LRUNode<T>>>, // None in the list's last node
-    prev: Option<*mut LRUNode<T>>,
-    data: Option<T>, // if None, then we have reached the head node
+    next: Option<usize>,
+    prev: Option<usize>,
+    data: Option<T>, // None if it's the head node, or if it's a free slot
 }
 
 struct LRUList<T> {
-    head: LRUNode<T>,
+    nodes: Vec<LRUNode<T>>,
+    head: usize, // index of the dummy head node
+    free_head: Option<usize>,
     count: usize,
 }
 
-/// This is likely unstable; more investigation is needed into correct behavior!
 impl<T> LRUList<T> {
     fn new() -> LRUList<T> {
+        let nodes = vec![LRUNode {
+            next: None,
+            prev: None,
+            data: None,
+        }];
         LRUList {
-            head: LRUNode {
-                data: None,
-                next: None,
-                prev: None,
-            },
+            nodes,
+            head: 0,
+            free_head: None,
             count: 0,
         }
     }
 
-    /// Inserts new element at front (least recently used element)
-    fn insert(&mut self, elem: T) -> LRUHandle<T> {
-        self.count += 1;
-        // Not first element
-        if self.head.next.is_some() {
-            let mut new = Box::new(LRUNode {
-                data: Some(elem),
+    fn alloc_node(&mut self, data: T) -> usize {
+        if let Some(free_idx) = self.free_head {
+            self.free_head = self.nodes[free_idx].next;
+            self.nodes[free_idx] = LRUNode {
                 next: None,
-                prev: Some(&mut self.head as *mut LRUNode<T>),
-            });
-            let newp = new.as_mut() as *mut LRUNode<T>;
-
-            // Set up the node after the new one
-            self.head.next.as_mut().unwrap().prev = Some(newp);
-            // Replace head.next with None and set the new node's next to that
-            new.next = self.head.next.take();
-            self.head.next = Some(new);
-
-            LRUHandle(newp)
+                prev: None,
+                data: Some(data),
+            };
+            free_idx
         } else {
-            // First node; the only node right now is an empty head node
-            let mut new = Box::new(LRUNode {
-                data: Some(elem),
+            let idx = self.nodes.len();
+            self.nodes.push(LRUNode {
                 next: None,
-                prev: Some(&mut self.head as *mut LRUNode<T>),
+                prev: None,
+                data: Some(data),
             });
-            let newp = new.as_mut() as *mut LRUNode<T>;
-
-            // Set tail
-            self.head.prev = Some(newp);
-            // Set first node
-            self.head.next = Some(new);
-
-            LRUHandle(newp)
+            idx
         }
+    }
+
+    fn free_node(&mut self, idx: usize) -> T {
+        let data = self.nodes[idx].data.take().unwrap();
+        self.nodes[idx].next = self.free_head;
+        self.nodes[idx].prev = None;
+        self.free_head = Some(idx);
+        data
+    }
+
+    /// Inserts new element at front (least recently used element)
+    fn insert(&mut self, elem: T) -> LRUHandle {
+        let new_idx = self.alloc_node(elem);
+        self.count += 1;
+
+        let old_next = self.nodes[self.head].next;
+
+        self.nodes[new_idx].prev = Some(self.head);
+        self.nodes[new_idx].next = old_next;
+
+        self.nodes[self.head].next = Some(new_idx);
+
+        if let Some(old_next_idx) = old_next {
+            self.nodes[old_next_idx].prev = Some(new_idx);
+        } else {
+            self.nodes[self.head].prev = Some(new_idx); // track tail in head's prev
+        }
+
+        LRUHandle(new_idx)
     }
 
     fn remove_last(&mut self) -> Option<T> {
-        if self.count() == 0 {
+        if self.count == 0 {
             return None;
         }
-        let mut lasto = unsafe { (*((*self.head.prev.unwrap()).prev.unwrap())).next.take() };
+        let tail_idx = self.nodes[self.head].prev.unwrap();
+        let prev_idx = self.nodes[tail_idx].prev.unwrap();
 
-        assert!(lasto.is_some());
-        if let Some(ref mut last) = lasto {
-            assert!(last.prev.is_some());
-            assert!(self.head.prev.is_some());
-            self.head.prev = last.prev;
-            self.count -= 1;
-            last.data.take()
+        self.nodes[prev_idx].next = None;
+        if prev_idx == self.head {
+            self.nodes[self.head].prev = None;
         } else {
-            None
+            self.nodes[self.head].prev = Some(prev_idx);
         }
+
+        self.count -= 1;
+        Some(self.free_node(tail_idx))
     }
 
-    fn remove(&mut self, node_handle: LRUHandle<T>) -> T {
-        unsafe {
-            let d = (*node_handle.0).data.take().unwrap();
-            // Take ownership of node to be removed.
-            let mut current = (*(*node_handle.0).prev.unwrap()).next.take().unwrap();
-            let prev = current.prev.unwrap();
-            // Update previous node's successor.
-            if current.next.is_some() {
-                // Update next node's predecessor.
-                current.next.as_mut().unwrap().prev = current.prev.take();
+    fn remove(&mut self, node_handle: LRUHandle) -> T {
+        let idx = node_handle.0;
+        let prev_idx = self.nodes[idx].prev.unwrap();
+        let next_idx = self.nodes[idx].next;
+
+        self.nodes[prev_idx].next = next_idx;
+
+        if let Some(next_idx) = next_idx {
+            self.nodes[next_idx].prev = Some(prev_idx);
+        } else {
+            // Removing the tail
+            if self.count > 1 {
+                self.nodes[self.head].prev = Some(prev_idx);
             } else {
-                // Removing the tail: update head.prev to reflect the new tail.
-                // When removing the only element (count == 1), set head.prev to None.
-                self.head.prev = if self.count > 1 { Some(prev) } else { None };
+                self.nodes[self.head].prev = None;
             }
-            (*prev).next = current.next.take();
-
-            self.count -= 1;
-
-            d
         }
+
+        self.count -= 1;
+        self.free_node(idx)
     }
 
     /// Reinserts the referenced node at the front.
-    fn reinsert_front(&mut self, node_handle: &LRUHandle<T>) {
-        unsafe {
-            let prevp = (*node_handle.0).prev.unwrap();
+    fn reinsert_front(&mut self, node_handle: &LRUHandle) {
+        let idx = node_handle.0;
+        let prev_idx = self.nodes[idx].prev.unwrap();
+        let next_idx = self.nodes[idx].next;
 
-            // If not last node, update following node's prev
-            if let Some(next) = (*node_handle.0).next.as_mut() {
-                next.prev = Some(prevp);
-            } else {
-                // If last node, update head
-                self.head.prev = Some(prevp);
-            }
+        if prev_idx == self.head {
+            return; // Already at front
+        }
 
-            // Swap this.next with prev.next. After that, this.next refers to this (!)
-            swap(&mut (*prevp).next, &mut (*node_handle.0).next);
-            // To reinsert at head, swap head's next with this.next
-            swap(&mut (*node_handle.0).next, &mut self.head.next);
-            // Update this' prev reference to point to head.
+        // Remove from current position
+        self.nodes[prev_idx].next = next_idx;
+        if let Some(n) = next_idx {
+            self.nodes[n].prev = Some(prev_idx);
+        } else {
+            // It was the tail
+            self.nodes[self.head].prev = Some(prev_idx);
+        }
 
-            // Update the second node's prev reference.
-            if let Some(ref mut newnext) = (*node_handle.0).next {
-                (*node_handle.0).prev = newnext.prev;
-                newnext.prev = Some(node_handle.0);
-            } else {
-                // Only one node, being the last one; avoid head.prev pointing to head
-                self.head.prev = Some(node_handle.0);
-            }
+        // Insert at front
+        let old_next = self.nodes[self.head].next;
+        self.nodes[idx].prev = Some(self.head);
+        self.nodes[idx].next = old_next;
+        self.nodes[self.head].next = Some(idx);
 
-            assert!(self.head.next.is_some());
-            assert!(self.head.prev.is_some());
+        if let Some(old_next_idx) = old_next {
+            self.nodes[old_next_idx].prev = Some(idx);
+        } else {
+            self.nodes[self.head].prev = Some(idx);
         }
     }
 
@@ -144,8 +157,8 @@ impl<T> LRUList<T> {
     }
 
     fn _testing_head_ref(&self) -> Option<&T> {
-        if let Some(ref first) = self.head.next {
-            first.data.as_ref()
+        if let Some(first) = self.nodes[self.head].next {
+            self.nodes[first].data.as_ref()
         } else {
             None
         }
@@ -154,7 +167,7 @@ impl<T> LRUList<T> {
 
 pub type CacheKey = [u8; 16];
 pub type CacheID = u64;
-type CacheEntry<T> = (T, LRUHandle<CacheKey>);
+type CacheEntry<T> = (T, LRUHandle);
 
 /// Implementation of `ShardedLRUCache`.
 /// Based on a HashMap; the elements are linked in order to support the LRU ordering.
@@ -201,6 +214,10 @@ impl<T> Cache<T> {
     /// If the capacity has been reached, the least recently used element is removed from the
     /// cache.
     pub fn insert(&mut self, key: &CacheKey, elem: T) {
+        if let Some((_, old_handle)) = self.map.remove(key) {
+            self.list.remove(old_handle);
+        }
+
         if self.list.count() >= self.cap {
             if let Some(removed_key) = self.list.remove_last() {
                 assert!(self.map.remove(&removed_key).is_some());
@@ -216,12 +233,11 @@ impl<T> Cache<T> {
     /// Retrieve an element from the cache.
     /// If the element has been preempted from the cache in the meantime, this returns None.
     pub fn get<'a>(&'a mut self, key: &CacheKey) -> Option<&'a T> {
-        match self.map.get(key) {
-            None => None,
-            Some((elem, lru_handle)) => {
-                self.list.reinsert_front(lru_handle);
-                Some(elem)
-            }
+        if let Some((elem, lru_handle)) = self.map.get(key) {
+            self.list.reinsert_front(lru_handle);
+            Some(elem)
+        } else {
+            None
         }
     }
 
@@ -403,5 +419,22 @@ mod tests {
         assert_eq!(lru.remove_last(), Some(3));
         assert_eq!(lru.remove_last(), None);
         assert_eq!(lru.remove_last(), None);
+    }
+
+    #[test]
+    fn test_cache_duplicate_insert() {
+        let mut cache = Cache::new(2);
+        let key = make_key(1, 0, 0);
+        let key2 = make_key(2, 0, 0);
+        let key3 = make_key(3, 0, 0);
+
+        cache.insert(&key, 10);
+        cache.insert(&key, 20); // duplicate
+        cache.insert(&key2, 30);
+        cache.insert(&key3, 40);
+
+        assert_eq!(cache.get(&key), None); // key was evicted
+        assert_eq!(cache.get(&key2), Some(&30));
+        assert_eq!(cache.get(&key3), Some(&40));
     }
 }

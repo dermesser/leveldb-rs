@@ -37,7 +37,7 @@ use std::mem;
 use std::ops::Drop;
 use std::path::Path;
 use std::path::PathBuf;
-use std::rc::Rc;
+use std::sync::Arc;
 
 /// DB contains the actual database implemenation. As opposed to the original, this implementation
 /// is not concurrent (yet).
@@ -46,14 +46,14 @@ pub struct DB {
     path: PathBuf,
     lock: Option<FileLock>,
 
-    internal_cmp: Rc<Box<dyn Cmp>>,
+    internal_cmp: Arc<Box<dyn Cmp>>,
     fpol: InternalFilterPolicy<BoxedFilterPolicy>,
     opt: Options,
 
     mem: MemTable,
     imm: Option<MemTable>,
 
-    log: Option<LogWriter<BufWriter<Box<dyn Write>>>>,
+    log: Option<LogWriter<BufWriter<Box<dyn std::io::Write + Send + Sync>>>>,
     log_num: Option<FileNum>,
     cache: Shared<TableCache>,
     vset: Shared<VersionSet>,
@@ -61,8 +61,6 @@ pub struct DB {
 
     cstats: [CompactionStats; NUM_LEVELS],
 }
-
-unsafe impl Send for DB {}
 
 impl DB {
     // RECOVERY AND INITIALIZATION //
@@ -88,7 +86,7 @@ impl DB {
             name: name.to_owned(),
             path,
             lock: None,
-            internal_cmp: Rc::new(Box::new(InternalKeyCmp(opt.cmp.clone()))),
+            internal_cmp: Arc::new(Box::new(InternalKeyCmp(opt.cmp.clone()))),
             fpol: InternalFilterPolicy::new(opt.filter_policy.clone()),
 
             mem: MemTable::new(opt.cmp.clone()),
@@ -107,7 +105,7 @@ impl DB {
     }
 
     fn current(&self) -> Shared<Version> {
-        self.vset.borrow().current()
+        self.vset.read().unwrap().current()
     }
 
     /// Opens or creates a new or existing database. `name` is the name of the directory containing
@@ -123,7 +121,7 @@ impl DB {
 
         // Create log file if an old one is not being reused.
         if db.log.is_none() {
-            let lognum = db.vset.borrow_mut().new_file_number();
+            let lognum = db.vset.write().unwrap().new_file_number();
             let logfile = db
                 .opt
                 .env
@@ -135,7 +133,7 @@ impl DB {
 
         if save_manifest {
             ve.set_log_num(db.log_num.unwrap_or(0));
-            db.vset.borrow_mut().log_and_apply(ve)?;
+            db.vset.write().unwrap().log_and_apply(ve)?;
         }
 
         db.delete_obsolete_files()?;
@@ -184,19 +182,20 @@ impl DB {
 
         // If save_manifest is true, we should log_and_apply() later in order to write the new
         // manifest.
-        let mut save_manifest = self.vset.borrow_mut().recover()?;
+        let mut save_manifest = self.vset.write().unwrap().recover()?;
 
         // Recover from all log files not in the descriptor.
         let mut max_seq = 0;
         let filenames = self.opt.env.children(&self.path)?;
-        let mut expected = self.vset.borrow().live_files();
+        let mut expected = self.vset.read().unwrap().live_files();
         let mut log_files = vec![];
 
         for file in &filenames {
             if let Ok((num, typ)) = parse_file_name(file) {
                 expected.remove(&num);
                 if typ == FileType::Log
-                    && (num >= self.vset.borrow().log_num || num == self.vset.borrow().prev_log_num)
+                    && (num >= self.vset.read().unwrap().log_num
+                        || num == self.vset.read().unwrap().prev_log_num)
                 {
                     log_files.push(num);
                 }
@@ -217,11 +216,14 @@ impl DB {
             if max_seq_ > max_seq {
                 max_seq = max_seq_;
             }
-            self.vset.borrow_mut().mark_file_number_used(log_files[i]);
+            self.vset
+                .write()
+                .unwrap()
+                .mark_file_number_used(log_files[i]);
         }
 
-        if self.vset.borrow().last_seq < max_seq {
-            self.vset.borrow_mut().last_seq = max_seq;
+        if self.vset.read().unwrap().last_seq < max_seq {
+            self.vset.write().unwrap().last_seq = max_seq;
         }
 
         Ok(save_manifest)
@@ -239,7 +241,7 @@ impl DB {
         let filename = log_file_name(&self.path, log_num);
         let logfile = self.opt.env.open_sequential_file(Path::new(&filename))?;
         // Use the user-supplied comparator; it will be wrapped inside a MemtableKeyCmp.
-        let cmp: Rc<Box<dyn Cmp>> = self.opt.cmp.clone();
+        let cmp: Arc<Box<dyn Cmp>> = self.opt.cmp.clone();
 
         let mut logreader = LogReader::new(
             logfile, // checksum=
@@ -304,18 +306,18 @@ impl DB {
 
     /// delete_obsolete_files removes files that are no longer needed from the file system.
     fn delete_obsolete_files(&mut self) -> Result<()> {
-        let files = self.vset.borrow().live_files();
+        let files = self.vset.read().unwrap().live_files();
         let filenames = self.opt.env.children(Path::new(&self.path))?;
         for name in filenames {
             if let Ok((num, typ)) = parse_file_name(&name) {
                 match typ {
                     FileType::Log => {
-                        if num >= self.vset.borrow().log_num {
+                        if num >= self.vset.read().unwrap().log_num {
                             continue;
                         }
                     }
                     FileType::Descriptor => {
-                        if num >= self.vset.borrow().manifest_num {
+                        if num >= self.vset.read().unwrap().manifest_num {
                             continue;
                         }
                     }
@@ -336,7 +338,7 @@ impl DB {
 
                 // If we're here, delete this file.
                 if typ == FileType::Table {
-                    let _ = self.cache.borrow_mut().evict(num);
+                    let _ = self.cache.read().unwrap().evict(num);
                 }
                 log!(self.opt.log, "Deleting file type={:?} num={}", typ, num);
                 if let Err(e) = self.opt.env.delete(&self.path.join(&name)) {
@@ -408,14 +410,14 @@ impl DB {
 
         let entries = batch.count() as u64;
         let log = self.log.as_mut().unwrap();
-        let next = self.vset.borrow().last_seq + 1;
+        let next = self.vset.read().unwrap().last_seq + 1;
 
         batch.insert_into_memtable(next, &mut self.mem);
         log.add_record(&batch.encode(next))?;
         if sync {
             log.flush()?;
         }
-        self.vset.borrow_mut().last_seq += entries;
+        self.vset.write().unwrap().last_seq += entries;
         Ok(())
     }
 
@@ -460,7 +462,7 @@ impl DB {
         // Limiting the borrow scope of self.current.
         {
             let current = self.current();
-            let mut current = current.borrow_mut();
+            let mut current = current.write().unwrap();
             if let Ok(Some((v, st))) = current.get(lkey.internal_key()) {
                 if current.update_stats(st) {
                     do_compaction = true;
@@ -485,7 +487,7 @@ impl DB {
 
     /// get is a simplified version of get_at(), translating errors to None.
     pub fn get(&mut self, key: &[u8]) -> Option<Bytes> {
-        let seq = self.vset.borrow().last_seq;
+        let seq = self.vset.read().unwrap().last_seq;
         self.get_internal(seq, key).unwrap_or_default()
     }
 }
@@ -525,7 +527,7 @@ impl DB {
 
         // Add iterators for table files.
         let current = self.current();
-        let current = current.borrow();
+        let current = current.read().unwrap();
         iters.extend(current.new_iters()?);
 
         Ok(MergingIter::new(self.internal_cmp.clone(), iters))
@@ -538,7 +540,7 @@ impl DB {
     /// Returns a snapshot at the current state. It can be used to retrieve entries from the
     /// database as they were at an earlier point in time.
     pub fn get_snapshot(&mut self) -> Snapshot {
-        self.snaps.new_snapshot(self.vset.borrow().last_seq)
+        self.snaps.new_snapshot(self.vset.read().unwrap().last_seq)
     }
 }
 
@@ -552,7 +554,7 @@ impl DB {
     /// Trigger a compaction based on where this key is located in the different levels.
     fn record_read_sample(&mut self, k: InternalKey<'_>) {
         let current = self.current();
-        if current.borrow_mut().record_read_sample(k) {
+        if current.write().unwrap().record_read_sample(k) {
             if let Err(e) = self.maybe_do_compaction() {
                 log!(self.opt.log, "record_read_sample: compaction failed: {}", e);
             }
@@ -571,7 +573,7 @@ impl DB {
             Ok(())
         } else {
             // Create new memtable.
-            let logn = self.vset.borrow_mut().new_file_number();
+            let logn = self.vset.write().unwrap().new_file_number();
             let logf = self
                 .opt
                 .env
@@ -586,7 +588,7 @@ impl DB {
                 self.imm = Some(imm);
                 self.maybe_do_compaction()
             } else {
-                self.vset.borrow_mut().reuse_file_number(logn);
+                self.vset.write().unwrap().reuse_file_number(logn);
                 Err(logf.err().unwrap())
             }
         }
@@ -599,8 +601,8 @@ impl DB {
         }
         // Issue #34 PR #36: after compacting a memtable into an L0 file, it is possible that the
         // L0 files need to be merged and promoted.
-        if self.vset.borrow().needs_compaction() {
-            let c = self.vset.borrow_mut().pick_compaction();
+        if self.vset.read().unwrap().needs_compaction() {
+            let c = self.vset.write().unwrap().pick_compaction();
             if let Some(c) = c {
                 self.start_compaction(c)
             } else {
@@ -619,8 +621,8 @@ impl DB {
     pub fn compact_range(&mut self, from: &[u8], to: &[u8]) -> Result<()> {
         let mut max_level = 1;
         {
-            let v = self.vset.borrow().current();
-            let v = v.borrow();
+            let v = self.vset.read().unwrap().current();
+            let v = v.read().unwrap();
             for l in 1..NUM_LEVELS - 1 {
                 if v.overlap_in_level(l, from, to) {
                     max_level = l;
@@ -640,7 +642,8 @@ impl DB {
             loop {
                 let c_ = self
                     .vset
-                    .borrow_mut()
+                    .write()
+                    .unwrap()
                     .compact_range(l, &ifrom, iend.internal_key());
                 if let Some(c) = c_ {
                     // Update ifrom to the largest key of the last file in this compaction.
@@ -668,7 +671,11 @@ impl DB {
             compaction.edit().delete_file(level, num);
             compaction.edit().add_file(level + 1, f);
 
-            let r = self.vset.borrow_mut().log_and_apply(compaction.into_edit());
+            let r = self
+                .vset
+                .write()
+                .unwrap()
+                .log_and_apply(compaction.into_edit());
             if let Err(e) = r {
                 log!(self.opt.log, "trivial move failed: {}", e);
                 Err(e)
@@ -684,13 +691,13 @@ impl DB {
                 log!(
                     self.opt.log,
                     "Summary: {}",
-                    self.vset.borrow().current_summary()
+                    self.vset.read().unwrap().current_summary()
                 );
                 Ok(())
             }
         } else {
             let smallest = if self.snaps.empty() {
-                self.vset.borrow().last_seq
+                self.vset.read().unwrap().last_seq
             } else {
                 self.snaps.oldest()
             };
@@ -703,7 +710,7 @@ impl DB {
             log!(
                 self.opt.log,
                 "Compaction finished: {}",
-                self.vset.borrow().current_summary()
+                self.vset.read().unwrap().current_summary()
             );
 
             self.delete_obsolete_files()
@@ -717,12 +724,12 @@ impl DB {
         let base = self.current();
 
         let imm = self.imm.take().unwrap();
-        if let Err(e) = self.write_l0_table(&imm, &mut ve, Some(&base.borrow())) {
+        if let Err(e) = self.write_l0_table(&imm, &mut ve, Some(&base.read().unwrap())) {
             self.imm = Some(imm);
             return Err(e);
         }
         ve.set_log_num(self.log_num.unwrap_or(0));
-        self.vset.borrow_mut().log_and_apply(ve)?;
+        self.vset.write().unwrap().log_and_apply(ve)?;
         if let Err(e) = self.delete_obsolete_files() {
             log!(self.opt.log, "Error deleting obsolete files: {}", e);
         }
@@ -737,18 +744,18 @@ impl DB {
         base: Option<&Version>,
     ) -> Result<()> {
         let start_ts = self.opt.env.micros();
-        let num = self.vset.borrow_mut().new_file_number();
+        let num = self.vset.write().unwrap().new_file_number();
         log!(self.opt.log, "Start write of L0 table {:06}", num);
         let fmd = build_table(&self.path, &self.opt, memt.iter(), num)?;
         log!(self.opt.log, "L0 table {:06} has {} bytes", num, fmd.size);
 
         // Wrote empty table.
         if fmd.size == 0 {
-            self.vset.borrow_mut().reuse_file_number(num);
+            self.vset.write().unwrap().reuse_file_number(num);
             return Ok(());
         }
 
-        let cache_result = self.cache.borrow_mut().get_table(num);
+        let cache_result = self.cache.read().unwrap().get_table(num);
         if let Err(e) = cache_result {
             log!(
                 self.opt.log,
@@ -785,8 +792,14 @@ impl DB {
 
     fn do_compaction_work(&mut self, cs: &mut CompactionState) -> Result<()> {
         {
-            let current = self.vset.borrow().current();
-            assert!(current.borrow().num_level_files(cs.compaction.level()) > 0);
+            let current = self.vset.read().unwrap().current();
+            assert!(
+                current
+                    .read()
+                    .unwrap()
+                    .num_level_files(cs.compaction.level())
+                    > 0
+            );
             assert!(cs.builder.is_none());
         }
         let start_ts = self.opt.env.micros();
@@ -799,7 +812,11 @@ impl DB {
             cs.compaction.level() + 1
         );
 
-        let mut input = self.vset.borrow().make_input_iterator(&cs.compaction);
+        let mut input = self
+            .vset
+            .read()
+            .unwrap()
+            .make_input_iterator(&cs.compaction);
         input.seek_to_first();
 
         let mut last_seq_for_key = MAX_SEQUENCE_NUMBER;
@@ -854,7 +871,7 @@ impl DB {
             last_seq_for_key = seq;
 
             if cs.builder.is_none() {
-                let fnum = self.vset.borrow_mut().new_file_number();
+                let fnum = self.vset.write().unwrap().new_file_number();
                 let fmd = FileMetaData {
                     num: fnum,
                     ..Default::default()
@@ -917,7 +934,7 @@ impl DB {
         if entries > 0 {
             // Verify that table can be used. (Separating get_table() because borrowing in an if
             // let expression is dangerous).
-            let r = self.cache.borrow_mut().get_table(output_num);
+            let r = self.cache.read().unwrap().get_table(output_num);
             if let Err(e) = r {
                 log!(self.opt.log, "New table can't be read: {}", e);
                 return Err(e);
@@ -949,7 +966,8 @@ impl DB {
             cs.compaction.edit().add_file(level + 1, output.clone());
         }
         self.vset
-            .borrow_mut()
+            .write()
+            .unwrap()
             .log_and_apply(cs.compaction.into_edit())
     }
 }
@@ -965,7 +983,7 @@ struct CompactionState {
     compaction: Compaction,
     smallest_seq: SequenceNumber,
     outputs: Vec<FileMetaData>,
-    builder: Option<TableBuilder<Box<dyn Write>>>,
+    builder: Option<TableBuilder<Box<dyn std::io::Write + Send + Sync>>>,
     total_bytes: usize,
 }
 
@@ -1114,7 +1132,7 @@ pub mod testutil {
 
         for l in 0..NUM_LEVELS {
             for f in &v.files[l] {
-                ve.add_file(l, f.borrow().clone());
+                ve.add_file(l, f.read().unwrap().clone());
             }
         }
 
@@ -1131,12 +1149,12 @@ pub mod testutil {
     /// set_file_to_compact ensures that the specified table file will be compacted next.
     pub fn set_file_to_compact(db: &mut DB, num: FileNum) {
         let v = db.current();
-        let mut v = v.borrow_mut();
+        let mut v = v.write().unwrap();
 
         let mut ftc = None;
         for l in 0..NUM_LEVELS {
             for f in &v.files[l] {
-                if f.borrow().num == num {
+                if f.read().unwrap().num == num {
                     ftc = Some((f.clone(), l));
                 }
             }
@@ -1280,11 +1298,12 @@ mod tests {
             assert!(env.exists(&Path::new("db").join("000004.log")).unwrap());
             // Check that entry exists and is correct. Phew, long call chain!
             let current = db.current();
-            log!(opt.log, "files: {:?}", current.borrow().files);
+            log!(opt.log, "files: {:?}", current.read().unwrap().files);
             assert_eq!(
                 b"def",
                 current
-                    .borrow_mut()
+                    .write()
+                    .unwrap()
                     .get(LookupKey::new(b"abc", 1).internal_key())
                     .unwrap()
                     .unwrap()
@@ -1474,7 +1493,7 @@ mod tests {
 
         {
             // Read table back in.
-            let mut tc = TableCache::new("db", opt.clone(), share(Cache::new(128)), 100);
+            let tc = TableCache::new("db", opt.clone(), share(Cache::new(128)), 100);
             let tbl = tc.get_table(123).unwrap();
             assert_eq!(mt.len(), LdbIteratorIter::wrap(&mut tbl.iter()).count());
         }
@@ -1494,7 +1513,7 @@ mod tests {
                 .write_all(&buf)
                 .unwrap();
 
-            let mut tc = TableCache::new("db", opt.clone(), share(Cache::new(128)), 100);
+            let tc = TableCache::new("db", opt.clone(), share(Cache::new(128)), 100);
             let tbl = tc.get_table(123).unwrap();
             // The last two entries are skipped due to the corruption above.
             assert_eq!(
@@ -1520,7 +1539,7 @@ mod tests {
     fn test_db_impl_get_from_table_with_snapshot() {
         let mut db = build_db().0;
 
-        assert_eq!(30, db.vset.borrow().last_seq);
+        assert_eq!(30, db.vset.read().unwrap().last_seq);
 
         // seq = 31
         db.put(b"xyy", b"123").unwrap();
@@ -1612,7 +1631,7 @@ mod tests {
 
         {
             let v = db.current();
-            let mut v = v.borrow_mut();
+            let mut v = v.write().unwrap();
             v.file_to_compact = Some(v.files[2][0].clone());
             v.file_to_compact_lvl = 2;
         }
@@ -1621,7 +1640,7 @@ mod tests {
 
         {
             let v = db.current();
-            let v = v.borrow_mut();
+            let v = v.write().unwrap();
             assert_eq!(1, v.files[3].len());
         }
     }
@@ -1657,7 +1676,8 @@ mod tests {
         );
         assert_eq!(
             7,
-            LdbIteratorIter::wrap(&mut db.cache.borrow_mut().get_table(3).unwrap().iter()).count()
+            LdbIteratorIter::wrap(&mut db.cache.read().unwrap().get_table(3).unwrap().iter())
+                .count()
         );
     }
 
@@ -1665,8 +1685,8 @@ mod tests {
     fn test_db_impl_compaction() {
         let mut db = build_db().0;
         let v = db.current();
-        v.borrow_mut().compaction_score = Some(2.0);
-        v.borrow_mut().compaction_level = Some(1);
+        v.write().unwrap().compaction_score = Some(2.0);
+        v.write().unwrap().compaction_level = Some(1);
 
         db.maybe_do_compaction().unwrap();
 
@@ -1690,8 +1710,8 @@ mod tests {
 
         // New current version.
         let v = db.current();
-        assert_eq!(0, v.borrow().files[1].len());
-        assert_eq!(2, v.borrow().files[2].len());
+        assert_eq!(0, v.read().unwrap().files[1].len());
+        assert_eq!(2, v.read().unwrap().files[2].len());
     }
 
     #[test]
@@ -1703,8 +1723,8 @@ mod tests {
         v.file_to_compact_lvl = 2;
 
         let mut db = DB::new("db", opt.clone());
-        db.vset.borrow_mut().add_version(v);
-        db.vset.borrow_mut().next_file_num = 10;
+        db.vset.write().unwrap().add_version(v);
+        db.vset.write().unwrap().next_file_num = 10;
 
         db.maybe_do_compaction().unwrap();
 
@@ -1718,8 +1738,8 @@ mod tests {
         );
 
         let v = db.current();
-        assert_eq!(1, v.borrow().files[2].len());
-        assert_eq!(3, v.borrow().files[3].len());
+        assert_eq!(1, v.read().unwrap().files[2].len());
+        assert_eq!(3, v.read().unwrap().files[3].len());
     }
 
     #[test]
@@ -1822,5 +1842,15 @@ mod tests {
             db.write(write_batch, false).unwrap();
             cnt += entries_per_batch;
         }
+    }
+}
+
+#[cfg(test)]
+mod test_send {
+    use super::*;
+    fn is_send<T: Send>() {}
+    #[test]
+    fn test_db_send() {
+        is_send::<DB>();
     }
 }

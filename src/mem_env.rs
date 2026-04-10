@@ -158,7 +158,12 @@ impl MemFS {
         }
     }
     /// Open a file for writing.
-    fn open_w(&self, p: &Path, append: bool, truncate: bool) -> Result<Box<dyn Write>> {
+    fn open_w(
+        &self,
+        p: &Path,
+        append: bool,
+        truncate: bool,
+    ) -> Result<Box<dyn std::io::Write + Send + Sync>> {
         let f = self.open(p, true)?;
         if truncate {
             f.0.lock().unwrap().clear();
@@ -298,10 +303,10 @@ impl Env for MemEnv {
             .open(p, false)
             .map(|m| Box::new(m) as Box<dyn RandomAccess>)
     }
-    fn open_writable_file(&self, p: &Path) -> Result<Box<dyn Write>> {
+    fn open_writable_file(&self, p: &Path) -> Result<Box<dyn std::io::Write + Send + Sync>> {
         self.0.open_w(p, true, true)
     }
-    fn open_appendable_file(&self, p: &Path) -> Result<Box<dyn Write>> {
+    fn open_appendable_file(&self, p: &Path) -> Result<Box<dyn std::io::Write + Send + Sync>> {
         self.0.open_w(p, true, false)
     }
 
