@@ -1,3 +1,4 @@
+#![allow(static_mut_refs)]
 struct KVService {
     db: rusty_leveldb::DB,
 }

@@ -791,6 +791,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::type_complexity)]
     fn test_version_get_simple() {
         let v = make_version().0;
         let cases: &[(&[u8], u64, Result<Option<Vec<u8>>>)] = &[
