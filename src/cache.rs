@@ -1,141 +1,87 @@
 use std::collections::HashMap;
-use std::mem::swap;
 
 // No clone, no copy! That asserts that an LRUHandle exists only once.
 struct LRUHandle<T>(*mut LRUNode<T>);
 
 struct LRUNode<T> {
-    next: Option<Box<LRUNode<T>>>, // None in the list's last node
-    prev: Option<*mut LRUNode<T>>,
-    data: Option<T>, // if None, then we have reached the head node
+    next: *mut LRUNode<T>,
+    prev: *mut LRUNode<T>,
+    data: Option<T>, // None only in the head (sentinel) node
 }
 
+/// Circular doubly linked list. Every node, including the sentinel `head`, is a heap allocation
+/// owned through a raw pointer. Node addresses therefore stay valid when the list is moved, and
+/// no `Box` or reference to a node is ever moved or kept while an `LRUHandle` points at it.
 struct LRUList<T> {
-    head: LRUNode<T>,
+    head: *mut LRUNode<T>,
     count: usize,
 }
 
-/// This is likely unstable; more investigation is needed into correct behavior!
 impl<T> LRUList<T> {
     fn new() -> LRUList<T> {
-        LRUList {
-            head: LRUNode {
-                data: None,
-                next: None,
-                prev: None,
-            },
-            count: 0,
+        let head = Box::into_raw(Box::new(LRUNode {
+            next: std::ptr::null_mut(),
+            prev: std::ptr::null_mut(),
+            data: None,
+        }));
+        unsafe {
+            (*head).next = head;
+            (*head).prev = head;
         }
+        LRUList { head, count: 0 }
+    }
+
+    /// Links `node` right after the head. `node` must not be linked.
+    unsafe fn link_front(&mut self, node: *mut LRUNode<T>) {
+        (*node).prev = self.head;
+        (*node).next = (*self.head).next;
+        (*(*node).next).prev = node;
+        (*self.head).next = node;
+    }
+
+    /// Unlinks `node` from its neighbours. `node` must be linked and must not be the head.
+    unsafe fn unlink(node: *mut LRUNode<T>) {
+        (*(*node).prev).next = (*node).next;
+        (*(*node).next).prev = (*node).prev;
     }
 
     /// Inserts new element at front (least recently used element)
     fn insert(&mut self, elem: T) -> LRUHandle<T> {
+        let node = Box::into_raw(Box::new(LRUNode {
+            next: std::ptr::null_mut(),
+            prev: std::ptr::null_mut(),
+            data: Some(elem),
+        }));
+        unsafe { self.link_front(node) };
         self.count += 1;
-        // Not first element
-        if self.head.next.is_some() {
-            let mut new = Box::new(LRUNode {
-                data: Some(elem),
-                next: None,
-                prev: Some(&mut self.head as *mut LRUNode<T>),
-            });
-            let newp = new.as_mut() as *mut LRUNode<T>;
-
-            // Set up the node after the new one
-            self.head.next.as_mut().unwrap().prev = Some(newp);
-            // Replace head.next with None and set the new node's next to that
-            new.next = self.head.next.take();
-            self.head.next = Some(new);
-
-            LRUHandle(newp)
-        } else {
-            // First node; the only node right now is an empty head node
-            let mut new = Box::new(LRUNode {
-                data: Some(elem),
-                next: None,
-                prev: Some(&mut self.head as *mut LRUNode<T>),
-            });
-            let newp = new.as_mut() as *mut LRUNode<T>;
-
-            // Set tail
-            self.head.prev = Some(newp);
-            // Set first node
-            self.head.next = Some(new);
-
-            LRUHandle(newp)
-        }
+        LRUHandle(node)
     }
 
     fn remove_last(&mut self) -> Option<T> {
         if self.count() == 0 {
             return None;
         }
-        let mut lasto = unsafe { (*((*self.head.prev.unwrap()).prev.unwrap())).next.take() };
-
-        assert!(lasto.is_some());
-        if let Some(ref mut last) = lasto {
-            assert!(last.prev.is_some());
-            assert!(self.head.prev.is_some());
-            self.head.prev = last.prev;
+        unsafe {
+            let last = (*self.head).prev;
+            Self::unlink(last);
             self.count -= 1;
-            last.data.take()
-        } else {
-            None
+            Box::from_raw(last).data
         }
     }
 
     fn remove(&mut self, node_handle: LRUHandle<T>) -> T {
         unsafe {
-            let d = (*node_handle.0).data.take().unwrap();
-            // Take ownership of node to be removed.
-            let mut current = (*(*node_handle.0).prev.unwrap()).next.take().unwrap();
-            let prev = current.prev.unwrap();
-            // Update previous node's successor.
-            if current.next.is_some() {
-                // Update next node's predecessor.
-                current.next.as_mut().unwrap().prev = current.prev.take();
-            } else {
-                // Removing the tail: update head.prev to reflect the new tail.
-                // When removing the only element (count == 1), set head.prev to None.
-                self.head.prev = if self.count > 1 { Some(prev) } else { None };
-            }
-            (*prev).next = current.next.take();
-
+            Self::unlink(node_handle.0);
             self.count -= 1;
-
-            d
+            Box::from_raw(node_handle.0).data.unwrap()
         }
     }
 
     /// Reinserts the referenced node at the front.
     fn reinsert_front(&mut self, node_handle: &LRUHandle<T>) {
         unsafe {
-            let prevp = (*node_handle.0).prev.unwrap();
-
-            // If not last node, update following node's prev
-            if let Some(next) = (*node_handle.0).next.as_mut() {
-                next.prev = Some(prevp);
-            } else {
-                // If last node, update head
-                self.head.prev = Some(prevp);
-            }
-
-            // Swap this.next with prev.next. After that, this.next refers to this (!)
-            swap(&mut (*prevp).next, &mut (*node_handle.0).next);
-            // To reinsert at head, swap head's next with this.next
-            swap(&mut (*node_handle.0).next, &mut self.head.next);
-            // Update this' prev reference to point to head.
-
-            // Update the second node's prev reference.
-            if let Some(ref mut newnext) = (*node_handle.0).next {
-                (*node_handle.0).prev = newnext.prev;
-                newnext.prev = Some(node_handle.0);
-            } else {
-                // Only one node, being the last one; avoid head.prev pointing to head
-                self.head.prev = Some(node_handle.0);
-            }
-
-            assert!(self.head.next.is_some());
-            assert!(self.head.prev.is_some());
+            Self::unlink(node_handle.0);
+            self.link_front(node_handle.0);
         }
     }
 
@@ -144,10 +90,20 @@ impl<T> LRUList<T> {
     }
 
     fn _testing_head_ref(&self) -> Option<&T> {
-        if let Some(ref first) = self.head.next {
-            first.data.as_ref()
-        } else {
-            None
+        unsafe { (*(*self.head).next).data.as_ref() }
+    }
+}
+
+impl<T> Drop for LRUList<T> {
+    fn drop(&mut self) {
+        unsafe {
+            let mut node = (*self.head).next;
+            while node != self.head {
+                let next = (*node).next;
+                drop(Box::from_raw(node));
+                node = next;
+            }
+            drop(Box::from_raw(self.head));
         }
     }
 }
