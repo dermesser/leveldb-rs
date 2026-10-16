@@ -327,7 +327,14 @@ impl LdbIterator for TableIterator {
                 // ok, found right block: continue
                 if let Ok(()) = self.load_block(&handle) {
                     // current_block is always set if load_block() returned Ok.
-                    self.current_block.as_mut().unwrap().seek(to);
+                    let block = self.current_block.as_mut().unwrap();
+                    block.seek(to);
+                    if !block.valid() {
+                        // `to` lies between the block's last key and its index separator: the
+                        // wanted entry is the first one of the next block.
+                        self.current_block = None;
+                        self.advance();
+                    }
                     return;
                 }
             }
@@ -690,6 +697,41 @@ mod tests {
         assert!(!iter.valid());
         iter.seek(b"bbb");
         assert!(iter.valid());
+    }
+
+    #[test]
+    fn test_table_iterator_seek_between_blocks() {
+        let (src, size) = build_table(build_data());
+        let data = build_data();
+        let bc = share(Cache::new(128));
+
+        let table = Table::new_raw(options::for_test(), bc, wrap_buffer(src), size).unwrap();
+        let mut iter = table.iter();
+
+        // Seek just past every key. For the last key of a block, the target falls between that
+        // key and the block's index separator, so the wanted entry is the first of the next block.
+        for i in 0..data.len() {
+            let mut target = data[i].0.as_bytes().to_vec();
+            target.push(0);
+            iter.seek(&target);
+
+            match data.get(i + 1) {
+                Some(&(k, v)) => {
+                    assert!(iter.valid(), "seek({:?}) left the iterator invalid", target);
+                    assert_eq!(
+                        current_key_val(&iter),
+                        Some((k.as_bytes().to_vec(), v.as_bytes().to_vec()))
+                    );
+                    // Iteration continues from the found entry.
+                    assert_eq!(
+                        iter.next(),
+                        data.get(i + 2)
+                            .map(|&(k, v)| (k.as_bytes().to_vec(), v.as_bytes().to_vec()))
+                    );
+                }
+                None => assert!(!iter.valid()),
+            }
+        }
     }
 
     #[test]
