@@ -356,9 +356,10 @@ mod tests {
 
         let block = Block::new(options::for_test(), blockc);
 
-        LdbIteratorIter::wrap(&mut block.iter()).for_each(|_| {
-            panic!("expected 0 iterations");
-        });
+        assert!(
+            LdbIteratorIter::wrap(&mut block.iter()).next().is_none(),
+            "expected 0 iterations"
+        );
     }
 
     #[test]

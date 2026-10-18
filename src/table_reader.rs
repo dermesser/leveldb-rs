@@ -26,7 +26,7 @@ fn read_footer(f: &dyn RandomAccess, size: usize) -> Result<Footer> {
         Some(ok) => Ok(ok),
         None => err(
             error::StatusCode::Corruption,
-            &format!("Couldn't decode damaged footer {:?}", &buf),
+            &format!("Couldn't decode damaged footer {:?}", buf),
         ),
     }
 }
@@ -94,7 +94,7 @@ impl Table {
                 None => {
                     return err(
                         error::StatusCode::Corruption,
-                        &format!("Couldn't decode corrupt blockhandle {:?}", &val),
+                        &format!("Couldn't decode corrupt blockhandle {:?}", val),
                     )
                 }
                 Some(ok) => ok.0,

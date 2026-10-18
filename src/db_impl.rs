@@ -1191,10 +1191,8 @@ mod tests {
 
     fn build_memtable() -> MemTable {
         let mut mt = MemTable::new(options::for_test().cmp);
-        let mut i = 1;
-        for k in ["abc", "def", "ghi", "jkl", "mno", "aabc", "test123"].iter() {
+        for (i, k) in (1..).zip(["abc", "def", "ghi", "jkl", "mno", "aabc", "test123"].iter()) {
             mt.add(i, ValueType::TypeValue, k.as_bytes(), b"looooongval");
-            i += 1;
         }
         mt
     }

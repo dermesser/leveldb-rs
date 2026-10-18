@@ -123,7 +123,7 @@ impl Version {
             }
         }
         // Sort by newest first.
-        levels[0].sort_by(|a, b| b.borrow().num.cmp(&a.borrow().num));
+        levels[0].sort_by_key(|a| std::cmp::Reverse(a.borrow().num));
 
         let icmp = InternalKeyCmp(self.user_cmp.clone());
         (1..NUM_LEVELS).for_each(|level| {
@@ -792,7 +792,8 @@ mod tests {
     #[test]
     fn test_version_get_simple() {
         let v = make_version().0;
-        let cases: &[(&[u8], u64, Result<Option<Vec<u8>>>)] = &[
+        type GetCase<'a> = (&'a [u8], u64, Result<Option<Vec<u8>>>);
+        let cases: &[GetCase] = &[
             (b"aaa", 1, Ok(None)),
             (b"aaa", 100, Ok(Some("val1".as_bytes().to_vec()))),
             (b"aaa", 21, Ok(Some("val0".as_bytes().to_vec()))),

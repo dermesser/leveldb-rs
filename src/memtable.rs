@@ -171,7 +171,7 @@ mod tests {
 
     fn get_memtable() -> MemTable {
         let mut mt = MemTable::new(options::for_test().cmp);
-        let entries = vec![
+        let entries = [
             (ValueType::TypeValue, 115, "abc", "122"),
             (ValueType::TypeValue, 120, "abc", "123"),
             (ValueType::TypeValue, 121, "abd", "124"),

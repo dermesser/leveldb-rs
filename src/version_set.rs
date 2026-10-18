@@ -307,12 +307,11 @@ impl VersionSet {
                 // Add first file in level. This will also reset the compaction pointers.
                 c.add_input(0, current.files[level][0].clone());
             }
-        } else if let Some(ref ftc) = current.file_to_compact {
+        } else {
+            let ftc = current.file_to_compact.as_ref()?;
             // Seek compaction?
             level = current.file_to_compact_lvl;
             c.add_input(0, ftc.clone());
-        } else {
-            return None;
         }
 
         c.level = level;
@@ -481,11 +480,11 @@ impl VersionSet {
     pub fn log_and_apply(&mut self, mut edit: VersionEdit) -> Result<()> {
         assert!(self.current.is_some());
 
-        if edit.log_number.is_none() {
-            edit.set_log_num(self.log_num);
+        if let Some(log_number) = edit.log_number {
+            assert!(log_number >= self.log_num);
+            assert!(log_number < self.next_file_num);
         } else {
-            assert!(edit.log_number.unwrap() >= self.log_num);
-            assert!(edit.log_number.unwrap() < self.next_file_num);
+            edit.set_log_num(self.log_num);
         }
         if edit.prev_log_number.is_none() {
             edit.set_prev_log_num(self.prev_log_num);

@@ -67,17 +67,15 @@ impl<W: Write> LogWriter<W> {
                 avail_for_data
             };
 
-            let recordtype;
-
-            if first_frag && data_frag_len == record.len() {
-                recordtype = RecordType::Full;
+            let recordtype = if first_frag && data_frag_len == record.len() {
+                RecordType::Full
             } else if first_frag {
-                recordtype = RecordType::First;
+                RecordType::First
             } else if data_frag_len == record.len() {
-                recordtype = RecordType::Last;
+                RecordType::Last
             } else {
-                recordtype = RecordType::Middle;
-            }
+                RecordType::Middle
+            };
 
             result = self.emit_record(recordtype, record, data_frag_len);
             record = &record[data_frag_len..];
@@ -301,12 +299,10 @@ mod tests {
 
         let mut i = 1;
         loop {
-            let r = lr.read(&mut dst);
-
-            if r.is_err() {
-                panic!("{}", r.unwrap_err());
-            } else if r.unwrap() == 0 {
-                break;
+            match lr.read(&mut dst) {
+                Err(e) => panic!("{}", e),
+                Ok(0) => break,
+                _ => {}
             }
 
             assert_eq!(dst, data[i]);
