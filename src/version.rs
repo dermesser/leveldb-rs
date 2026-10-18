@@ -631,7 +631,6 @@ pub mod testutil {
         let mut tbl = TableBuilder::new(options::for_test(), dst);
         for i in 0..contents.len() {
             tbl.add(&keys[i], contents[i].1).unwrap();
-            seq += 1;
         }
 
         let f = new_file(
