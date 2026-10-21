@@ -34,7 +34,7 @@ pub struct DBIterator {
 }
 
 impl DBIterator {
-    pub fn new(
+    pub(crate) fn new(
         cmp: Rc<Box<dyn Cmp>>,
         vset: Shared<VersionSet>,
         iter: MergingIter,

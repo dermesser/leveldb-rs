@@ -11,15 +11,26 @@ const HEADER_SIZE: usize = 12;
 
 /// A WriteBatch contains entries to be written to a MemTable (for example) in a compact form.
 ///
-/// The storage format is (with the respective length in bytes)
+/// The storage format has a 12-byte header: an 8-byte little-endian sequence number, followed by
+/// a 4-byte little-endian count of entries. The header's sequence number is zero until the
+/// WriteBatch is encoded with a given sequence number.
 ///
-/// [tag: 1, keylen: ~var, key: keylen, vallen: ~var, val: vallen]
+/// After the header are entries with one of the following formats
+/// (with respective lengths in bytes, where ~var denotes a varint):
+/// - [tag: 1, keylen: ~var, key: keylen]
+/// - [tag: 1, keylen: ~var, key: keylen, vallen: ~var, val: vallen]
+///
+/// A WriteBatch entry for `delete` uses a tag of 0 and the first format (with only a key).
+///
+/// A WriteBatch entry for `put` uses a tag of 1 and the second format
+/// (that includes both a key and value).
 pub struct WriteBatch {
     entries: Vec<u8>,
 }
 
 impl WriteBatch {
-    pub(crate) fn new() -> WriteBatch {
+    /// Initializes an empty WriteBatch with only a 12-byte header, set to zero.
+    pub fn new() -> WriteBatch {
         let mut v = Vec::with_capacity(128);
         v.resize(HEADER_SIZE, 0);
 
@@ -60,9 +71,10 @@ impl WriteBatch {
         self.set_count(c + 1);
     }
 
-    /// Clear the contents of a WriteBatch.
+    /// Clear the contents of a WriteBatch, and set the 12 header bytes to 0.
     pub fn clear(&mut self) {
-        self.entries.clear()
+        self.entries.clear();
+        self.entries.resize(HEADER_SIZE, 0);
     }
 
     fn byte_size(&self) -> usize {
