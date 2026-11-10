@@ -66,6 +66,10 @@ impl Cmp for DefaultCmp {
         // Try increasing a and check if it's still smaller than b. First find the last byte
         // smaller than 0xff, and then increment that byte. Only if the separator is lesser than b,
         // return it.
+        // An empty `a` has no byte to increment; it is its own separator.
+        if a.is_empty() {
+            return sep;
+        }
         let mut i = a.len() - 1;
         while i > 0 && sep[i] == 0xff {
             i -= 1;
@@ -85,6 +89,11 @@ impl Cmp for DefaultCmp {
         // "abc\0", which is greater than abc and lesser than abd.
         // Append a 0 byte; by making it longer than a, it will compare greater to it.
         sep.extend_from_slice(&[0]);
+        // If this results in `b` itself ("abc" vs "abc\0"), there is no key between the two,
+        // and `a` is the only separator that is still lesser than b.
+        if sep.as_slice() == b {
+            sep.pop();
+        }
         sep
     }
 
@@ -126,7 +135,15 @@ impl Cmp for InternalKeyCmp {
 
         let sep: Vec<u8> = self.0.find_shortest_sep(keya, keyb);
 
-        if sep.len() < keya.len() && self.0.cmp(keya, &sep) == Ordering::Less {
+        // The user separator can only be used if it is strictly between the two user keys.
+        // Otherwise return `a` unchanged, as the C++ implementation does. `a` is always a valid
+        // separator, whereas a key rebuilt from the user separator can sort after `b` (same
+        // user key as `b`, but `a` has the lower sequence number) or before `a` (same user key
+        // as `a`, but `a` is a deletion).
+        if self.0.cmp(&sep, keya) != Ordering::Greater || self.0.cmp(&sep, keyb) != Ordering::Less {
+            return a.to_vec();
+        }
+        if sep.len() < keya.len() {
             return LookupKey::new(&sep, types::MAX_SEQUENCE_NUMBER)
                 .internal_key()
                 .to_vec();
@@ -232,6 +249,39 @@ mod tests {
             DefaultCmp.find_short_succ(&[0xff, 0xff, 0xff]),
             &[0xff, 0xff, 0xff, 0xff]
         );
+    }
+
+    #[test]
+    fn test_cmp_shortest_sep_adjacent_keys() {
+        use crate::key_types::ValueType;
+        let cmp = InternalKeyCmp(Rc::new(Box::new(DefaultCmp)));
+        let key =
+            |user: &[u8], seq, typ| LookupKey::new_full(user, seq, typ).internal_key().to_vec();
+        // Pairs of user keys with no key in between. The separator has to be `a` itself,
+        // for any sequence numbers and value types.
+        let pairs: [(&[u8], &[u8]); 4] = [
+            (b"abc", b"abc\0"),
+            (b"abc", b"abc"),
+            (b"", b"\0"),
+            (b"\xff\xff", b"\xff\xff\0"),
+        ];
+        for (a, b) in pairs {
+            for (seq_a, seq_b) in [(1, 2), (9, 2)] {
+                if a == b && seq_a < seq_b {
+                    // One key's entries are stored newest first.
+                    continue;
+                }
+                for typ in [ValueType::TypeValue, ValueType::TypeDeletion] {
+                    let (a, b) = (key(a, seq_a, typ), key(b, seq_b, ValueType::TypeValue));
+                    let sep = cmp.find_shortest_sep(&a, &b);
+                    assert_eq!(sep, a);
+                    assert!(cmp.cmp(&sep, &b) == Ordering::Less);
+                }
+            }
+        }
+        assert_eq!(DefaultCmp.find_shortest_sep(b"abc", b"abc\0"), b"abc");
+        assert_eq!(DefaultCmp.find_shortest_sep(b"", b"\0"), b"");
+        assert_eq!(DefaultCmp.find_shortest_sep(b"", b"x"), b"");
     }
 
     #[test]

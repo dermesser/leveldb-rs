@@ -198,7 +198,8 @@ impl Table {
 
         let handle;
         if let Some((last_in_block, h)) = current_key_val(&index_iter) {
-            if self.opt.cmp.cmp(key, &last_in_block) == Ordering::Less {
+            // The index key may be the block's last entry itself, so an equal key is in it.
+            if self.opt.cmp.cmp(key, &last_in_block) != Ordering::Greater {
                 handle = BlockHandle::decode(&h).unwrap().0;
             } else {
                 return Ok(None);

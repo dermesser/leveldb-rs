@@ -855,7 +855,7 @@ fn temp_file_name<P: AsRef<Path>>(dbname: P, file_num: FileNum) -> PathBuf {
     dbname.as_ref().join(format!("{:06}.dbtmp", file_num))
 }
 
-fn current_file_name<P: AsRef<Path>>(dbname: P) -> PathBuf {
+pub fn current_file_name<P: AsRef<Path>>(dbname: P) -> PathBuf {
     dbname.as_ref().join("CURRENT").to_owned()
 }
 

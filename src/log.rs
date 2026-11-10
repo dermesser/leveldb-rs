@@ -9,7 +9,6 @@ use crate::error::{err, Result, StatusCode};
 use std::io::{Read, Write};
 
 use integer_encoding::FixedInt;
-use integer_encoding::FixedIntWriter;
 
 const BLOCK_SIZE: usize = 32 * 1024;
 const HEADER_SIZE: usize = 4 + 2 + 1;
@@ -93,12 +92,13 @@ impl<W: Write> LogWriter<W> {
 
         let chksum = mask_crc(digest.finalize());
 
-        let mut s = 0;
-        s += self.dst.write(&chksum.encode_fixed_vec())?;
-        s += self.dst.write_fixedint(len as u16)?;
-        s += self.dst.write(&[t as u8])?;
-        s += self.dst.write(&data[0..len])?;
+        // write_all, because write() is allowed to write only a part of the buffer.
+        self.dst.write_all(&chksum.encode_fixed_vec())?;
+        self.dst.write_all(&(len as u16).encode_fixed_vec())?;
+        self.dst.write_all(&[t as u8])?;
+        self.dst.write_all(&data[0..len])?;
 
+        let s = HEADER_SIZE + len;
         self.current_block_offset += s;
         Ok(s)
     }
@@ -203,6 +203,7 @@ pub fn unmask_crc(mc: u32) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use std::io::Cursor;
 
     #[test]
@@ -309,5 +310,39 @@ mod tests {
             i += 1;
         }
         assert_eq!(i, data.len());
+    }
+
+    /// A writer that accepts a single byte per call to write().
+    struct OneByteAtATime(Vec<u8>);
+
+    impl Write for OneByteAtATime {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.extend_from_slice(&buf[..buf.len().min(1)]);
+            Ok(buf.len().min(1))
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_writer_short_writes() {
+        let records: [&[u8]; 3] = [b"first", &[7u8; 70_000], b"last"];
+        let mut whole = LogWriter::new(Vec::new());
+        let mut pieces = LogWriter::new(OneByteAtATime(Vec::new()));
+        for record in records {
+            assert_eq!(
+                whole.add_record(record).unwrap(),
+                pieces.add_record(record).unwrap()
+            );
+        }
+        assert_eq!(whole.dst, pieces.dst.0);
+
+        let mut reader = LogReader::new(pieces.dst.0.as_slice(), true);
+        let mut read = Vec::new();
+        for record in records {
+            reader.read(&mut read).unwrap();
+            assert_eq!(read, record);
+        }
     }
 }
