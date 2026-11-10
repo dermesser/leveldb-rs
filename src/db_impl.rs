@@ -1825,6 +1825,36 @@ mod tests {
     }
 
     #[test]
+    fn test_db_impl_get_key_extended_by_zero_in_next_block() {
+        let mut db = open_with_small_blocks();
+
+        // Nothing sorts between "abc" and "abc\0", and a block ends between them.
+        db.put(b"abc", &[1; 200]).unwrap();
+        db.put(b"abc\0", b"second").unwrap();
+        db.put(b"abd", b"third").unwrap();
+        db.compact_range(b"a", b"z").unwrap();
+
+        assert_eq!(Some(1), db.get(b"abc").map(|v| v[0]));
+        assert_eq!(
+            Some(b"second".to_vec()),
+            db.get(b"abc\0").map(|v| v.to_vec())
+        );
+        assert_eq!(Some(b"third".to_vec()), db.get(b"abd").map(|v| v.to_vec()));
+    }
+
+    #[test]
+    fn test_db_impl_empty_key_ends_block() {
+        let mut db = open_with_small_blocks();
+
+        db.put(b"", &[1; 200]).unwrap();
+        db.put(b"a", b"second").unwrap();
+        db.compact_range(b"", b"z").unwrap();
+
+        assert_eq!(Some(1), db.get(b"").map(|v| v[0]));
+        assert_eq!(Some(b"second".to_vec()), db.get(b"a").map(|v| v.to_vec()));
+    }
+
+    #[test]
     fn test_drop_memtable() {
         let mut db = DB::open("db", options::for_test()).unwrap();
         let mut cnt = 0;
