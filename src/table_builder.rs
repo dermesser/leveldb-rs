@@ -273,7 +273,8 @@ impl<Dst: Write> TableBuilder<Dst> {
         let mut buf = [0; FULL_FOOTER_LENGTH];
         footer.encode(&mut buf);
 
-        self.offset += self.dst.write(&buf[..])?;
+        self.dst.write_all(&buf[..])?;
+        self.offset += buf.len();
         self.dst.flush()?;
         Ok(self.offset)
     }
