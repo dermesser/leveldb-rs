@@ -1803,6 +1803,27 @@ mod tests {
         }
     }
 
+    /// An empty database with blocks so small that a 200 byte value ends its block.
+    fn open_with_small_blocks() -> DB {
+        let mut opt = options::for_test();
+        opt.block_size = 64;
+        DB::open("db", opt).unwrap()
+    }
+
+    #[test]
+    fn test_db_impl_get_key_versions_in_two_blocks() {
+        let mut db = open_with_small_blocks();
+
+        db.put(b"k", &[1; 200]).unwrap();
+        // The snapshot keeps the first version alive in the compaction.
+        let ss = db.get_snapshot();
+        db.put(b"k", &[2; 200]).unwrap();
+        db.compact_range(b"a", b"z").unwrap();
+
+        assert_eq!(Some(2), db.get(b"k").map(|v| v[0]));
+        assert_eq!(Some(1), db.get_at(&ss, b"k").unwrap().map(|v| v[0]));
+    }
+
     #[test]
     fn test_drop_memtable() {
         let mut db = DB::open("db", options::for_test()).unwrap();
